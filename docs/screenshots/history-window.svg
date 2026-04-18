@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#eef2ff"/>
+  <rect x="50" y="35" width="1180" height="70" rx="8" fill="#111827"/>
+  <text x="80" y="80" fill="#ffffff" font-family="Arial, sans-serif" font-size="28">BiblioLED — Histórico completo (exemplo)</text>
+
+  <rect x="50" y="130" width="1180" height="60" rx="8" fill="#ffffff" stroke="#c7d2fe"/>
+  <text x="75" y="170" fill="#374151" font-family="Arial, sans-serif" font-size="20">Pesquisar título: ________________________________</text>
+
+  <rect x="50" y="210" width="1180" height="430" rx="8" fill="#ffffff" stroke="#c7d2fe"/>
+  <rect x="70" y="240" width="1140" height="45" fill="#dbeafe"/>
+  <text x="90" y="270" fill="#111827" font-family="Arial, sans-serif" font-size="20">Data</text>
+  <text x="280" y="270" fill="#111827" font-family="Arial, sans-serif" font-size="20">Título</text>
+  <text x="1020" y="270" fill="#111827" font-family="Arial, sans-serif" font-size="20">Tipo</text>
+
+  <rect x="70" y="285" width="1140" height="45" fill="#ffffff"/>
+  <text x="90" y="315" fill="#374151" font-family="Arial, sans-serif" font-size="18">2026-04-12 15:20</text>
+  <text x="280" y="315" fill="#374151" font-family="Arial, sans-serif" font-size="18">Padrões de Arquitectura</text>
+  <text x="1020" y="315" fill="#374151" font-family="Arial, sans-serif" font-size="18">Livro</text>
+
+  <rect x="70" y="330" width="1140" height="45" fill="#f8fafc"/>
+  <text x="90" y="360" fill="#374151" font-family="Arial, sans-serif" font-size="18">2026-04-08 11:00</text>
+  <text x="280" y="360" fill="#374151" font-family="Arial, sans-serif" font-size="18">Estruturas de Dados</text>
+  <text x="1020" y="360" fill="#374151" font-family="Arial, sans-serif" font-size="18">DVD</text>
+
+  <text x="50" y="685" fill="#6b7280" font-family="Arial, sans-serif" font-size="18">Imagem ilustrativa para documentação.</text>
+</svg>
