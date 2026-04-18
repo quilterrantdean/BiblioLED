@@ -112,7 +112,7 @@ class LoanManagerApp(object):
     def create_limits_frame(self, parent):
         f = ttk.LabelFrame(parent, text="Limites Actuais", padding="10")
         f.columnconfigure(1, weight=1)
-        ttk.Label(f, text="Disponíveis Hoje (24h):").grid(row=0, column=0, sticky=tk.W, padx=5)
+        ttk.Label(f, text="Disponíveis Hoje (desde 00:00):").grid(row=0, column=0, sticky=tk.W, padx=5)
         ttk.Label(f, textvariable=self.daily_avail_var).grid(row=0, column=1, sticky=tk.E, padx=5)
         ttk.Label(f, text="Disponíveis Mês ({}d):".format(config.MONTHLY_WINDOW_DAYS)).grid(row=1, column=0, sticky=tk.W, padx=5)
         ttk.Label(f, textvariable=self.monthly_avail_var).grid(row=1, column=1, sticky=tk.E, padx=5)
@@ -204,7 +204,7 @@ class LoanManagerApp(object):
         slots = data_utils.find_next_monthly_slot_dates(status['monthly_loans_list'])
         
         msg = "Estado Actual: {} vagas disponíveis.\n\n".format(status['monthly_available'])
-        msg += "Empréstimos activos na janela de 30 dias e data de libertação de vaga:\n"
+        msg += "Empréstimos activos na janela de {} dias e data de libertação de vaga:\n".format(config.MONTHLY_WINDOW_DAYS)
         msg += "(Data/Hora em que deixam de contar para o limite)\n\n"
         if slots:
             for s in slots: 

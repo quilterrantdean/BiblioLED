@@ -14,8 +14,12 @@ except Exception:
 
 from gui_utils import center_window
 
-class SilentDialog(tk.Toplevel):
+_TkToplevelBase = tk.Toplevel if tk else object
+
+class SilentDialog(_TkToplevelBase):
     def __init__(self, parent, title, message, is_error=False):
+        if not tk or not ttk:
+            return
         super(SilentDialog, self).__init__(parent)
         self.transient(parent)
         self.title(title)
@@ -49,8 +53,10 @@ class SilentDialog(tk.Toplevel):
         self.grab_set()
         self.wait_window(self)
 
-class ConfirmationDialog(tk.Toplevel):
+class ConfirmationDialog(_TkToplevelBase):
     def __init__(self, parent, title, message):
+        if not tk or not ttk:
+            return
         super(ConfirmationDialog, self).__init__(parent)
         self.transient(parent)
         self.title(title)
@@ -90,15 +96,15 @@ class ConfirmationDialog(tk.Toplevel):
         self.wait_window(self)
 
 def show_silent_info(parent, title, msg):
-    if parent and parent.winfo_exists():
+    if tk and parent and parent.winfo_exists():
         SilentDialog(parent, title, msg, is_error=False)
 
 def show_silent_error(parent, title, msg):
-    if parent and parent.winfo_exists():
+    if tk and parent and parent.winfo_exists():
         SilentDialog(parent, title, msg, is_error=True)
 
 def ask_silent_yesno(parent, title, msg):
-    if not parent or not parent.winfo_exists():
+    if not tk or not parent or not parent.winfo_exists():
         return False
     d = ConfirmationDialog(parent, title, msg)
     return d.result
@@ -226,18 +232,14 @@ class NewRecordDialog(tk.Toplevel):
             self.time_entry.focus_set()
             return
 
-        try:
-            full_dt = datetime.datetime.combine(dt_date, dt_time)
-            self.result = {'title': title, 'loan_date': full_dt, 'type': loan_type}
-            
-            cb = self.callback
-            self.destroy() 
-            
-            if cb:
-                cb(self.result)
-
-        except Exception as e:
-            pass
+        full_dt = datetime.datetime.combine(dt_date, dt_time)
+        self.result = {'title': title, 'loan_date': full_dt, 'type': loan_type}
+        
+        cb = self.callback
+        self.destroy() 
+        
+        if cb:
+            cb(self.result)
 
     def _on_cancel(self):
         self.result = None
