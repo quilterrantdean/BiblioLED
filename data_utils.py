@@ -168,6 +168,7 @@ def get_dashboard_metrics():
         expiry_rows = cursor.fetchall()
 
     monthly_loans = []
+    monthly_loans_count = len(monthly_rows)
     for rid, title, loan_date_raw, loan_type in monthly_rows:
         dt = parse_db_datetime(loan_date_raw)
         if dt is None:
@@ -190,7 +191,7 @@ def get_dashboard_metrics():
     
     expiries.sort(key=lambda x: x['expiry_date'])
     daily_available = max(0, config.MAX_DAILY_LOANS - daily_count)
-    monthly_available = max(0, config.MAX_MONTHLY_LOANS - len(monthly_loans))
+    monthly_available = max(0, config.MAX_MONTHLY_LOANS - monthly_loans_count)
 
     return {
         'daily_available': daily_available,
