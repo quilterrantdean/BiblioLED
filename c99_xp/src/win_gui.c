@@ -109,7 +109,7 @@ static void refresh_dashboard(app_ctx_t *ctx) {
     dashboard_metrics_t m; char line[512]; int i;
     if (metrics_get_dashboard(&ctx->cfg,&m,NULL,0)!=0) { set_status(ctx->h_status,"Erro ao calcular métricas."); return; }
     ListView_DeleteAllItems(ctx->h_list);
-    for(i=0;i<m.expiries_count;++i){ LVITEMA it; char days[32]; ZeroMemory(&it,sizeof(it)); it.mask=LVIF_TEXT; it.iItem=i; it.pszText=m.expiries[i].title; ListView_InsertItem(ctx->h_list,&it); ListView_SetItemText(ctx->h_list,i,1,m.expiries[i].expiry_date); sprintf(days,"%d",m.expiries[i].days_left); ListView_SetItemText(ctx->h_list,i,2,days); ListView_SetItemText(ctx->h_list,i,3,m.expiries[i].type); }
+    for(i=0;i<m.expiries_count;++i){ LVITEMA it; char days[32]; ZeroMemory(&it,sizeof(it)); it.mask=LVIF_TEXT; it.iItem=i; it.pszText=m.expiries[i].title; ListView_InsertItemA(ctx->h_list,&it); ListView_SetItemText(ctx->h_list,i,1,m.expiries[i].expiry_date); sprintf(days,"%d",m.expiries[i].days_left); ListView_SetItemText(ctx->h_list,i,2,days); ListView_SetItemText(ctx->h_list,i,3,m.expiries[i].type); }
     sprintf(line,"Disponíveis hoje: %d | Disponíveis mês: %d | Expirações: %d",m.daily_available,m.monthly_available,m.expiries_count);
     set_status(ctx->h_status,line);
 }
@@ -130,7 +130,7 @@ static void history_reload(history_ctx_t *hctx, const char *filter) {
         }
         ZeroMemory(&it,sizeof(it)); it.mask=LVIF_TEXT; it.iItem=shown;
         sprintf(idb, "%d", hctx->rows[i].id);
-        it.pszText = idb; ListView_InsertItem(hctx->h_list, &it);
+        it.pszText = idb; ListView_InsertItemA(hctx->h_list, &it);
         ListView_SetItemText(hctx->h_list, shown, 1, hctx->rows[i].loan_date);
         ListView_SetItemText(hctx->h_list, shown, 2, hctx->rows[i].type);
         ListView_SetItemText(hctx->h_list, shown, 3, hctx->rows[i].title);
@@ -181,7 +181,7 @@ static LRESULT CALLBACK history_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             char f[256]; GetWindowTextA(hctx->h_filter, f, sizeof(f)); history_reload(hctx, f); return 0;
         }
         if (LOWORD(wParam)==ID_HIST_DEL) {
-            int id = selected_id(hctx);
+            int id = selected_id(hctx), i;
             if (id < 0) { MessageBoxA(hwnd,"Seleccione um registo.","Histórico",MB_OK|MB_ICONINFORMATION); return 0; }
             if (MessageBoxA(hwnd, "Confirma eliminação?", "Confirmar", MB_YESNO|MB_ICONQUESTION)!=IDYES) return 0;
             loans_delete(&hctx->ctx->cfg, id, NULL, 0);
@@ -190,8 +190,8 @@ static LRESULT CALLBACK history_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             return 0;
         }
         if (LOWORD(wParam)==ID_HIST_EDIT) {
-            int id = selected_id(hctx);
-            record_data_t d; int found = -1; int i;
+            int id = selected_id(hctx), i;
+            record_data_t d; int found = -1;
             if (id < 0) { MessageBoxA(hwnd,"Seleccione um registo.","Histórico",MB_OK|MB_ICONINFORMATION); return 0; }
             for (i=0; i<hctx->count; i++) if (hctx->rows[i].id == id) { found = i; break; }
             if (found < 0) return 0;
