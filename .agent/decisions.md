@@ -80,8 +80,7 @@ This file records decisions explicitly agreed with the user. Status labels disti
 
 - **Preferred candidate:** C++ with native Win32 and SQLite.
 - The initial proof of concept uses C++11, CMake, and SQLite 3.53.4. The compiler/toolchain is not yet final.
-- **SQLite XP baseline:** 3.53.4 is pinned because 3.54.0 introduced a Windows dependency on SRW locks unavailable on XP. Reconsider later releases only after actual XP validation.
-- SQLite 3.53.4 is pinned for the XP proof of concept: SQLite 3.54.0 changed the Windows implementation to use Slim Reader/Writer Locks, which are unavailable on XP. See https://sqlite.org/forum/info/2f3abc1a9d346e4a779003d2e21204255bd7462c99396ffeee46025e22fe0f48.
+- **SQLite XP baseline:** 3.53.4 is pinned because 3.54.0 introduced a Windows dependency on SRW (Slim Reader/Writer) locks unavailable on XP. Reconsider later releases only after actual XP validation. See https://sqlite.org/forum/info/2f3abc1a9d346e4a779003d2e21204255bd7462c99396ffeee46025e22fe0f48.
 - This version pin is a compatibility baseline, not a permanent prohibition on upgrades. Re-evaluate later SQLite releases only after testing the Windows XP target.
 - Build and run the proof of concept on Windows XP before finalising the language/toolchain decision.
 - Free Pascal may be included as a comparison candidate if the C++ proof of concept exposes a meaningful disadvantage.

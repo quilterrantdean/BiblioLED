@@ -21,7 +21,7 @@ The new prototype is not yet validated on Windows XP and must not be used with t
 
 See [docs/building.md](docs/building.md).
 
-The current automated test target exercises the platform-independent SQLite store using an isolated temporary database. The Win32 application still requires an XP-compatible compiler/toolchain and real Windows XP validation.
+GitHub Actions currently builds and tests the SQLite store on Linux and builds the 32-bit Win32 application plus runs the store tests on a modern Windows runner. Both jobs pass. This is not Windows XP runtime validation: an XP-compatible compiler/toolchain and a real XP SP3 test remain outstanding.
 
 ## Development notes
 

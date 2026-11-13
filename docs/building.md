@@ -11,7 +11,7 @@ The C++ proof of concept uses C++11, CMake, native Win32 controls, and SQLite.
 - For the Windows build, network access at first configure so CMake can download the pinned SQLite 3.53.4 amalgamation. CMake verifies the archive SHA3-256 hash before use.
 - On non-Windows hosts, the core test target uses the system SQLite development package.
 
-The final XP-compatible compiler/toolchain has not yet been selected. GitHub Actions also performs a Win32 compile check with a modern Windows SDK; this catches Windows-specific source errors but does not validate XP runtime compatibility. Defining `_WIN32_WINNT=0x0501` and the PE subsystem version is not, by itself, proof of XP compatibility; imported APIs and runtime dependencies must also be checked.
+The final XP-compatible compiler/toolchain has not yet been selected. GitHub Actions compiles the Win32 application and runs the isolated SQLite store tests with a modern Windows SDK; this catches Windows-specific source errors but does not validate XP runtime compatibility. Defining `_WIN32_WINNT=0x0501` and the PE subsystem version is not, by itself, proof of XP compatibility; imported APIs and runtime dependencies must also be checked.
 
 ### Configure and build on Windows
 
@@ -43,3 +43,13 @@ The tests create their own synthetic database in the build directory. They do no
 SQLite 3.54.0 changed its Windows implementation to use Slim Reader/Writer Locks, which are not available on Windows XP. SQLite's maintainer states that SQLite 3.53 and earlier continue to work on XP. The prototype therefore pins 3.53.4. See the [SQLite discussion](https://sqlite.org/forum/info/2f3abc1a9d346e4a779003d2e21204255bd7462c99396ffeee46025e22fe0f48).
 
 This is a compatibility choice based on the SQLite API dependency change, not a substitute for executing the built application on Windows XP SP3.
+
+
+## CI validation
+
+The `Core tests` workflow has two jobs:
+
+- `Core tests (Ubuntu)`: builds and tests the platform-independent SQLite store.
+- `Win32 compile check (modern Windows SDK)`: compiles the 32-bit Win32 application and runs the SQLite store tests on a Windows runner.
+
+Both jobs passed for the initial proof-of-concept branch head. The Windows runner is a modern Windows environment, not Windows XP.

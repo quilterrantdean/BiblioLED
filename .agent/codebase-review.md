@@ -80,13 +80,23 @@ The following files now exist alongside the legacy Python reference:
 - `src/win32/dialogs.rc`, `src/win32/resource.h` — native record-entry dialog.
 - `config/settings.ini` — initial external operational limits.
 - `tests/loan_store_tests.cpp` — isolated CRUD, Unicode, future-date count, reopen, and integrity tests.
-- `.github/workflows/core-tests.yml` — Linux CI for the platform-independent SQLite store tests.
+- `.github/workflows/core-tests.yml` — Linux core tests and Win32 build/test CI.
 
 Important limitations of this first slice:
 
-- It has not yet been compiled or run on Windows XP.
+- The Win32 executable and SQLite store tests now compile and pass in GitHub Actions using a modern Windows toolchain. It has not yet been run on Windows XP.
 - The actual XP-compatible compiler/toolchain is not yet selected.
 - Linux CI uses the system SQLite package; the Windows build fetches and statically links SQLite 3.53.4.
 - Backups, restore, schema migrations, audit logs, full-history window, statistics, settings UI, export, and the final About dialog remain future work.
 - The prototype database path is `data/biblioteca.sqlite`; no user database has been copied, opened, migrated, or modified.
 - The prototype's current automatic first-run database creation is only for the proof of concept. The complete product must implement the agreed missing/corrupt-database safeguards before it is used with real data.
+
+
+## CI validation status
+
+The current `development` head has passed both jobs in GitHub Actions:
+
+- **Linux core tests:** CMake configure, build, and CTest pass.
+- **Win32 compile check:** 32-bit Windows configure, SQLite amalgamation compile, native Win32 application link, and Win32 SQLite store tests pass using a modern Windows SDK/toolchain.
+
+This validates the current source on a modern Windows build runner. It does **not** validate the executable on Windows XP. The XP-compatible compiler/runtime strategy and an actual XP SP3 run remain outstanding.

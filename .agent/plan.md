@@ -2,9 +2,9 @@
 
 ## Current status
 
-**Stage:** first C++/Win32/SQLite proof of concept underway.
+**Stage:** first C++/Win32/SQLite proof of concept builds and passes core CI on Linux and Win32; Windows XP runtime validation remains outstanding.
 
-The initial requirements and architecture are documented. The first implementation slice now contains a SQLite store, a native Win32 main window with basic loan CRUD, a settings file, isolated store tests, and a GitHub Actions core-test workflow. It is not yet validated on Windows XP. The user's real database has not been opened or modified.
+The initial requirements and architecture are documented. The first implementation slice contains a SQLite store, native Win32 main window with basic loan CRUD, settings file, isolated store tests, and GitHub Actions jobs for Linux core tests and Win32 compilation/tests. Both CI jobs pass with their current toolchains. The application has not yet been run on Windows XP. The user's real database has not been opened or modified.
 
 The `development` branch was created from `main` and now contains the first C++/Win32/SQLite prototype. All development commits remain confined to this branch.
 
@@ -32,8 +32,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Establish C++11 and CMake for the initial prototype.
 - [x] Pin SQLite 3.53.4 for the XP compatibility baseline; newer releases require revalidation.
 - [x] Add the first native Win32 window, list view, loan dialog, and SQLite CRUD implementation.
-- [x] Add isolated SQLite store tests and a Linux GitHub Actions test workflow.
-- [ ] Select and document the final XP-compatible compiler/toolchain.
+- [x] Add isolated SQLite store tests and GitHub Actions jobs for Linux and Win32.
+- [ ] Select and document the final XP-compatible compiler/toolchain (the modern Windows CI build is a source/Win32 compile check, not proof of XP compatibility).
 - [ ] Build and run the Win32 application on Windows XP SP3.
 - [ ] Measure startup time, executable size, memory use, and responsiveness.
 - [ ] Decide whether Free Pascal still merits a direct comparison after the C++ XP test.
@@ -62,7 +62,7 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Add exhaustive automated tests using isolated test data.
 - [ ] Add static analysis and dependency checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
-- [ ] Expand CI to cover the selected Win32/XP toolchain and the full test suite.
+- [ ] Expand CI to cover the selected XP-compatible toolchain and the full test suite.
 - [ ] Validate the application and tests on Windows XP as well as newer systems.
 - [ ] Produce a portable 32-bit ZIP distribution.
 - [ ] Document the build and release process.
