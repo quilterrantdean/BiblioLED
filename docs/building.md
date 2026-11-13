@@ -11,7 +11,7 @@ The C++ proof of concept uses C++11, CMake, native Win32 controls, and SQLite.
 - For the Windows build, network access at first configure so CMake can download the pinned SQLite 3.53.4 amalgamation. CMake verifies the archive SHA3-256 hash before use.
 - On non-Windows hosts, the core test target uses the system SQLite development package.
 
-The final XP-compatible compiler/toolchain has not yet been selected. GitHub Actions compiles the Win32 application and runs the isolated SQLite store tests with a modern Windows SDK; this catches Windows-specific source errors but does not validate XP runtime compatibility. Defining `_WIN32_WINNT=0x0501` and the PE subsystem version is not, by itself, proof of XP compatibility; imported APIs and runtime dependencies must also be checked.
+The initial XP-targeted compiler baseline is the **x86 edition of w64devkit**. Upstream documents that this edition supports Windows XP or later and requires a Pentium 4-class processor with SSE2. CI pins w64devkit 2.10.0 by SHA-256; the local workflow below uses the same CMake preset. The separate modern-MSVC job remains a source/Win32 compile check, not XP validation.
 
 ### Configure and build on Windows
 
@@ -37,6 +37,28 @@ ctest --test-dir build --output-on-failure
 ```
 
 The tests create their own synthetic database in the build directory. They do not use the user's database.
+
+## XP-targeted build using w64devkit x86
+
+Use the x86 edition of w64devkit, not the x64 edition. Its x86 toolchain targets Windows XP or later and requires SSE2; this is appropriate for the project's Pentium 4 target. The dedicated GitHub Actions workflow pins w64devkit 2.10.0 and verifies the downloaded archive against SHA-256 before extracting it.
+
+Start the w64devkit command prompt, change to the repository root, and confirm that the compiler is the 32-bit target:
+
+```text
+gcc -dumpmachine
+```
+
+The expected target is `i686-w64-mingw32`. Then configure, build, and run the tests:
+
+```text
+cmake --preset xp-x86-w64devkit
+cmake --build --preset xp-x86-w64devkit --parallel
+ctest --preset xp-x86-w64devkit
+```
+
+The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01 and publishes a disposable ZIP artifact containing the executable, icon, settings file, and PE inspection output.
+
+These checks establish an XP-oriented build target, not proof that the application runs on XP. The ZIP is only a test prototype: it currently creates a new database automatically when the expected file is absent and does not yet implement the agreed automatic backup/recovery protection. Do not point it at or replace the real application data.
 
 ## XP compatibility note
 

@@ -85,12 +85,16 @@ The following files now exist alongside the legacy Python reference:
 Important limitations of this first slice:
 
 - The Win32 executable and SQLite store tests now compile and pass in GitHub Actions using a modern Windows toolchain. It has not yet been run on Windows XP.
-- The actual XP-compatible compiler/toolchain is not yet selected.
+- The initial XP-targeted compiler baseline is now w64devkit x86. The dedicated CI workflow pins release 2.10.0, checks the i386 PE format and Windows GUI subsystem 5.01, and runs the store tests. This is still not a substitute for launching the executable on Windows XP SP3.
 - Linux CI uses the system SQLite package; the Windows build fetches and statically links SQLite 3.53.4.
 - Backups, restore, schema migrations, audit logs, full-history window, statistics, settings UI, export, and the final About dialog remain future work.
 - The prototype database path is `data/biblioteca.sqlite`; no user database has been copied, opened, migrated, or modified.
 - The prototype's current automatic first-run database creation is only for the proof of concept. The complete product must implement the agreed missing/corrupt-database safeguards before it is used with real data.
 
+
+## XP-targeted build baseline
+
+The initial XP build path uses the official w64devkit **x86** release. The upstream project states that the x86 kit targets Windows XP or later and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256, builds through the `xp-x86-w64devkit` CMake preset, runs the isolated store tests, checks the PE machine type and subsystem version, and publishes a disposable proof-of-concept ZIP. The CI runner is still a modern Windows host; final compatibility requires a real Windows XP SP3 execution test.
 
 ## CI validation status
 
@@ -99,4 +103,4 @@ The current `development` head has passed both jobs in GitHub Actions:
 - **Linux core tests:** CMake configure, build, and CTest pass.
 - **Win32 compile check:** 32-bit Windows configure, SQLite amalgamation compile, native Win32 application link, and Win32 SQLite store tests pass using a modern Windows SDK/toolchain.
 
-This validates the current source on a modern Windows build runner. It does **not** validate the executable on Windows XP. The XP-compatible compiler/runtime strategy and an actual XP SP3 run remain outstanding.
+This validates the current source on a modern Windows build runner. It does **not** validate the executable on Windows XP. The w64devkit x86 XP-targeted build is now covered by a separate workflow; an actual XP SP3 run remains outstanding.

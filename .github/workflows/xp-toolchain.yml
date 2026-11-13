@@ -1,0 +1,112 @@
+name: XP-targeted Win32 build
+
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
+  workflow_dispatch:
+
+jobs:
+  xp-x86:
+    name: w64devkit x86 (XP target)
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Download and verify w64devkit x86
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "w64devkit-x86-2.10.0.7z.exe"
+          $url = "https://github.com/skeeto/w64devkit/releases/download/v2.10.0/w64devkit-x86-2.10.0.7z.exe"
+          $expectedSha256 = "513ff7fc571cf6764a5aedbca92f43c513f8d01085c65df5133a82db13a7e63d"
+
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $actualSha256 = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "w64devkit archive SHA-256 mismatch."
+          }
+
+          $sevenZip = (Get-Command "7z.exe" -ErrorAction SilentlyContinue).Source
+          if (-not $sevenZip) {
+            $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          }
+          if (-not (Test-Path $sevenZip)) {
+            throw "7-Zip was not found on the GitHub Windows runner."
+          }
+
+          $destination = Join-Path $env:RUNNER_TEMP "w64devkit-x86"
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          & $sevenZip x $archive "-o$destination" -y | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not extract the w64devkit archive."
+          }
+
+          $toolRoot = Join-Path $destination "w64devkit"
+          $bin = Join-Path $toolRoot "bin"
+          if (-not (Test-Path (Join-Path $bin "gcc.exe"))) {
+            throw "The extracted w64devkit x86 compiler was not found."
+          }
+
+          $env:PATH = "$bin;$env:PATH"
+          "$bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "W64DEVKIT_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $target = (& (Join-Path $bin "gcc.exe") -dumpmachine).Trim()
+          if ($target -ne "i686-w64-mingw32") {
+            throw "Expected i686-w64-mingw32, got: $target"
+          }
+
+          & (Join-Path $bin "gcc.exe") --version
+          & (Join-Path $bin "g++.exe") --version
+
+      - name: Configure XP-targeted build
+        run: cmake --preset xp-x86-w64devkit
+
+      - name: Build application and tests
+        run: cmake --build --preset xp-x86-w64devkit --parallel
+
+      - name: Run SQLite store tests
+        run: ctest --preset xp-x86-w64devkit
+
+      - name: Inspect executable target and imports
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE "build\xp-x86-w64devkit\BiblioLED.exe"
+          $machine = (& objdump -f $exe | Out-String)
+          if ($machine -notmatch "pei-i386") {
+            throw "The application is not a 32-bit i386 PE executable."
+          }
+
+          $headers = (& objdump -p $exe | Out-String)
+          if ($headers -notmatch "MajorSubsystemVersion\s+5" -or
+              $headers -notmatch "MinorSubsystemVersion\s+1") {
+            throw "The PE subsystem version is not Windows XP (5.01)."
+          }
+
+          $headers | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "pe-inspection.txt") -Encoding utf8
+
+      - name: Package disposable XP test build
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP "BiblioLED-XP-PoC"
+          New-Item -ItemType Directory -Force -Path (Join-Path $package "config") | Out-Null
+
+          Copy-Item "build\xp-x86-w64devkit\BiblioLED.exe" (Join-Path $package "BiblioLED.exe")
+          Copy-Item "port.ico" (Join-Path $package "port.ico")
+          Copy-Item "config\settings.ini" (Join-Path $package "config\settings.ini")
+          Copy-Item (Join-Path $env:RUNNER_TEMP "pe-inspection.txt") (Join-Path $package "pe-inspection.txt")
+
+          $zip = Join-Path $env:RUNNER_TEMP "BiblioLED-XP-PoC.zip"
+          Compress-Archive -Path (Join-Path $package "*") -DestinationPath $zip -Force
+
+      - name: Upload disposable XP test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: BiblioLED-XP-PoC
+          path: ${{ runner.temp }}/BiblioLED-XP-PoC.zip
+          if-no-files-found: error
+          retention-days: 30
