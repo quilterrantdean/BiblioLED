@@ -65,7 +65,7 @@ The main window remains an operational overview of active loans and useful curre
 
 ## Open questions to resolve during design or implementation
 
-- Final column arrangement and exact display of future-dated records in the main loan list (their inclusion and immediate quota reservation are already defined).
+- Final column arrangement and exact visual treatment of future-dated loans and expiry status in the main “Empréstimos” table (future-dated inclusion, immediate quota reservation, and exclusion of expired loans are already defined).
 - Final field/column arrangement and commands in the main window and history window.
 - Exact real-time filter controls and the threshold, if any, for progressive history loading.
 - Exact audit-log synchronisation behaviour when file logging is disabled.
