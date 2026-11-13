@@ -82,7 +82,7 @@ if(WIN32)
     target_link_libraries(BiblioLED PRIVATE biblioled_core comctl32)
 
     if(MSVC)
-        target_link_options(BiblioLED PRIVATE "/SUBSYSTEM:WINDOWS,5.01")
+        target_link_options(BiblioLED PRIVATE "/SUBSYSTEM:WINDOWS,5.01" "/MANIFEST:NO")
     elseif(MINGW)
         target_link_options(BiblioLED PRIVATE "-Wl,--subsystem,windows:5.01")
     endif()
