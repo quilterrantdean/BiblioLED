@@ -73,6 +73,8 @@ if(WIN32)
         WINVER=0x0501
         _WIN32_WINNT=0x0501
         _WIN32_IE=0x0600
+        UNICODE
+        _UNICODE
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         BIBLIOLED_VERSION="${PROJECT_VERSION}"
