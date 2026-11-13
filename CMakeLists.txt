@@ -84,7 +84,8 @@ if(WIN32)
     if(MSVC)
         target_link_options(BiblioLED PRIVATE "/SUBSYSTEM:WINDOWS,5.01" "/MANIFEST:NO")
     elseif(MINGW)
-        target_link_options(BiblioLED PRIVATE "-Wl,--subsystem,windows:5.01")
+        # wWinMain requires the Unicode CRT entry point in MinGW.
+        target_link_options(BiblioLED PRIVATE "-municode" "-Wl,--subsystem,windows:5.01")
     endif()
 
     add_custom_command(TARGET BiblioLED POST_BUILD
