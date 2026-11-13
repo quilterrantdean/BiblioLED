@@ -87,7 +87,40 @@ jobs:
             throw "The PE subsystem version is not Windows XP (5.01)."
           }
 
-          $headers | Out-File -FilePath (Join-Path $env:RUNNER_TEMP "pe-inspection.txt") -Encoding utf8
+          $dlls = [regex]::Matches($headers, "(?m)^\s*DLL Name:\s*(.+?)\s*$") |
+            ForEach-Object { $_.Groups[1].Value } |
+            Sort-Object -Unique
+
+          if ($dlls | Where-Object { $_ -match "^(api-ms-win-|ext-ms-win-)" }) {
+            throw "The executable imports an API-set DLL that is not provided by Windows XP."
+          }
+
+          $xpUnavailableApis = @(
+            "AcquireSRWLockExclusive", "AcquireSRWLockShared",
+            "InitializeSRWLock", "ReleaseSRWLockExclusive", "ReleaseSRWLockShared",
+            "SleepConditionVariableCS", "WakeConditionVariable",
+            "InitOnceExecuteOnce", "GetTickCount64",
+            "GetSystemTimePreciseAsFileTime", "CreateFile2",
+            "GetFileInformationByHandleEx", "GetFinalPathNameByHandleW",
+            "CancelIoEx", "GetQueuedCompletionStatusEx", "SetThreadDescription"
+          )
+          $foundUnavailableApis = @(
+            foreach ($api in $xpUnavailableApis) {
+              if ($headers -match ("(?m)\s" + [regex]::Escape($api) + "\s*$")) { $api }
+            }
+          )
+          if ($foundUnavailableApis.Count -gt 0) {
+            throw "Found APIs unavailable on Windows XP: $($foundUnavailableApis -join ', ')"
+          }
+
+          $report = @(
+            "Executable: BiblioLED.exe",
+            "Machine: i386 (32-bit)",
+            "Subsystem: Windows GUI 5.01 (Windows XP)",
+            "Imported system DLLs: $($dlls -join ', ')",
+            "Known post-XP API blacklist: no matches"
+          )
+          $report | Set-Content -Path (Join-Path $env:RUNNER_TEMP "pe-inspection.txt") -Encoding utf8
 
       - name: Package disposable XP test build
         shell: pwsh
@@ -100,13 +133,29 @@ jobs:
           Copy-Item "config\settings.ini" (Join-Path $package "config\settings.ini")
           Copy-Item (Join-Path $env:RUNNER_TEMP "pe-inspection.txt") (Join-Path $package "pe-inspection.txt")
 
-          $zip = Join-Path $env:RUNNER_TEMP "BiblioLED-XP-PoC.zip"
-          Compress-Archive -Path (Join-Path $package "*") -DestinationPath $zip -Force
+          @'
+          BiblioLED — prova de conceito para Windows XP SP3 (32 bits)
+
+          Esta compilação serve apenas para ensaio.
+          Não é uma versão de utilização diária nem está preparada para dados reais.
+
+          O programa cria automaticamente data\biblioteca.sqlite quando a base de dados
+          ainda não existe. Esta prova de conceito ainda não implementa cópia de segurança
+          automática, recuperação nem migração segura.
+
+          Para testar:
+          1. Extraia este artefacto para uma pasta nova e vazia.
+          2. Execute BiblioLED.exe.
+          3. Crie um registo de teste, feche a aplicação e volte a abri-la.
+          4. Confirme que o registo permanece na lista.
+
+          Não copie aqui a base de dados real nem substitua a instalação actual.
+          '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8
 
       - name: Upload disposable XP test build
         uses: actions/upload-artifact@v4
         with:
           name: BiblioLED-XP-PoC
-          path: ${{ runner.temp }}/BiblioLED-XP-PoC.zip
+          path: ${{ runner.temp }}/BiblioLED-XP-PoC/
           if-no-files-found: error
           retention-days: 30

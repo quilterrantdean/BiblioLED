@@ -2,9 +2,9 @@
 
 ## Current status
 
-**Stage:** first C++/Win32/SQLite proof of concept builds and passes core CI on Linux and Win32; Windows XP runtime validation remains outstanding.
+**Stage:** first C++/Win32/SQLite proof of concept builds and passes Linux, modern Win32, and XP-targeted w64devkit CI; Windows XP runtime validation remains outstanding.
 
-The initial requirements and architecture are documented. The first implementation slice contains a SQLite store, native Win32 main window with basic loan CRUD, settings file, isolated store tests, and GitHub Actions jobs for Linux core tests and modern Win32 compilation/tests. Both jobs pass. The initial XP-targeted compiler baseline is w64devkit x86; a dedicated workflow now builds with a pinned release and checks the PE architecture/subsystem. The application has not yet been run on Windows XP. The user's real database has not been opened or modified.
+The initial requirements and architecture are documented. The first implementation slice contains a SQLite store, native Win32 main window with basic loan CRUD, settings file, isolated store tests, and CI for Linux, modern Win32, and the XP-targeted w64devkit x86 build. All three checks pass on commit 40df8aee. The XP-targeted build passes its SQLite test and PE32/i386/subsystem 5.01 checks. A disposable test artefact is published. The application has not yet been run on Windows XP. The user's real database has not been opened or modified.
 
 The `development` branch was created from `main` and now contains the first C++/Win32/SQLite prototype. All development commits remain confined to this branch.
 
@@ -34,7 +34,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Add the first native Win32 window, list view, loan dialog, and SQLite CRUD implementation.
 - [x] Add isolated SQLite store tests and GitHub Actions jobs for Linux and Win32.
 - [x] Select and document the initial XP-targeted compiler baseline: w64devkit x86 (XP-compatible x86 package; Pentium 4/SSE2 requirement).
-- [ ] Validate the pinned w64devkit build and PE headers in the dedicated XP-targeted CI job.
+- [x] Validate the pinned w64devkit build, SQLite store test, and PE headers in the dedicated XP-targeted CI job.
 - [ ] Decide whether the current w64devkit baseline is final after real XP runtime validation.
 - [ ] Build and run the Win32 application on Windows XP SP3.
 - [ ] Measure startup time, executable size, memory use, and responsiveness.
@@ -65,7 +65,7 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Add static analysis and dependency checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
-- [ ] Confirm the w64devkit XP-targeted workflow passes and retain its downloadable test build.
+- [x] Confirm the w64devkit XP-targeted workflow passes and publish a downloadable test build.
 - [ ] Expand CI to cover the full test suite.
 - [ ] Validate the application and tests on Windows XP as well as newer systems.
 - [ ] Produce a portable 32-bit ZIP distribution.
@@ -73,7 +73,7 @@ The main window remains an operational overview of active loans and useful curre
 
 ## Remaining implementation questions
 
-- Final XP-compatible compiler/toolchain and its runtime-library strategy.
+- Confirm w64devkit x86 as the final compiler/toolchain after the Windows XP SP3 runtime test.
 - Exact external-log synchronisation behaviour when file logging is deliberately disabled.
 - Low-impact UI details (final column widths, menu commands, and progressive history-loading threshold).
 - Final settings-file format and any schema-version marker.

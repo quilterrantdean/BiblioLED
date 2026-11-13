@@ -56,7 +56,7 @@ cmake --build --preset xp-x86-w64devkit --parallel
 ctest --preset xp-x86-w64devkit
 ```
 
-The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01 and publishes a disposable ZIP artifact containing the executable, icon, settings file, and PE inspection output.
+The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `40df8aee91227e2f08bce9175d7f52dc052c879b` passed compilation, the SQLite store test, PE inspection, and artifact upload.
 
 These checks establish an XP-oriented build target, not proof that the application runs on XP. The ZIP is only a test prototype: it currently creates a new database automatically when the expected file is absent and does not yet implement the agreed automatic backup/recovery protection. Do not point it at or replace the real application data.
 

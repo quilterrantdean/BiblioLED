@@ -85,7 +85,7 @@ The following files now exist alongside the legacy Python reference:
 Important limitations of this first slice:
 
 - The Win32 executable and SQLite store tests now compile and pass in GitHub Actions using a modern Windows toolchain. It has not yet been run on Windows XP.
-- The initial XP-targeted compiler baseline is now w64devkit x86. The dedicated CI workflow pins release 2.10.0, checks the i386 PE format and Windows GUI subsystem 5.01, and runs the store tests. This is still not a substitute for launching the executable on Windows XP SP3.
+- The initial XP-targeted compiler baseline is w64devkit x86. CI pins release 2.10.0, builds with GCC 16.2.0, passes the SQLite store test, and verifies PE32/i386 plus Windows GUI subsystem 5.01. The inspected executable imports only COMCTL32, KERNEL32, msvcrt, and USER32; a blacklist check rejects selected post-XP APIs and API-set DLLs. This is still not a substitute for launching the executable on Windows XP SP3.
 - Linux CI uses the system SQLite package; the Windows build fetches and statically links SQLite 3.53.4.
 - Backups, restore, schema migrations, audit logs, full-history window, statistics, settings UI, export, and the final About dialog remain future work.
 - The prototype database path is `data/biblioteca.sqlite`; no user database has been copied, opened, migrated, or modified.
@@ -103,4 +103,4 @@ The current `development` head has passed both jobs in GitHub Actions:
 - **Linux core tests:** CMake configure, build, and CTest pass.
 - **Win32 compile check:** 32-bit Windows configure, SQLite amalgamation compile, native Win32 application link, and Win32 SQLite store tests pass using a modern Windows SDK/toolchain.
 
-This validates the current source on a modern Windows build runner. It does **not** validate the executable on Windows XP. The w64devkit x86 XP-targeted build is now covered by a separate workflow; an actual XP SP3 run remains outstanding.
+This validates the current source on a modern Windows build runner. It does **not** validate the executable on Windows XP. The w64devkit x86 XP-targeted build has passed its separate workflow and publishes a disposable test artifact; an actual XP SP3 run remains outstanding.

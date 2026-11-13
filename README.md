@@ -22,7 +22,7 @@ The new prototype is not yet validated on Windows XP and must not be used with t
 
 See [docs/building.md](docs/building.md).
 
-GitHub Actions builds and tests the SQLite store on Linux, checks a modern Win32 build, and has a separate build using the XP-targeted w64devkit x86 toolchain. The latter checks the PE architecture/subsystem and publishes a disposable ZIP artifact. No workflow running on a modern Windows host can replace the final execution test on Windows XP SP3.
+GitHub Actions builds and tests the SQLite store on Linux, checks a modern Win32 build, and builds with the XP-targeted w64devkit x86 toolchain. The XP build passes its SQLite test and PE32/i386/subsystem checks, then publishes a disposable test artifact. No workflow running on a modern Windows host can replace the final execution test on Windows XP SP3.
 
 ## Development notes
 
