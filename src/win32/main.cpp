@@ -530,7 +530,7 @@ void RefreshList()
 
     wchar_t status[256] = {0};
     _snwprintf(status, 255,
-        L"%u empréstimo(s) apresentados  |  Actualizado às %s%s",
+        L"%u empréstimo(s) apresentados  |  Actualizado às %ls%s",
         static_cast<unsigned int>(visible.size()),
         Utf8ToWide(FormatDateTime(now, "%H:%M:%S")).c_str(),
         invalid_dates ? L"  |  Existem registos com datas inválidas" : L"");

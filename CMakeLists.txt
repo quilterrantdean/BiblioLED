@@ -14,6 +14,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # implementation. Those APIs are unavailable on Windows XP. The 3.53.4
 # amalgamation is therefore pinned for the XP proof of concept.
 if(WIN32)
+    enable_language(RC)
+
     if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
         message(FATAL_ERROR "BiblioLED is currently a Win32 (32-bit) application.")
     endif()
