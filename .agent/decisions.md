@@ -76,12 +76,11 @@ This file records decisions explicitly agreed with the user. Status labels disti
 | D-051 | Application updates are manual. Replacing program files must preserve database, settings, backups, exports, and logs. | Confirmed |
 | D-052 | Never commit directly to `main` or `master`. Assistant development work is only on `development`. PRs/Auto-merge are permitted after required checks; no manual merge or direct update of primary branches without a specific user request. | Confirmed |
 
-| D-055 | The initial proof of concept pins SQLite 3.53.4 because SQLite 3.54.0 introduced a Windows dependency on SRW locks unavailable on XP. Reconsider newer releases only after actual XP validation. | Confirmed for the proof of concept; future upgrades remain open |
-
 ## Provisional technology direction
 
 - **Preferred candidate:** C++ with native Win32 and SQLite.
 - The initial proof of concept uses C++11, CMake, and SQLite 3.53.4. The compiler/toolchain is not yet final.
+- **SQLite XP baseline:** 3.53.4 is pinned because 3.54.0 introduced a Windows dependency on SRW locks unavailable on XP. Reconsider later releases only after actual XP validation.
 - SQLite 3.53.4 is pinned for the XP proof of concept: SQLite 3.54.0 changed the Windows implementation to use Slim Reader/Writer Locks, which are unavailable on XP. See https://sqlite.org/forum/info/2f3abc1a9d346e4a779003d2e21204255bd7462c99396ffeee46025e22fe0f48.
 - This version pin is a compatibility baseline, not a permanent prohibition on upgrades. Re-evaluate later SQLite releases only after testing the Windows XP target.
 - Build and run the proof of concept on Windows XP before finalising the language/toolchain decision.

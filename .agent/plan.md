@@ -6,7 +6,7 @@
 
 The initial requirements and architecture are documented. The first implementation slice now contains a SQLite store, a native Win32 main window with basic loan CRUD, a settings file, isolated store tests, and a GitHub Actions core-test workflow. It is not yet validated on Windows XP. The user's real database has not been opened or modified.
 
-The `development` branch was created from the current `main` branch. This initial change adds project/agent documentation only.
+The `development` branch was created from `main` and now contains the first C++/Win32/SQLite prototype. All development commits remain confined to this branch.
 
 ## Agreed product direction
 
@@ -24,7 +24,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Define architectural separation, testing expectations, and branch safety.
 - [x] Establish the high-level UI direction and primary window behaviour. Remaining visual details will be decided during implementation.
 - [x] Resolve the main loan-list behaviour for future-dated and expired records.
-- [ ] Resolve only remaining questions that materially affect data or user-visible behaviour.
+- [x] Close high-level product decisions; defer low-impact implementation details to the development work.
 
 ### Phase 2 — Technology proof of concept
 
@@ -40,7 +40,7 @@ The main window remains an operational overview of active loans and useful curre
 
 ### Phase 3 — Foundation
 
-- [ ] Establish the project structure and build configuration.
+- [x] Establish the initial project structure and CMake build configuration.
 - [ ] Implement the portable path model.
 - [ ] Implement settings loading, validation, and persistence.
 - [ ] Implement SQLite access and schema versioning.
@@ -61,18 +61,19 @@ The main window remains an operational overview of active loans and useful curre
 
 - [ ] Add exhaustive automated tests using isolated test data.
 - [ ] Add static analysis and dependency checks.
-- [ ] Configure GitHub Actions for development branches and pull requests.
+- [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
+- [ ] Expand CI to cover the selected Win32/XP toolchain and the full test suite.
 - [ ] Validate the application and tests on Windows XP as well as newer systems.
 - [ ] Produce a portable 32-bit ZIP distribution.
 - [ ] Document the build and release process.
 
-## Open questions to resolve during design or implementation
+## Remaining implementation questions
 
-- Final column arrangement and exact visual treatment of future-dated loans and expiry status in the main “Empréstimos” table (future-dated inclusion, immediate quota reservation, and exclusion of expired loans are already defined).
-- Final field/column arrangement and commands in the main window and history window.
-- Exact real-time filter controls and the threshold, if any, for progressive history loading.
-- Exact audit-log synchronisation behaviour when file logging is disabled.
-- Final XP-compatible compiler/toolchain; the prototype currently uses C++11 and CMake.
-- The final portable directory names and exact configuration-file format.
+- Final XP-compatible compiler/toolchain and its runtime-library strategy.
+- Exact external-log synchronisation behaviour when file logging is deliberately disabled.
+- Low-impact UI details (final column widths, menu commands, and progressive history-loading threshold).
+- Final settings-file format and any schema-version marker.
+
+Resolve these during implementation unless they materially change stored data or the agreed user experience.
 
 Do not implement speculative answers to these questions where they could change stored data or user-visible behaviour. For low-impact implementation details, choose a conventional, simple, and safe default.
