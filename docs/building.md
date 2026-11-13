@@ -11,7 +11,7 @@ The C++ proof of concept uses C++11, CMake, native Win32 controls, and SQLite.
 - For the Windows build, network access at first configure so CMake can download the pinned SQLite 3.53.4 amalgamation. CMake verifies the archive SHA3-256 hash before use.
 - On non-Windows hosts, the core test target uses the system SQLite development package.
 
-The final XP-compatible compiler/toolchain has not yet been selected. Defining `_WIN32_WINNT=0x0501` and the PE subsystem version is not, by itself, proof of XP compatibility; imported APIs and runtime dependencies must also be checked.
+The final XP-compatible compiler/toolchain has not yet been selected. GitHub Actions also performs a Win32 compile check with a modern Windows SDK; this catches Windows-specific source errors but does not validate XP runtime compatibility. Defining `_WIN32_WINNT=0x0501` and the PE subsystem version is not, by itself, proof of XP compatibility; imported APIs and runtime dependencies must also be checked.
 
 ### Configure and build on Windows
 

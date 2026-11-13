@@ -28,3 +28,19 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  win32-compile:
+    name: Win32 compile check (modern Windows SDK)
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure Win32
+        run: cmake -S . -B build -A Win32 -DBUILD_TESTING=ON
+
+      - name: Build Win32 application and tests
+        run: cmake --build build --config Release --parallel
+
+      - name: Test Win32 SQLite store
+        run: ctest --test-dir build -C Release --output-on-failure
