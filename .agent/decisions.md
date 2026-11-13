@@ -17,6 +17,7 @@ This file records decisions explicitly agreed with the user. Status labels disti
 | D-009 | User-facing text is European Portuguese, using pre-1990 spelling conventions. | Confirmed |
 | D-010 | Keyboard navigation and shortcuts are first-class. The main window is resizable and should work from 800 × 600 pixels. | Confirmed |
 | D-011 | Follow the active Windows visual theme and use native Win32 controls where practical. | Confirmed |
+| D-053 | Future-dated loan records are shown in the main loan list in the same way as other records and immediately reserve capacity against the daily and monthly limits when entered. Their expiry is calculated from the loan date recorded for them. | Confirmed |
 
 ## Data, settings, and portability
 
