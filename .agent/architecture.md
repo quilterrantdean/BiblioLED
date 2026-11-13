@@ -100,3 +100,26 @@ The interaction between disabling file logs and retaining internal audit records
 - Statistics: general/evolution and usage-pattern views; no reading-progress or streak tracking.
 - About: existing icon, application name, version, short description, and build date.
 - Appearance: compact native Windows utility, prioritising legibility and functional density over decoration.
+
+
+## Initial proof-of-concept implementation
+
+The first C++ implementation slice is being introduced under:
+
+```text
+CMakeLists.txt
+config/settings.ini
+include/biblioled/loan_store.h
+src/core/loan_store.cpp
+src/win32/main.cpp
+src/win32/resource.h
+src/win32/dialogs.rc
+tests/loan_store_tests.cpp
+.github/workflows/core-tests.yml
+```
+
+The initial UI supports listing, creating, editing, and deleting loan records. It reads the existing `loans(id, title, loan_date, type)` table shape and creates that exact table only for a new database. It uses the portable folder beside the executable.
+
+The current implementation is deliberately a proof of concept, not the complete application. Backup/restore, schema migration, audit logging, history, statistics, and the settings dialog are not implemented yet.
+
+SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows builds. It is pinned because SQLite 3.54.0 introduced a Windows SRW-lock dependency that is not available on Windows XP. The pin must be revisited only after target-OS testing.

@@ -1,0 +1,23 @@
+#include <windows.h>
+#include "resource.h"
+
+IDD_LOAN_DIALOG DIALOG 0, 0, 258, 126
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Empréstimo"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    LTEXT       "Título:", -1, 8, 10, 40, 10
+    EDITTEXT    IDC_LOAN_TITLE, 54, 8, 196, 14, ES_AUTOHSCROLL
+
+    LTEXT       "Tipo:", -1, 8, 31, 40, 10
+    COMBOBOX    IDC_LOAN_TYPE, 54, 29, 112, 48, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+
+    LTEXT       "Data (AAAA-MM-DD):", -1, 8, 53, 85, 10
+    EDITTEXT    IDC_LOAN_DATE, 96, 51, 75, 14, ES_AUTOHSCROLL
+
+    LTEXT       "Hora (HH:MM):", -1, 8, 75, 85, 10
+    EDITTEXT    IDC_LOAN_TIME, 96, 73, 55, 14, ES_AUTOHSCROLL
+
+    DEFPUSHBUTTON "Guardar", IDOK, 142, 101, 52, 16
+    PUSHBUTTON    "Cancelar", IDCANCEL, 198, 101, 52, 16
+END

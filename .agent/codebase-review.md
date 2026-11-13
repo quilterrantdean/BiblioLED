@@ -68,3 +68,25 @@ This is an initial static review, not a complete runtime test or exhaustive audi
 6. Add exhaustive automated tests and static analysis.
 
 Do not treat this review as permission to start changing application code. It is a baseline for planning the rewrite/restructure on `development`.
+
+
+## Initial C++ proof-of-concept slice (added on development)
+
+The following files now exist alongside the legacy Python reference:
+
+- `CMakeLists.txt` — C++11/CMake build, SQLite selection, Win32 executable, and CTest target.
+- `include/biblioled/loan_store.h`, `src/core/loan_store.cpp` — SQLite storage API with prepared statements, list/lookup/insert/update/delete/count, initial-schema creation, existing-schema validation, and quick integrity checking.
+- `src/win32/main.cpp` — initial native Win32 window, ListView, create/edit dialog, delete confirmation, quota summary, portable paths, and single-instance mutex.
+- `src/win32/dialogs.rc`, `src/win32/resource.h` — native record-entry dialog.
+- `config/settings.ini` — initial external operational limits.
+- `tests/loan_store_tests.cpp` — isolated CRUD, Unicode, future-date count, reopen, and integrity tests.
+- `.github/workflows/core-tests.yml` — Linux CI for the platform-independent SQLite store tests.
+
+Important limitations of this first slice:
+
+- It has not yet been compiled or run on Windows XP.
+- The actual XP-compatible compiler/toolchain is not yet selected.
+- Linux CI uses the system SQLite package; the Windows build fetches and statically links SQLite 3.53.4.
+- Backups, restore, schema migrations, audit logs, full-history window, statistics, settings UI, export, and the final About dialog remain future work.
+- The prototype database path is `data/biblioteca.sqlite`; no user database has been copied, opened, migrated, or modified.
+- The prototype's current automatic first-run database creation is only for the proof of concept. The complete product must implement the agreed missing/corrupt-database safeguards before it is used with real data.

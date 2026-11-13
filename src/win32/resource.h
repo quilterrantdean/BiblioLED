@@ -1,0 +1,26 @@
+#ifndef BIBLIOLED_RESOURCE_H
+#define BIBLIOLED_RESOURCE_H
+
+#define IDD_LOAN_DIALOG 101
+
+#define IDC_LOAN_TITLE 1001
+#define IDC_LOAN_TYPE  1002
+#define IDC_LOAN_DATE  1003
+#define IDC_LOAN_TIME  1004
+
+#define IDM_NEW        2001
+#define IDM_EDIT       2002
+#define IDM_DELETE     2003
+#define IDM_REFRESH    2004
+#define IDM_EXIT       2005
+#define IDM_ABOUT      2006
+
+#define IDC_BUTTON_NEW     3001
+#define IDC_BUTTON_EDIT    3002
+#define IDC_BUTTON_DELETE  3003
+#define IDC_BUTTON_REFRESH 3004
+#define IDC_LOAN_LIST      3005
+#define IDC_QUOTA_LABEL    3006
+#define IDC_STATUS_LABEL   3007
+
+#endif

@@ -1,0 +1,904 @@
+#include <windows.h>
+#include <commctrl.h>
+
+#include "biblioled/loan_store.h"
+#include "resource.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#ifndef BIBLIOLED_VERSION
+#define BIBLIOLED_VERSION "0.1.0"
+#endif
+
+namespace {
+
+const wchar_t* kWindowClass = L"BiblioLEDMainWindow";
+const UINT kActivateMessage = WM_APP + 10;
+
+struct AppSettings {
+    int daily_limit;
+    int monthly_limit;
+    int monthly_window_days;
+    int loan_duration_days;
+
+    AppSettings()
+        : daily_limit(5), monthly_limit(20),
+          monthly_window_days(30), loan_duration_days(21) {}
+};
+
+struct RecordDialogContext {
+    biblioled::LoanRecord record;
+    bool accepted;
+    RecordDialogContext() : accepted(false) {}
+};
+
+struct VisibleLoan {
+    biblioled::LoanRecord record;
+    std::time_t expiry;
+};
+
+HINSTANCE gInstance = NULL;
+HWND gMainWindow = NULL;
+HWND gLoanList = NULL;
+HWND gQuotaLabel = NULL;
+HWND gStatusLabel = NULL;
+HANDLE gInstanceMutex = NULL;
+HICON gApplicationIcon = NULL;
+std::wstring gApplicationDirectory;
+biblioled::LoanStore gStore;
+AppSettings gSettings;
+
+enum {
+    kToolbarHeight = 34,
+    kQuotaHeight = 24,
+    kStatusHeight = 23
+};
+
+std::wstring JoinPath(const std::wstring& left, const std::wstring& right)
+{
+    if (left.empty()) return right;
+    const wchar_t last = left[left.size() - 1];
+    if (last == L'\\' || last == L'/') return left + right;
+    return left + L"\\" + right;
+}
+
+std::wstring GetApplicationDirectory()
+{
+    wchar_t path[MAX_PATH] = {0};
+    const DWORD length = GetModuleFileNameW(NULL, path, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) return L".";
+
+    std::wstring full(path, length);
+    const std::wstring::size_type separator = full.find_last_of(L"\\/");
+    if (separator == std::wstring::npos) return L".";
+    return full.substr(0, separator);
+}
+
+std::string WideToUtf8(const std::wstring& value)
+{
+    if (value.empty()) return std::string();
+    const int length = WideCharToMultiByte(
+        CP_UTF8, 0, value.c_str(), -1, NULL, 0, NULL, NULL);
+    if (length <= 1) return std::string();
+
+    std::string result(static_cast<size_t>(length), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, &result[0], length, NULL, NULL);
+    result.resize(static_cast<size_t>(length - 1));
+    return result;
+}
+
+std::wstring Utf8ToWide(const std::string& value)
+{
+    if (value.empty()) return std::wstring();
+    const int length = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, NULL, 0);
+    if (length <= 1) return std::wstring();
+
+    std::wstring result(static_cast<size_t>(length), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, &result[0], length);
+    result.resize(static_cast<size_t>(length - 1));
+    return result;
+}
+
+bool EnsureDirectory(const std::wstring& path)
+{
+    if (CreateDirectoryW(path.c_str(), NULL)) return true;
+    return GetLastError() == ERROR_ALREADY_EXISTS;
+}
+
+std::string Trim(const std::string& value)
+{
+    const std::string::size_type first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return std::string();
+    const std::string::size_type last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+bool ParsePositiveInteger(const std::string& text, int minimum, int maximum, int* value)
+{
+    if (!value) return false;
+    char* end = NULL;
+    const long parsed = std::strtol(text.c_str(), &end, 10);
+    if (text.empty() || !end || *end != '\0' || parsed < minimum || parsed > maximum) {
+        return false;
+    }
+    *value = static_cast<int>(parsed);
+    return true;
+}
+
+bool WriteDefaultSettings(const std::wstring& path)
+{
+    const std::string utf8_path = WideToUtf8(path);
+    std::ofstream output(utf8_path.c_str(), std::ios::out | std::ios::binary);
+    if (!output) return false;
+    output << "; BiblioLED portable settings\r\n"
+              "[limits]\r\n"
+              "daily_limit=5\r\n"
+              "monthly_limit=20\r\n"
+              "monthly_window_days=30\r\n"
+              "loan_duration_days=21\r\n";
+    return output.good();
+}
+
+bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* error)
+{
+    if (!settings) return false;
+
+    const std::string utf8_path = WideToUtf8(path);
+    std::ifstream input(utf8_path.c_str(), std::ios::in | std::ios::binary);
+    if (!input.good()) {
+        if (!WriteDefaultSettings(path)) {
+            if (error) *error = "Não foi possível criar config/settings.ini.";
+            return false;
+        }
+        *settings = AppSettings();
+        return true;
+    }
+
+    AppSettings loaded;
+    std::string line;
+    int seen = 0;
+    bool valid = true;
+
+    while (std::getline(input, line)) {
+        line = Trim(line);
+        if (line.empty() || line[0] == ';' || line[0] == '#' || line[0] == '[') continue;
+
+        const std::string::size_type equals = line.find('=');
+        if (equals == std::string::npos) {
+            valid = false;
+            break;
+        }
+
+        const std::string key = Trim(line.substr(0, equals));
+        const std::string value = Trim(line.substr(equals + 1));
+        int parsed = 0;
+
+        if (key == "daily_limit") {
+            valid = ParsePositiveInteger(value, 1, 1000, &parsed);
+            loaded.daily_limit = parsed;
+            ++seen;
+        } else if (key == "monthly_limit") {
+            valid = ParsePositiveInteger(value, 1, 10000, &parsed);
+            loaded.monthly_limit = parsed;
+            ++seen;
+        } else if (key == "monthly_window_days") {
+            valid = ParsePositiveInteger(value, 1, 3660, &parsed);
+            loaded.monthly_window_days = parsed;
+            ++seen;
+        } else if (key == "loan_duration_days") {
+            valid = ParsePositiveInteger(value, 1, 3660, &parsed);
+            loaded.loan_duration_days = parsed;
+            ++seen;
+        }
+
+        if (!valid) break;
+    }
+
+    if (!valid || seen != 4) {
+        if (error) {
+            *error = "As configurações são inválidas. O ficheiro original foi preservado; "
+                     "serão usados valores predefinidos nesta sessão.";
+        }
+        *settings = AppSettings();
+        return false;
+    }
+
+    *settings = loaded;
+    return true;
+}
+
+std::time_t ParseDateTime(const std::string& value)
+{
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int consumed = 0;
+
+    if (std::sscanf(value.c_str(), "%d-%d-%d %d:%d%n",
+                    &year, &month, &day, &hour, &minute, &consumed) != 5 ||
+        consumed != static_cast<int>(value.size())) {
+        return static_cast<std::time_t>(-1);
+    }
+
+    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31 ||
+        hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        return static_cast<std::time_t>(-1);
+    }
+
+    std::tm parts = {};
+    parts.tm_year = year - 1900;
+    parts.tm_mon = month - 1;
+    parts.tm_mday = day;
+    parts.tm_hour = hour;
+    parts.tm_min = minute;
+    parts.tm_isdst = -1;
+
+    const std::time_t result = std::mktime(&parts);
+    if (result == static_cast<std::time_t>(-1)) return result;
+
+    const std::tm* checked = std::localtime(&result);
+    if (!checked ||
+        checked->tm_year != year - 1900 ||
+        checked->tm_mon != month - 1 ||
+        checked->tm_mday != day ||
+        checked->tm_hour != hour ||
+        checked->tm_min != minute) {
+        return static_cast<std::time_t>(-1);
+    }
+
+    return result;
+}
+
+std::string FormatDateTime(std::time_t value, const char* format)
+{
+    const std::tm* local = std::localtime(&value);
+    if (!local) return std::string();
+
+    char buffer[64] = {0};
+    if (std::strftime(buffer, sizeof(buffer), format, local) == 0) return std::string();
+    return buffer;
+}
+
+std::time_t AddDays(std::time_t value, int days)
+{
+    const std::tm* current = std::localtime(&value);
+    if (!current) return static_cast<std::time_t>(-1);
+
+    std::tm adjusted = *current;
+    adjusted.tm_mday += days;
+    adjusted.tm_isdst = -1;
+    return std::mktime(&adjusted);
+}
+
+std::string CurrentDateTime()
+{
+    return FormatDateTime(std::time(NULL), "%Y-%m-%d %H:%M");
+}
+
+std::wstring GetControlText(HWND dialog, int control_id)
+{
+    wchar_t buffer[512] = {0};
+    GetDlgItemTextW(dialog, control_id, buffer, 511);
+    return buffer;
+}
+
+INT_PTR CALLBACK LoanDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    RecordDialogContext* context =
+        reinterpret_cast<RecordDialogContext*>(GetWindowLongPtrW(dialog, DWLP_USER));
+
+    if (message == WM_INITDIALOG) {
+        context = reinterpret_cast<RecordDialogContext*>(lParam);
+        SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(context));
+
+        SendDlgItemMessageW(dialog, IDC_LOAN_TYPE, CB_ADDSTRING, 0,
+                            reinterpret_cast<LPARAM>(L"Livro"));
+        SendDlgItemMessageW(dialog, IDC_LOAN_TYPE, CB_ADDSTRING, 0,
+                            reinterpret_cast<LPARAM>(L"Audiolivro"));
+
+        if (context && context->record.id > 0) {
+            SetDlgItemTextW(dialog, IDC_LOAN_TITLE,
+                            Utf8ToWide(context->record.title).c_str());
+
+            const int type_index =
+                (context->record.type == "audiolivro" || context->record.type == "Audiolivro") ? 1 : 0;
+            SendDlgItemMessageW(dialog, IDC_LOAN_TYPE, CB_SETCURSEL, type_index, 0);
+
+            const std::string::size_type separator = context->record.loan_date.find(' ');
+            const std::string date = context->record.loan_date.substr(0, separator);
+            const std::string time = separator == std::string::npos
+                ? "00:00" : context->record.loan_date.substr(separator + 1);
+
+            SetDlgItemTextW(dialog, IDC_LOAN_DATE, Utf8ToWide(date).c_str());
+            SetDlgItemTextW(dialog, IDC_LOAN_TIME, Utf8ToWide(time).c_str());
+        } else {
+            SetDlgItemTextW(dialog, IDC_LOAN_TYPE, L"Livro");
+            SendDlgItemMessageW(dialog, IDC_LOAN_TYPE, CB_SETCURSEL, 0, 0);
+
+            const std::string now = CurrentDateTime();
+            SetDlgItemTextW(dialog, IDC_LOAN_DATE,
+                Utf8ToWide(now.substr(0, 10)).c_str());
+            SetDlgItemTextW(dialog, IDC_LOAN_TIME,
+                Utf8ToWide(now.substr(11, 5)).c_str());
+        }
+
+        SetFocus(GetDlgItem(dialog, IDC_LOAN_TITLE));
+        return FALSE;
+    }
+
+    if (message == WM_COMMAND && LOWORD(wParam) == IDOK) {
+        if (!context) return TRUE;
+
+        const std::wstring title = GetControlText(dialog, IDC_LOAN_TITLE);
+        const std::wstring date = GetControlText(dialog, IDC_LOAN_DATE);
+        const std::wstring time = GetControlText(dialog, IDC_LOAN_TIME);
+        const LRESULT type_index =
+            SendDlgItemMessageW(dialog, IDC_LOAN_TYPE, CB_GETCURSEL, 0, 0);
+
+        if (title.empty()) {
+            MessageBoxW(dialog, L"O título é obrigatório.", L"BiblioLED", MB_OK | MB_ICONWARNING);
+            SetFocus(GetDlgItem(dialog, IDC_LOAN_TITLE));
+            return TRUE;
+        }
+        if (type_index == CB_ERR) {
+            MessageBoxW(dialog, L"Seleccione o tipo de empréstimo.", L"BiblioLED",
+                        MB_OK | MB_ICONWARNING);
+            SetFocus(GetDlgItem(dialog, IDC_LOAN_TYPE));
+            return TRUE;
+        }
+
+        const std::string loan_date = WideToUtf8(date) + " " + WideToUtf8(time);
+        if (ParseDateTime(loan_date) == static_cast<std::time_t>(-1)) {
+            MessageBoxW(dialog,
+                L"Data ou hora inválida. Utilize AAAA-MM-DD e HH:MM.",
+                L"BiblioLED", MB_OK | MB_ICONWARNING);
+            SetFocus(GetDlgItem(dialog, IDC_LOAN_DATE));
+            return TRUE;
+        }
+
+        context->record.title = WideToUtf8(title);
+        context->record.loan_date = loan_date;
+        context->record.type = type_index == 1 ? "audiolivro" : "livro";
+        context->accepted = true;
+        EndDialog(dialog, IDOK);
+        return TRUE;
+    }
+
+    if (message == WM_COMMAND && LOWORD(wParam) == IDCANCEL) {
+        EndDialog(dialog, IDCANCEL);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+bool ShowLoanDialog(HWND parent, biblioled::LoanRecord* record)
+{
+    if (!record) return false;
+
+    RecordDialogContext context;
+    context.record = *record;
+
+    const INT_PTR result = DialogBoxParamW(
+        gInstance, MAKEINTRESOURCEW(IDD_LOAN_DIALOG), parent,
+        LoanDialogProc, reinterpret_cast<LPARAM>(&context));
+
+    if (result != IDOK || !context.accepted) return false;
+    *record = context.record;
+    return true;
+}
+
+int SelectedRecordId()
+{
+    if (!gLoanList) return 0;
+    const int selected = ListView_GetNextItem(gLoanList, -1, LVNI_SELECTED);
+    if (selected < 0) return 0;
+
+    LVITEMW item = {};
+    item.mask = LVIF_PARAM;
+    item.iItem = selected;
+    if (!ListView_GetItem(gLoanList, &item)) return 0;
+    return static_cast<int>(item.lParam);
+}
+
+void ShowStoreError(const wchar_t* operation, const std::string& error)
+{
+    std::wstring message = operation;
+    message += L"\n\n";
+    message += Utf8ToWide(error);
+    MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED", MB_OK | MB_ICONERROR);
+}
+
+void InsertColumn(int index, const wchar_t* title, int width)
+{
+    LVCOLUMNW column = {};
+    column.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+    column.pszText = const_cast<LPWSTR>(title);
+    column.cx = width;
+    column.iSubItem = index;
+    ListView_InsertColumn(gLoanList, index, &column);
+}
+
+void RefreshList()
+{
+    if (!gLoanList) return;
+
+    std::vector<biblioled::LoanRecord> records;
+    std::string error;
+    if (!gStore.GetAll(&records, &error)) {
+        ShowStoreError(L"Não foi possível ler os empréstimos.", error);
+        return;
+    }
+
+    const std::time_t now = std::time(NULL);
+    std::vector<VisibleLoan> visible;
+    int invalid_dates = 0;
+
+    for (size_t i = 0; i < records.size(); ++i) {
+        const std::time_t loan_time = ParseDateTime(records[i].loan_date);
+        if (loan_time == static_cast<std::time_t>(-1)) {
+            ++invalid_dates;
+            continue;
+        }
+
+        const std::time_t expiry = AddDays(loan_time, gSettings.loan_duration_days);
+        if (expiry == static_cast<std::time_t>(-1)) {
+            ++invalid_dates;
+            continue;
+        }
+
+        // Pre-entered future records are shown. Expired records remain in the
+        // full history and are omitted from this operational view.
+        if (expiry >= now) {
+            VisibleLoan item;
+            item.record = records[i];
+            item.expiry = expiry;
+            visible.push_back(item);
+        }
+    }
+
+    std::sort(visible.begin(), visible.end(),
+        [](const VisibleLoan& left, const VisibleLoan& right) {
+            if (left.expiry != right.expiry) return left.expiry < right.expiry;
+            return left.record.id < right.record.id;
+        });
+
+    ListView_DeleteAllItems(gLoanList);
+
+    for (size_t i = 0; i < visible.size(); ++i) {
+        const biblioled::LoanRecord& record = visible[i].record;
+        const std::wstring title = Utf8ToWide(record.title);
+        const std::wstring type = record.type == "audiolivro" ? L"Audiolivro" : L"Livro";
+        const std::time_t loan_time = ParseDateTime(record.loan_date);
+        const std::wstring loan_date = Utf8ToWide(
+            FormatDateTime(loan_time, "%d/%m/%Y %H:%M"));
+        const std::wstring expiry = Utf8ToWide(
+            FormatDateTime(visible[i].expiry, "%d/%m/%Y %H:%M"));
+        const long days_left = static_cast<long>(
+            std::difftime(visible[i].expiry, now) / 86400.0);
+        wchar_t days[32] = {0};
+        _snwprintf(days, 31, L"%ld", days_left);
+
+        LVITEMW row = {};
+        row.mask = LVIF_TEXT | LVIF_PARAM;
+        row.iItem = static_cast<int>(i);
+        row.iSubItem = 0;
+        row.pszText = const_cast<LPWSTR>(title.c_str());
+        row.lParam = record.id;
+        const int inserted = ListView_InsertItem(gLoanList, &row);
+
+        if (inserted >= 0) {
+            ListView_SetItemText(gLoanList, inserted, 1, const_cast<LPWSTR>(type.c_str()));
+            ListView_SetItemText(gLoanList, inserted, 2, const_cast<LPWSTR>(loan_date.c_str()));
+            ListView_SetItemText(gLoanList, inserted, 3, const_cast<LPWSTR>(expiry.c_str()));
+            ListView_SetItemText(gLoanList, inserted, 4, days);
+        }
+    }
+
+    int daily_count = 0;
+    int monthly_count = 0;
+    const std::string today_start = FormatDateTime(now, "%Y-%m-%d") + " 00:00";
+    const std::time_t month_start = AddDays(now, -gSettings.monthly_window_days);
+    const std::string monthly_start = FormatDateTime(month_start, "%Y-%m-%d %H:%M");
+
+    if (!gStore.CountSince(today_start, &daily_count, &error) ||
+        !gStore.CountSince(monthly_start, &monthly_count, &error)) {
+        ShowStoreError(L"Não foi possível calcular a disponibilidade.", error);
+        return;
+    }
+
+    const int daily_available = (gSettings.daily_limit > daily_count)
+        ? gSettings.daily_limit - daily_count : 0;
+    const int monthly_available = (gSettings.monthly_limit > monthly_count)
+        ? gSettings.monthly_limit - monthly_count : 0;
+
+    wchar_t quota[256] = {0};
+    _snwprintf(quota, 255,
+        L"Disponibilidade: hoje %d/%d livres  |  últimos %d dias %d/%d livres",
+        daily_available, gSettings.daily_limit,
+        gSettings.monthly_window_days, monthly_available, gSettings.monthly_limit);
+    SetWindowTextW(gQuotaLabel, quota);
+
+    wchar_t status[256] = {0};
+    _snwprintf(status, 255,
+        L"%u empréstimo(s) apresentados  |  Actualizado às %s%s",
+        static_cast<unsigned int>(visible.size()),
+        Utf8ToWide(FormatDateTime(now, "%H:%M:%S")).c_str(),
+        invalid_dates ? L"  |  Existem registos com datas inválidas" : L"");
+    SetWindowTextW(gStatusLabel, status);
+}
+
+void AddLoan()
+{
+    biblioled::LoanRecord record;
+    if (!ShowLoanDialog(gMainWindow, &record)) return;
+
+    std::string error;
+    if (!gStore.Insert(&record, &error)) {
+        ShowStoreError(L"Não foi possível criar o empréstimo.", error);
+        return;
+    }
+    RefreshList();
+}
+
+void EditLoan()
+{
+    const int id = SelectedRecordId();
+    if (id <= 0) {
+        MessageBoxW(gMainWindow, L"Seleccione um empréstimo.", L"BiblioLED",
+                    MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
+    biblioled::LoanRecord record;
+    std::string error;
+    if (!gStore.GetById(id, &record, &error)) {
+        ShowStoreError(L"Não foi possível abrir o empréstimo.", error);
+        return;
+    }
+
+    if (!ShowLoanDialog(gMainWindow, &record)) return;
+    if (!gStore.Update(record, &error)) {
+        ShowStoreError(L"Não foi possível guardar as alterações.", error);
+        return;
+    }
+    RefreshList();
+}
+
+void DeleteLoan()
+{
+    const int id = SelectedRecordId();
+    if (id <= 0) {
+        MessageBoxW(gMainWindow, L"Seleccione um empréstimo.", L"BiblioLED",
+                    MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
+    if (MessageBoxW(gMainWindow, L"Eliminar o empréstimo seleccionado?",
+                    L"Confirmar eliminação", MB_YESNO | MB_ICONQUESTION) != IDYES) {
+        return;
+    }
+
+    std::string error;
+    if (!gStore.Remove(id, &error)) {
+        ShowStoreError(L"Não foi possível eliminar o empréstimo.", error);
+        return;
+    }
+    RefreshList();
+}
+
+HMENU CreateApplicationMenu()
+{
+    HMENU menu = CreateMenu();
+    HMENU file_menu = CreatePopupMenu();
+    HMENU record_menu = CreatePopupMenu();
+    HMENU view_menu = CreatePopupMenu();
+    HMENU help_menu = CreatePopupMenu();
+
+    AppendMenuW(file_menu, MF_STRING, IDM_NEW, L"Novo registo\tCtrl+N");
+    AppendMenuW(file_menu, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(file_menu, MF_STRING, IDM_EXIT, L"Sair");
+
+    AppendMenuW(record_menu, MF_STRING, IDM_EDIT, L"Editar\tEnter");
+    AppendMenuW(record_menu, MF_STRING, IDM_DELETE, L"Eliminar\tDelete");
+
+    AppendMenuW(view_menu, MF_STRING, IDM_REFRESH, L"Actualizar\tF5");
+    AppendMenuW(help_menu, MF_STRING, IDM_ABOUT, L"Sobre");
+
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(file_menu), L"Ficheiro");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(record_menu), L"Registo");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(view_menu), L"Ver");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(help_menu), L"Ajuda");
+    return menu;
+}
+
+void CreateChildControls(HWND window)
+{
+    CreateWindowW(L"BUTTON", L"Novo", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        8, 6, 62, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_NEW), gInstance, NULL);
+    CreateWindowW(L"BUTTON", L"Editar", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        74, 6, 62, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_EDIT), gInstance, NULL);
+    CreateWindowW(L"BUTTON", L"Eliminar", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        140, 6, 66, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_DELETE), gInstance, NULL);
+    CreateWindowW(L"BUTTON", L"Actualizar", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        210, 6, 78, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_REFRESH), gInstance, NULL);
+
+    gQuotaLabel = CreateWindowW(L"STATIC", L"Disponibilidade",
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        9, 38, 600, 20, window,
+        reinterpret_cast<HMENU>(IDC_QUOTA_LABEL), gInstance, NULL);
+
+    gLoanList = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
+        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+        8, 62, 700, 400, window,
+        reinterpret_cast<HMENU>(IDC_LOAN_LIST), gInstance, NULL);
+
+    ListView_SetExtendedListViewStyle(gLoanList,
+        LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+
+    InsertColumn(0, L"Título", 320);
+    InsertColumn(1, L"Tipo", 100);
+    InsertColumn(2, L"Empréstimo", 130);
+    InsertColumn(3, L"Expira em", 130);
+    InsertColumn(4, L"Dias", 55);
+
+    gStatusLabel = CreateWindowW(L"STATIC", L"Pronto.",
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        8, 0, 700, 20, window,
+        reinterpret_cast<HMENU>(IDC_STATUS_LABEL), gInstance, NULL);
+}
+
+void LayoutControls(HWND window)
+{
+    RECT client = {};
+    GetClientRect(window, &client);
+
+    const int width = client.right - client.left;
+    const int height = client.bottom - client.top;
+    const int list_height = height - kToolbarHeight - kQuotaHeight - kStatusHeight - 12;
+
+    if (gQuotaLabel) {
+        MoveWindow(gQuotaLabel, 9, kToolbarHeight + 3, width - 18, 18, TRUE);
+    }
+    if (gLoanList) {
+        MoveWindow(gLoanList, 8, kToolbarHeight + kQuotaHeight,
+                   width - 16, list_height, TRUE);
+
+        const int available = width - 16;
+        ListView_SetColumnWidth(gLoanList, 0, available - 420);
+        ListView_SetColumnWidth(gLoanList, 1, 95);
+        ListView_SetColumnWidth(gLoanList, 2, 125);
+        ListView_SetColumnWidth(gLoanList, 3, 125);
+        ListView_SetColumnWidth(gLoanList, 4, 65);
+    }
+    if (gStatusLabel) {
+        MoveWindow(gStatusLabel, 8, height - kStatusHeight,
+                   width - 16, kStatusHeight - 2, TRUE);
+    }
+}
+
+void ShowAbout()
+{
+    std::wstring text = L"BiblioLED\nVersão ";
+    text += Utf8ToWide(BIBLIOLED_VERSION);
+    text += L"\nGestor pessoal de empréstimos";
+    MessageBoxW(gMainWindow, text.c_str(), L"Sobre", MB_OK | MB_ICONINFORMATION);
+}
+
+LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    switch (message) {
+    case WM_CREATE:
+        CreateChildControls(window);
+        LayoutControls(window);
+        RefreshList();
+        return 0;
+
+    case WM_SIZE:
+        LayoutControls(window);
+        return 0;
+
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDM_NEW:
+        case IDC_BUTTON_NEW:
+            AddLoan();
+            return 0;
+        case IDM_EDIT:
+        case IDC_BUTTON_EDIT:
+            EditLoan();
+            return 0;
+        case IDM_DELETE:
+        case IDC_BUTTON_DELETE:
+            DeleteLoan();
+            return 0;
+        case IDM_REFRESH:
+        case IDC_BUTTON_REFRESH:
+            RefreshList();
+            return 0;
+        case IDM_EXIT:
+            DestroyWindow(window);
+            return 0;
+        case IDM_ABOUT:
+            ShowAbout();
+            return 0;
+        }
+        break;
+
+    case WM_NOTIFY:
+        if (reinterpret_cast<NMHDR*>(lParam)->idFrom == IDC_LOAN_LIST &&
+            reinterpret_cast<NMHDR*>(lParam)->code == LVN_ITEMACTIVATE) {
+            EditLoan();
+            return 0;
+        }
+        break;
+
+    case WM_KEYDOWN:
+        if (wParam == VK_F5) {
+            RefreshList();
+            return 0;
+        }
+        if (wParam == VK_DELETE) {
+            DeleteLoan();
+            return 0;
+        }
+        break;
+
+    case kActivateMessage:
+        ShowWindow(window, SW_RESTORE);
+        SetForegroundWindow(window);
+        return 0;
+
+    case WM_DESTROY:
+        gStore.Close();
+        if (gApplicationIcon) {
+            DestroyIcon(gApplicationIcon);
+            gApplicationIcon = NULL;
+        }
+        if (gInstanceMutex) {
+            ReleaseMutex(gInstanceMutex);
+            CloseHandle(gInstanceMutex);
+            gInstanceMutex = NULL;
+        }
+        PostQuitMessage(0);
+        return 0;
+    }
+
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+unsigned long DirectoryHash(const std::wstring& value)
+{
+    unsigned long hash = 2166136261UL;
+    for (size_t i = 0; i < value.size(); ++i) {
+        hash ^= static_cast<unsigned long>(value[i]);
+        hash *= 16777619UL;
+    }
+    return hash;
+}
+
+} // namespace
+
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
+{
+    gInstance = instance;
+    gApplicationDirectory = GetApplicationDirectory();
+
+    wchar_t mutex_name[80] = {0};
+    _snwprintf(mutex_name, 79, L"Local\\BiblioLED_%08lX",
+               DirectoryHash(gApplicationDirectory));
+
+    gInstanceMutex = CreateMutexW(NULL, TRUE, mutex_name);
+    if (gInstanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
+        HWND existing = NULL;
+        for (int attempt = 0; attempt < 20 && !existing; ++attempt) {
+            existing = FindWindowW(kWindowClass, NULL);
+            if (!existing) Sleep(50);
+        }
+        if (existing) {
+            ShowWindow(existing, SW_RESTORE);
+            SetForegroundWindow(existing);
+        }
+        CloseHandle(gInstanceMutex);
+        gInstanceMutex = NULL;
+        return 0;
+    }
+
+    EnsureDirectory(JoinPath(gApplicationDirectory, L"config"));
+    EnsureDirectory(JoinPath(gApplicationDirectory, L"data"));
+    EnsureDirectory(JoinPath(gApplicationDirectory, L"data\\backups"));
+    EnsureDirectory(JoinPath(gApplicationDirectory, L"exports"));
+    EnsureDirectory(JoinPath(gApplicationDirectory, L"logs"));
+
+    std::string settings_error;
+    const std::wstring settings_path =
+        JoinPath(gApplicationDirectory, L"config\\settings.ini");
+    if (!LoadSettings(settings_path, &gSettings, &settings_error) && !settings_error.empty()) {
+        MessageBoxW(NULL, Utf8ToWide(settings_error).c_str(), L"BiblioLED",
+                    MB_OK | MB_ICONWARNING);
+    }
+
+    const std::wstring database_path =
+        JoinPath(gApplicationDirectory, L"data\\biblioteca.sqlite");
+    const std::string database_utf8 = WideToUtf8(database_path);
+    std::string database_error;
+    if (!gStore.Open(database_utf8, &database_error)) {
+        MessageBoxW(NULL,
+            (L"Não foi possível abrir a base de dados.\n\n" +
+             Utf8ToWide(database_error)).c_str(),
+            L"BiblioLED", MB_OK | MB_ICONERROR);
+        if (gInstanceMutex) CloseHandle(gInstanceMutex);
+        return 1;
+    }
+
+    INITCOMMONCONTROLSEX controls = {};
+    controls.dwSize = sizeof(controls);
+    controls.dwICC = ICC_LISTVIEW_CLASSES;
+    InitCommonControlsEx(&controls);
+
+    const std::wstring icon_path = JoinPath(gApplicationDirectory, L"port.ico");
+    gApplicationIcon = static_cast<HICON>(LoadImageW(
+        NULL, icon_path.c_str(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE));
+
+    WNDCLASSEXW window_class = {};
+    window_class.cbSize = sizeof(window_class);
+    window_class.style = CS_HREDRAW | CS_VREDRAW;
+    window_class.lpfnWndProc = MainWindowProc;
+    window_class.hInstance = gInstance;
+    window_class.hIcon = gApplicationIcon ? gApplicationIcon : LoadIconW(NULL, IDI_APPLICATION);
+    window_class.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    window_class.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
+    window_class.lpszClassName = kWindowClass;
+    window_class.hIconSm = window_class.hIcon;
+
+    if (!RegisterClassExW(&window_class)) {
+        MessageBoxW(NULL, L"Não foi possível registar a janela principal.",
+                    L"BiblioLED", MB_OK | MB_ICONERROR);
+        gStore.Close();
+        if (gInstanceMutex) CloseHandle(gInstanceMutex);
+        return 1;
+    }
+
+    std::wstring title = L"BiblioLED v";
+    title += Utf8ToWide(BIBLIOLED_VERSION);
+
+    gMainWindow = CreateWindowExW(
+        0, kWindowClass, title.c_str(),
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT, 900, 600,
+        NULL, CreateApplicationMenu(), gInstance, NULL);
+
+    if (!gMainWindow) {
+        MessageBoxW(NULL, L"Não foi possível criar a janela principal.",
+                    L"BiblioLED", MB_OK | MB_ICONERROR);
+        gStore.Close();
+        if (gApplicationIcon) DestroyIcon(gApplicationIcon);
+        if (gInstanceMutex) CloseHandle(gInstanceMutex);
+        return 1;
+    }
+
+    if (gApplicationIcon) {
+        SendMessageW(gMainWindow, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(gApplicationIcon));
+        SendMessageW(gMainWindow, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(gApplicationIcon));
+    }
+
+    ShowWindow(gMainWindow, show_command);
+    UpdateWindow(gMainWindow);
+
+    MSG message;
+    while (GetMessageW(&message, NULL, 0, 0) > 0) {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+
+    return static_cast<int>(message.wParam);
+}

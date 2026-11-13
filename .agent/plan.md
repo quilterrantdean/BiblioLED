@@ -2,9 +2,9 @@
 
 ## Current status
 
-**Stage:** requirements and architecture planning.
+**Stage:** first C++/Win32/SQLite proof of concept underway.
 
-The initial requirements review has covered data integrity and recovery, portable file/configuration management, architecture and maintenance, and the preferred technology direction. No application code has been changed as part of this planning work.
+The initial requirements and architecture are documented. The first implementation slice now contains a SQLite store, a native Win32 main window with basic loan CRUD, a settings file, isolated store tests, and a GitHub Actions core-test workflow. It is not yet validated on Windows XP. The user's real database has not been opened or modified.
 
 The `development` branch was created from the current `main` branch. This initial change adds project/agent documentation only.
 
@@ -22,18 +22,21 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Define the data-integrity, backup, restore, and migration principles.
 - [x] Define portable storage, settings, and diagnostic-log requirements.
 - [x] Define architectural separation, testing expectations, and branch safety.
-- [ ] Finish the high-level UI specification for the main window, history, menus, settings, statistics, and About dialog.
-- [ ] Decide unresolved behaviours that materially affect the data model or user experience.
+- [x] Establish the high-level UI direction and primary window behaviour. Remaining visual details will be decided during implementation.
+- [x] Resolve the main loan-list behaviour for future-dated and expired records.
+- [ ] Resolve only remaining questions that materially affect data or user-visible behaviour.
 
 ### Phase 2 — Technology proof of concept
 
-- [ ] Evaluate C++ with native Win32 controls and SQLite as the leading candidate.
-- [ ] Keep other viable candidates open until measured, including Free Pascal if useful.
-- [ ] Select a compiler/toolchain, C++ language baseline, build system, and SQLite integration method.
-- [ ] Build a small 32-bit proof of concept with a window, table, and basic SQLite CRUD operations.
-- [ ] Build and run the proof of concept on Windows XP SP3.
+- [x] Establish C++ / native Win32 / SQLite as the leading proof-of-concept direction.
+- [x] Establish C++11 and CMake for the initial prototype.
+- [x] Pin SQLite 3.53.4 for the XP compatibility baseline; newer releases require revalidation.
+- [x] Add the first native Win32 window, list view, loan dialog, and SQLite CRUD implementation.
+- [x] Add isolated SQLite store tests and a Linux GitHub Actions test workflow.
+- [ ] Select and document the final XP-compatible compiler/toolchain.
+- [ ] Build and run the Win32 application on Windows XP SP3.
 - [ ] Measure startup time, executable size, memory use, and responsiveness.
-- [ ] Make the final technology decision from observed results, not assumptions.
+- [ ] Decide whether Free Pascal still merits a direct comparison after the C++ XP test.
 
 ### Phase 3 — Foundation
 
@@ -69,7 +72,7 @@ The main window remains an operational overview of active loans and useful curre
 - Final field/column arrangement and commands in the main window and history window.
 - Exact real-time filter controls and the threshold, if any, for progressive history loading.
 - Exact audit-log synchronisation behaviour when file logging is disabled.
-- Final compiler, toolchain, build system, and language baseline.
+- Final XP-compatible compiler/toolchain; the prototype currently uses C++11 and CMake.
 - The final portable directory names and exact configuration-file format.
 
 Do not implement speculative answers to these questions where they could change stored data or user-visible behaviour. For low-impact implementation details, choose a conventional, simple, and safe default.

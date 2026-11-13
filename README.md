@@ -1,64 +1,34 @@
 # BiblioLED
 
-Aplicação de ambiente de trabalho para registo e acompanhamento de empréstimos, com foco em simplicidade operacional, controlo de limites e consulta de histórico.
+Personal application for recording and managing the user's own BiblioLED loans. This is not public-library management software.
 
-## Visão geral
+## Project status
 
-O BiblioLED permite:
+The `development` branch contains an early C++ / Win32 / SQLite proof of concept. The legacy Python/Tkinter implementation remains in the repository as a functional reference while the replacement is developed.
 
-- registar novos empréstimos com data/hora e tipo;
-- acompanhar disponibilidade diária e mensal de acordo com limites configuráveis;
-- consultar próximas expirações de empréstimos activos;
-- pesquisar, editar e eliminar registos históricos;
-- exportar dados para CSV;
-- visualizar estatísticas avançadas.
+The new prototype is not yet validated on Windows XP and must not be used with the user's real database.
 
-A interface gráfica é desenvolvida com `tkinter` e os dados são guardados em SQLite.
+## Current direction
 
-## Requisitos
+- Windows XP SP3, 32-bit (Win32) is the primary target.
+- Native Win32 controls and a compact, utility-style interface.
+- SQLite is the required database engine.
+- C++11 and CMake are used for the initial proof of concept.
+- SQLite 3.53.4 is pinned for the XP prototype because SQLite 3.54.0 introduced a Windows SRW-lock dependency unavailable on XP.
+- User data, settings, backups, exports, and logs will remain in the portable application folder.
 
-- Python 3.8 ou superior;
-- `tkinter` disponível no sistema operativo;
-- permissões de escrita na pasta da aplicação (base de dados, exportações e definições).
+## Build and tests
 
-## Instalação e execução
+See [docs/building.md](docs/building.md).
 
-1. Clone este repositório.
-2. Entre na pasta do projecto.
-3. Execute a aplicação:
+The current automated test target exercises the platform-independent SQLite store using an isolated temporary database. The Win32 application still requires an XP-compatible compiler/toolchain and real Windows XP validation.
 
-```bash
-python biblioled.pyw
-```
+## Development notes
 
-> Nota: em alguns sistemas pode ser necessário executar com `python3`.
+- `AGENTS.md` contains instructions for coding agents.
+- `.agent/plan.md` tracks the project phases.
+- `.agent/decisions.md` records user-approved requirements.
+- `.agent/architecture.md` describes the target component boundaries.
+- `.agent/codebase-review.md` records the legacy implementation review and prototype status.
 
-## Configuração
-
-A configuração base encontra-se em `config.py`. Os principais parâmetros incluem:
-
-- ficheiro da base de dados (`DB_FILE`);
-- duração dos empréstimos (`LOAN_DURATION_DAYS`);
-- janela mensal para contabilização (`MONTHLY_WINDOW_DAYS`);
-- limites diários e mensais (`MAX_DAILY_LOANS`, `MAX_MONTHLY_LOANS`);
-- formato de datas e delimitador CSV.
-
-As definições de utilizador podem ser persistidas em `user_settings.json`.
-
-## Estrutura principal
-
-- `biblioled.pyw` — ponto de entrada e orquestração da interface.
-- `data_utils.py` — operações de base de dados, leitura/escrita e métricas.
-- `ui_components.py` — componentes e diálogos da interface.
-- `gui_utils.py` — utilitários de suporte para interface.
-- `config.py` — constantes e carregamento de definições.
-
-## Dados e exportação
-
-- Base de dados SQLite: `biblioteca.db` (por omissão);
-- exportações CSV: pasta `exports/`;
-- migração legada: quando aplicável, o histórico CSV pode ser migrado para SQLite.
-
-## Observações
-
-Este projecto foi concebido para utilização local. Recomenda-se cópia de segurança periódica da base de dados e dos ficheiros de configuração.
+All assistant development work takes place on `development`. Never commit directly to `main` or `master`.
