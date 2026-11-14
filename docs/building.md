@@ -110,7 +110,7 @@ The width values are in pixels. Layout is loaded at startup and saved after a co
 
 ## Backup formats, cadence and retention
 
-New backups use the statically linked zlib 1.4 library. The supported wrappers are gzip (`.sqlite.gz`) and zlib (`.sqlite.zlib`); raw DEFLATE is not used. The format and compression level (0–9, default 6) are set in the application backup-settings dialog and stored in `config/settings.ini`:
+New backups use the statically linked zlib 1.4 library. The supported wrappers are gzip (`.sqlite.gz`) and zlib (`.sqlite.zlib`); raw DEFLATE is not used. The format and compression level (0–9, default 6) are set in the application backup-settings dialog and stored in `config/settings.ini`. Changes are applied immediately to the open backup store and affect the next backup created; no application restart is needed. A valid automatic snapshot already created for the current day is still reused:
 
 ```ini
 [backups]
@@ -124,7 +124,7 @@ Automatic backups are created at most once per local calendar day, immediately b
 
 Only automatic backups are subject to rolling retention: keep the latest 7 daily snapshots, then one per week for the following 4 weeks, then one per month for the following 12 months. Pruning runs only after a new automatic snapshot has been created and validated. Manual backups and safety backups made before restore or migration are stored separately and are never removed by this policy. Unrecognised or malformed filenames are preserved. Older backups using the former generic `BiblioLED_YYYYMMDD_HHMMSS.sqlite` naming scheme are also preserved because their original category cannot be identified safely; they can still be restored.
 
-Restore accepts both compressed formats and older uncompressed `.sqlite` files. Compressed files are decompressed to a temporary SQLite database and checked for stream integrity, SQLite integrity and schema compatibility before the current database is backed up and replaced. Restore verification and the safety-copy rollback path remain in place.
+On Windows, BiblioLED constructs backup paths with backslashes for consistency; Win32 file APIs also accept forward slashes, so the mixed separator shown by an earlier test build did not indicate a failed backup operation. Restore accepts both compressed formats and older uncompressed `.sqlite` files. Compressed files are decompressed to a temporary SQLite database and checked for stream integrity, SQLite integrity and schema compatibility before the current database is backed up and replaced. Restore verification and the safety-copy rollback path remain in place.
 
 
 ## External audit log
