@@ -177,9 +177,9 @@ jobs:
           dados ficam bloqueadas até a sincronização recuperar. Depois de corrigir
           o problema, prima F5 para tentar novamente sem reiniciar a aplicação.
 
-          Ainda faltam recuperação guiada, futuras migrações de esquema, a interface
-          geral de definições, história, estatísticas, exportação e outras funcionalidades
-          da aplicação final. O registo interno de auditoria não tem visualizador.
+          Ainda faltam recuperação guiada, futuras migrações de esquema, estatísticas,
+          exportação e outras funcionalidades da aplicação final. O registo interno
+          de auditoria não tem visualizador.
 
           Ensaio sugerido (apenas numa pasta temporária):
           1. Extraia este artefacto para uma pasta nova e vazia.
