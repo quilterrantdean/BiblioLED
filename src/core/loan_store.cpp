@@ -352,6 +352,25 @@ bool ValidateDatabaseFile(const std::string& path, std::string* error)
         if (error) *error = "SQLite integrity_check returned no result.";
     }
 
+    // Integrity alone is not enough when reusing an existing daily snapshot:
+    // it must also be a supported BiblioLED database, not an unrelated SQLite file.
+    if (!HasExpectedSchema(check_db)) {
+        valid = false;
+        if (error) *error = "The backup does not contain the expected BiblioLED loans table.";
+    } else {
+        int version = -1;
+        bool has_audit = false;
+        if (!ReadUserVersion(check_db, &version, error) ||
+            !HasAuditTable(check_db, &has_audit, error)) {
+            valid = false;
+        } else if (version < 0 || version > 1 ||
+                   (version == 0 && has_audit) ||
+                   (version == 1 && (!has_audit || !HasAuditSchema(check_db)))) {
+            valid = false;
+            if (error) *error = "The backup has an unsupported or inconsistent BiblioLED schema.";
+        }
+    }
+
     sqlite3_finalize(statement);
     const int close_rc = sqlite3_close(check_db);
     if (close_rc != SQLITE_OK) {
