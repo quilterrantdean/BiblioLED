@@ -258,11 +258,12 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
     sqlite3* backup_db = NULL;
     int rc = sqlite3_open_v2(
         path.c_str(), &backup_db,
-        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL);
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXCLUSIVE, NULL);
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(backup_db, "Could not create the SQLite backup"));
         if (backup_db) sqlite3_close(backup_db);
-        std::remove(path.c_str());
+        // The path may belong to an earlier backup if a timestamp collision
+        // or external race occurred. Never remove a file we did not create.
         return false;
     }
 
