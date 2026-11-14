@@ -1131,6 +1131,15 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             }
         }
         if (reinterpret_cast<NMHDR*>(lParam)->idFrom == IDC_LOAN_LIST &&
+            reinterpret_cast<NMHDR*>(lParam)->code == LVN_KEYDOWN) {
+            const NMLVKEYDOWN* key = reinterpret_cast<const NMLVKEYDOWN*>(lParam);
+            if (key->wVKey == VK_F5) {
+                SynchronizeExternalAuditLog(true);
+                RefreshList();
+                return 0;
+            }
+        }
+        if (reinterpret_cast<NMHDR*>(lParam)->idFrom == IDC_LOAN_LIST &&
             reinterpret_cast<NMHDR*>(lParam)->code == LVN_ITEMACTIVATE) {
             EditLoan();
             return 0;
