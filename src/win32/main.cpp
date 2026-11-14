@@ -5,6 +5,7 @@
 #include "biblioled/loan_store.h"
 #include "biblioled/audit_log.h"
 #include "resource.h"
+#include "history_dialog.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -931,52 +932,57 @@ void RestoreDatabaseFromBackup()
     RefreshList();
 }
 
-void EditLoan()
+bool EditLoanById(int id, HWND owner)
 {
-    const int id = SelectedRecordId();
-    if (id <= 0) {
-        MessageBoxW(gMainWindow, L"Seleccione um empréstimo.", L"BiblioLED",
-                    MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-
+    if(id<=0 || gStore.MigrationRequired() || gStore.ExternalAuditLogBlocked()) return false;
     biblioled::LoanRecord record;
     std::string error;
-    if (!gStore.GetById(id, &record, &error)) {
-        ShowStoreError(L"Não foi possível abrir o empréstimo.", error);
-        return;
+    if(!gStore.GetById(id,&record,&error)) {
+        ShowStoreError(L"Não foi possível abrir o empréstimo.",error);
+        return false;
     }
-
-    if (!ShowLoanDialog(gMainWindow, &record)) return;
-    if (!gStore.Update(record, &error)) {
-        ShowStoreError(L"Não foi possível guardar as alterações.", error);
-        return;
+    if(!ShowLoanDialog(owner,&record)) return false;
+    if(!gStore.Update(record,&error)) {
+        ShowStoreError(L"Não foi possível guardar as alterações.",error);
+        return false;
     }
     SynchronizeExternalAuditLog(true);
     RefreshList();
+    return true;
 }
-
+void EditLoan()
+{
+    const int id=SelectedRecordId();
+    if(id<=0) {
+        MessageBoxW(gMainWindow,L"Seleccione um empréstimo.",L"BiblioLED",
+                    MB_OK|MB_ICONINFORMATION);
+        return;
+    }
+    EditLoanById(id,gMainWindow);
+}
+bool DeleteLoanById(int id,HWND owner,bool confirm)
+{
+    if(id<=0 || gStore.MigrationRequired() || gStore.ExternalAuditLogBlocked()) return false;
+    if(confirm && MessageBoxW(owner,L"Eliminar o empréstimo seleccionado?",
+        L"Confirmar eliminação",MB_YESNO|MB_DEFBUTTON2|MB_ICONQUESTION)!=IDYES) return false;
+    std::string error;
+    if(!gStore.Remove(id,&error)) {
+        ShowStoreError(L"Não foi possível eliminar o empréstimo.",error);
+        return false;
+    }
+    SynchronizeExternalAuditLog(true);
+    RefreshList();
+    return true;
+}
 void DeleteLoan()
 {
-    const int id = SelectedRecordId();
-    if (id <= 0) {
-        MessageBoxW(gMainWindow, L"Seleccione um empréstimo.", L"BiblioLED",
-                    MB_OK | MB_ICONINFORMATION);
+    const int id=SelectedRecordId();
+    if(id<=0) {
+        MessageBoxW(gMainWindow,L"Seleccione um empréstimo.",L"BiblioLED",
+                    MB_OK|MB_ICONINFORMATION);
         return;
     }
-
-    if (MessageBoxW(gMainWindow, L"Eliminar o empréstimo seleccionado?",
-                    L"Confirmar eliminação", MB_YESNO | MB_ICONQUESTION) != IDYES) {
-        return;
-    }
-
-    std::string error;
-    if (!gStore.Remove(id, &error)) {
-        ShowStoreError(L"Não foi possível eliminar o empréstimo.", error);
-        return;
-    }
-    SynchronizeExternalAuditLog(true);
-    RefreshList();
+    DeleteLoanById(id,gMainWindow,true);
 }
 
 HMENU CreateApplicationMenu()
@@ -998,6 +1004,7 @@ HMENU CreateApplicationMenu()
     AppendMenuW(record_menu, write_menu_flags, IDM_EDIT, L"Editar\tEnter");
     AppendMenuW(record_menu, write_menu_flags, IDM_DELETE, L"Eliminar\tDelete");
 
+    AppendMenuW(view_menu, MF_STRING, IDM_HISTORY, L"Histórico\tCtrl+H");
     AppendMenuW(view_menu, MF_STRING, IDM_REFRESH, L"Actualizar\tF5");
     AppendMenuW(help_menu, MF_STRING, IDM_ABOUT, L"Sobre");
 
@@ -1250,6 +1257,9 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         case IDC_BUTTON_DELETE:
             DeleteLoan();
             return 0;
+        case IDM_HISTORY:
+            biblioled::win32::ShowHistoryDialog(gInstance,gMainWindow,&gStore);
+            return 0;
         case IDM_REFRESH:
         case IDC_BUTTON_REFRESH:
             SynchronizeExternalAuditLog(true);
@@ -1285,6 +1295,10 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         if (reinterpret_cast<NMHDR*>(lParam)->idFrom == IDC_LOAN_LIST &&
             reinterpret_cast<NMHDR*>(lParam)->code == LVN_KEYDOWN) {
             const NMLVKEYDOWN* key = reinterpret_cast<const NMLVKEYDOWN*>(lParam);
+            if (key->wVKey == 'H' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                biblioled::win32::ShowHistoryDialog(gInstance,window,&gStore);
+                return 0;
+            }
             if (key->wVKey == VK_F5) {
                 SynchronizeExternalAuditLog(true);
                 RefreshList();
@@ -1299,6 +1313,10 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         break;
 
     case WM_KEYDOWN:
+        if (wParam == 'H' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+            biblioled::win32::ShowHistoryDialog(gInstance,window,&gStore);
+            return 0;
+        }
         if (wParam == VK_F5) {
             SynchronizeExternalAuditLog(true);
             RefreshList();
@@ -1310,6 +1328,12 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         }
         break;
 
+    case biblioled::win32::kHistoryEditMessage:
+        return EditLoanById(static_cast<int>(wParam),
+            lParam ? reinterpret_cast<HWND>(lParam) : window) ? 1 : 0;
+    case biblioled::win32::kHistoryDeleteMessage:
+        return DeleteLoanById(static_cast<int>(wParam),
+            lParam ? reinterpret_cast<HWND>(lParam) : window,false) ? 1 : 0;
     case kActivateMessage:
         ShowWindow(window, SW_RESTORE);
         SetForegroundWindow(window);

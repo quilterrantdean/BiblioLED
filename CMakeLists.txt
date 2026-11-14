@@ -83,6 +83,7 @@ if(WIN32)
 
     add_executable(BiblioLED WIN32
         src/win32/main.cpp
+        src/win32/history_dialog.cpp
         src/win32/dialogs.rc
         src/infrastructure/audit_log.cpp
     )
