@@ -21,3 +21,14 @@ The repository-root `AGENTS.md` is the agent instruction entry point. It directs
 - All development changes belong on the `development` branch. Never commit directly to `main` or `master`.
 
 These files are project documentation, not application runtime data.
+
+
+## Local command environment and GitHub authentication
+
+The user operates Git for Windows through the Mintty terminal using the `MINGW32` Git Bash environment. The observed Git version is `2.10.0.windows.1`.
+
+The user's GitHub credentials are already configured at account level for Git operations. **Do not routinely ask the user to create, paste, or export a new personal access token or `GH_TOKEN`.** For local scripts that need GitHub HTTPS authentication, first reuse the configured Git credential helper (the successful workflow-history cleanup used the helper route through `git credential fill`). Read credentials only in process memory; never print them, commit them, or write them to project documentation or script files. Ask for a new token only if the configured helper cannot provide a usable credential or lacks the required permission.
+
+The user's installed Python 3.10.18 interpreter is `C:\\Python31018\\python.exe`. In the observed Git Bash environment, the unqualified `python` command resolves to a different installation under `C:\\Program Files\\Python\\python`; use the explicit interpreter path for scripts that require the known Python 3.10.18 environment.
+
+The workflow-history cleanup was run locally from Mintty/Git Bash, not from PowerShell. It reduced the Actions history from 225 runs to the two required successful validation runs recorded in `plan.md`. The cleanup was verified afterwards through the GitHub Actions API. Future cleanup scripts must preview their targets, preserve the latest successful Core tests and XP-targeted build, skip in-progress runs, and require an explicit confirmation before deletion.

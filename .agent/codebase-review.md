@@ -109,9 +109,26 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 
 All automated tests use generated databases and temporary backup files. The user's real database has not been copied, opened, migrated, or modified. Do not use the current prototype with real data.
 
+## Pending user-approved Win32 UI refinements
+
+The following are confirmed requirements for the next UI work; they are not yet implemented:
+
+- Add a top-level **Opções** menu and move general/backup settings there from **Ficheiro**.
+- Investigate garbled Portuguese characters in secondary dialogs. The main window/menu are correct. Inspect `src/win32/dialogs.rc`, resource compiler code-page behaviour, and UTF-8-to-wide conversion paths before choosing a fix; do not assume fonts are at fault.
+- Make the history dialog resizable, enable header drag-and-drop for column reordering, and implement a right-click context menu for the selected record. Preserve double-click editing.
+- Remove the statistics manual refresh button/handler. Read a fresh snapshot when the dialog opens and recalculate year-dependent views from that cached snapshot; no periodic database polling.
+- Main-list reads must be event-driven: startup and successful create/edit/delete/restore. Remove manual refresh UI and the "Actualizado às ..." timestamp; do not add timer polling.
+- Implement functioning Win32 keyboard accelerators. Current menu captions display shortcut hints, but there is no complete accelerator-table/`TranslateAcceleratorW` path.
+- The current F5 handler also retries external audit-log synchronisation. Preserve this recovery operation under an explicit command if F5 is removed as a general refresh shortcut.
+
 ## XP-targeted build baseline
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest passing XP-targeted workflow is run [43621507828](https://github.com/quilterrantdean/BiblioLED/actions/runs/43621507828) for commit `1a9170d51ce7ea80fac5cedfbcf8c403b54f4e69`. It compiled the application and tests with w64devkit x86, passed the SQLite-store, compression, retention and audit-log tests, checked PE32/i386, Windows GUI subsystem 5.01 and imports, and published artifact `14124735304` (`BiblioLED-XP-PoC`). The matching Core Tests run [43621507774](https://github.com/quilterrantdean/BiblioLED/actions/runs/43621507774) passed on Ubuntu and modern Win32. These are target-build checks, not proof of runtime compatibility on a physical Windows XP SP3 installation.
+The latest documented validation baseline is commit `a8a11c0b5543b899054d2c285c460da437e4d297` on `development`.
+
+- [XP-targeted Win32 build run 43644095824](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824) succeeded. It downloaded and verified the pinned w64devkit x86 release, configured and built the XP-targeted application and tests, ran SQLite store tests, inspected the PE target/subsystem/imports, and published artefact [14133187960](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824), named `BiblioLED-XP-PoC`. Artefact SHA-256: `db9a7f2e887d71abfe51449d65584b0e5a453341c5a350b7b78bab61dd553f02`.
+- [Core tests run 43644095785](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095785) succeeded. Its jobs were Ubuntu core tests and modern Windows SDK Win32 compile/store tests.
+
+On 2026-11-14, workflow-history cleanup removed 223 older runs and retained these two successful runs. This cleanup does not change source code or test results. These CI checks are not proof of runtime compatibility on a physical Windows XP SP3 installation; that test remains outstanding.
 
