@@ -433,6 +433,43 @@ BackupCompressionFormat CompressionFormatFromName(const std::string& name)
                           : BackupCompressionFormat::Gzip;
 }
 
+std::string InvalidBackupPath(const std::string& original, int suffix)
+{
+    const std::string::size_type separator = original.find_last_of("/\\");
+    const std::string directory = separator == std::string::npos
+        ? std::string() : original.substr(0, separator + 1);
+    const std::string filename = separator == std::string::npos
+        ? original : original.substr(separator + 1);
+
+    const char* extensions[] = {".sqlite.gz", ".sqlite.zlib", ".sqlite"};
+    std::string extension;
+    for (size_t i = 0; i < sizeof(extensions) / sizeof(extensions[0]); ++i) {
+        if (HasSuffix(filename, extensions[i])) {
+            extension = extensions[i];
+            break;
+        }
+    }
+    if (extension.empty()) return std::string();
+
+    const std::string stem = filename.substr(0, filename.size() - extension.size());
+    const std::string prefix = "BiblioLED_auto_";
+    if (stem.compare(0, prefix.size(), prefix) != 0) return std::string();
+
+    const std::time_t now = std::time(NULL);
+    const std::tm* local = std::localtime(&now);
+    char timestamp[32] = {0};
+    if (!local || std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", local) == 0) {
+        return std::string();
+    }
+
+    std::ostringstream name;
+    name << "BiblioLED_invalid_auto_" << stem.substr(prefix.size())
+         << "_" << timestamp;
+    if (suffix > 0) name << "_" << suffix;
+    name << extension;
+    return directory + name.str();
+}
+
 std::string SqliteError(sqlite3* db, const std::string& operation)
 {
     std::string message = operation;
@@ -766,8 +803,25 @@ bool LoanStore::EnsureAutomaticBackup(std::string* error)
             return true;
         }
         if (!temporary_path.empty()) RemoveBackupFile(temporary_path);
-        // Preserve an invalid daily file. A new uniquely named snapshot is
-        // created below rather than overwriting evidence of corruption.
+
+        // Keep corrupt candidates for diagnosis, but move them out of the
+        // automatic-backup namespace so retention and next launch can work.
+        bool preserved = false;
+        for (int suffix = 0; suffix < 1000; ++suffix) {
+            const std::string invalid_path = InvalidBackupPath(candidates[i], suffix);
+            if (invalid_path.empty()) break;
+            if (FileExists(invalid_path)) continue;
+            if (MoveBackupFile(candidates[i], invalid_path)) {
+                preserved = true;
+                break;
+            }
+        }
+        if (!preserved) {
+            SetError(error,
+                "A corrupt daily backup could not be renamed safely. "
+                "No loan data was changed.");
+            return false;
+        }
     }
 
     const std::string path = MakeBackupPath("auto");
