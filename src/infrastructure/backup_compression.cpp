@@ -132,6 +132,7 @@ bool CompressBackupFile(const std::string& source_path,
                               window_bits, 8, Z_DEFAULT_STRATEGY);
     if (result != Z_OK) {
         FinishFiles(input, output);
+        RemoveBackupFile(destination_path);
         SetError(error, "zlib could not initialise backup compression.");
         return false;
     }
@@ -168,7 +169,7 @@ bool CompressBackupFile(const std::string& source_path,
                 SetError(error, "Could not write the compressed backup.");
                 break;
             }
-        } while (ok && stream.avail_out == 0);
+        } while (ok && result != Z_STREAM_END && stream.avail_out == 0);
 
         if (!ok) break;
     } while (result != Z_STREAM_END);
@@ -209,6 +210,7 @@ bool DecompressBackupFile(const std::string& source_path,
     int result = inflateInit2(&stream, window_bits);
     if (result != Z_OK) {
         FinishFiles(input, output);
+        RemoveBackupFile(destination_path);
         SetError(error, "zlib could not initialise backup decompression.");
         return false;
     }
