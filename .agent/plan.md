@@ -2,13 +2,16 @@
 
 ## Current status
 
-**Stage:** the C++11/Win32/SQLite proof of concept includes automatic/manual/safety backups with compressed restore and retention, explicit schema migration and missing-database protection, transactional SQLite auditing with recoverable rotating external logs, the embedded icon and persistent main-table columns, searchable history, general and backup settings dialogs, About, read-only two-area statistics, CSV export, and portable loan-date/quota/statistics modules with dedicated tests.
+**Stage:** the C++11/Win32/SQLite proof of concept now includes the agreed Win32 UI refinement pass. Source commit `bda018b0ee5924c736b9388cf4a6efa45dc1bdfb` on `development` passed both CI workflows:
 
-The last fully validated implementation baseline before the current UI refinement pass was commit `a8a11c0b5543b899054d2c285c460da437e4d297` on `development`. The `Core tests` run [43644095785](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095785) passed both the Ubuntu core-test job and the modern Windows SDK Win32 compile/store-test job. The `XP-targeted Win32 build` run [43644095824](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824) passed using the pinned w64devkit x86 toolchain, ran the SQLite store tests, inspected the PE32/i386 executable, GUI subsystem 5.01 and imports, and published artefact [14133187960](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824). The artefact is `BiblioLED-XP-PoC`, SHA-256 `db9a7f2e887d71abfe51449d65584b0e5a453341c5a350b7b78bab61dd553f02`.
+- [Core tests run 43652481224](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481224): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed.
+- [XP-targeted build run 43652481252](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252): pinned w64devkit x86 build, all 7 XP-targeted tests, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14135909694](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252), `BiblioLED-XP-PoC`, SHA-256 `7f3942f71828c9f5e4f0e05b9b68003f9d432ceb33cae620c15527e3f01d7585`.
 
-On 2026-11-14, the Actions history cleanup removed the 223 older runs and preserved exactly those two successful runs (225 total before cleanup, 2 afterwards). This is a historical cleanup record; subsequent pushes can naturally create new runs. The branch comparison at that point showed `development` 129 commits ahead of `main`, with no commits behind. The `main` branch remains the unchanged Python reference.
+The UI implementation includes the top-level **Opções** menu, explicit audit-log retry command, event-driven refresh without polling, removal of redundant refresh UI, Ctrl+N/Ctrl+H accelerators, a resizable/reorderable/context-menu history window, statistics from a per-open snapshot, and UTF-8 resource/source handling. History controls are laid out in dialog units so they remain aligned when the window is resized.
 
-These CI checks establish successful builds and tests on GitHub-hosted modern runners, plus PE-level XP-target checks. The user has reported having tested the application manually; the exact tested artefact, operating-system build and exercised scenarios have not yet been recorded, so do not treat this as a fully documented XP compatibility sign-off.
+On 2026-11-14, Actions history cleanup removed 223 older workflow runs and preserved the then-latest successful Core and XP-targeted runs (225 total before, 2 afterwards). Later pushes created new runs normally. At this baseline, `development` was 134 commits ahead of `main`, with none behind; `main` remains the unchanged Python reference.
+
+The user reports having tested the application manually. The exact tested artefact, Windows build and exercised scenarios have not yet been recorded; do not treat this as formal target-runtime sign-off. CI PE/build checks are not a substitute for testing on the target machine.
 
 The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
@@ -59,21 +62,22 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Implement guided missing/corrupt-database recovery and reporting.
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
 - [x] Synchronise internal audit events to the external append-only UTF-8 log using stable event fingerprints; recover an incomplete final line and rotate archives at the configured size.
-- [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; F5 retries synchronisation without requiring an application restart.
+- [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; retry through **Ficheiro > Tentar sincronizar registo de auditoria...**.
 - [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
-- [ ] Extend audit coverage beyond the implemented backup-settings change event to other settings, exports, warnings, errors, and failures.
+- [x] Record general/backup settings changes and CSV exports in the transactional audit log.
+- [ ] Extend audit coverage to warnings, errors, and failures.
 - [x] Separate audit-only writes (including startup/shutdown and settings changes) from loan-data backup triggers.
 - [x] Implement the approved automatic-backup retention policy: 7 daily, 4 weekly, and 12 monthly snapshots. Only recognised automatic backups are pruned; manual and restore/migration safety backups are preserved. Unknown filenames are preserved.
 - [x] Integrate statically linked zlib 1.4 for streaming gzip and zlib wrappers. Verify compressed round-trips and SQLite integrity; keep `.sqlite` backups compatible.
 - [x] Add backup settings for format (`gzip` or `zlib`) and compression level (0–9, default 6) to `config/settings.ini` and a dedicated Win32 dialog. Changes are applied immediately to the open `LoanStore`, without restarting; a valid same-day automatic snapshot remains reused.
 - [x] Use native filesystem path separators for generated backup paths (`\\` on Windows, `/` on POSIX), avoiding mixed separators in messages and file operations.
 
-The current CI validation baseline, run identifiers, XP artefact and remaining physical-runtime limitation are recorded in **Current status** above. Keep that section authoritative when newer successful runs replace this baseline.
+The current CI validation baseline and XP artefact are recorded in **Current status** above. Keep that section authoritative when newer successful runs replace this baseline.
 
 ### Phase 4 — Application functionality and interface
 
 - [x] Extract date parsing, calendar-day expiry, operational visibility, quota windows and remaining-quota calculation into portable core code; test these rules without the GUI.
-- [ ] Implement the main active-loans overview.
+- [x] Implement the main active-loans overview.
 - [x] Implement the separate searchable/filterable history window; show all records including expired/future entries, filter by title/type/date/ID, and support edit/delete.
 - [x] Implement revised statistics: annual evolution/comparison, daily activity, weekday/hour patterns, and mean/median intervals between distinct active dates; no progress or streak tracking.
 - [x] Implement CSV export of the complete loan history, with UTF-8 BOM, semicolon delimiter, legacy-compatible columns, atomic replacement and an audit event.
@@ -94,7 +98,7 @@ The current CI validation baseline, run identifiers, XP artefact and remaining p
 - [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
 - [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
 
-All changes above are implementation-complete in the current development commit, pending the new CI runs. The UI resource encoding fix must still be confirmed visually on the user's target system; CI compilation alone cannot prove rendered glyphs.
+All changes above are implementation-complete and passed the Core and XP-targeted CI workflows at `bda018b0ee5924c736b9388cf4a6efa45dc1bdfb`. The UTF-8 resource encoding fix and resized history layout still require visual confirmation on the user's target system; CI compilation alone cannot prove rendered glyphs.
 
 ### Phase 5 — Verification and delivery
 
@@ -103,7 +107,7 @@ All changes above are implementation-complete in the current development commit,
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
 - [x] Confirm the w64devkit XP-targeted workflow passes and publish a downloadable test build.
-- [ ] Expand CI to cover the full test suite.
+- [x] Run the full portable core/store/backup test suite on Linux and Windows, including Windows audit-log tests.
 - [ ] Validate the application and tests on Windows XP as well as newer systems.
 - [ ] Produce a portable 32-bit ZIP distribution.
 - [ ] Document the build and release process.
@@ -111,7 +115,6 @@ All changes above are implementation-complete in the current development commit,
 ## Remaining implementation questions
 
 - Confirm w64devkit x86 as the final compiler/toolchain after the Windows XP SP3 runtime test.
-- Exact external-log synchronisation behaviour when file logging is deliberately disabled.
 - Progressive history-loading threshold for very large histories. Final menu placement and refresh behaviour are now implemented according to the confirmed decisions.
 
 Resolve these during implementation unless they materially change stored data or the agreed user experience. The UI refinements above are already user-approved; do not ask the user to repeat those decisions. Preserve the audit-log recovery capability when changing the F5 interaction.

@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the target architecture and the C++/Win32/SQLite implementation now being built on development. The application remains a proof of concept until actual Windows XP SP3 execution and the remaining safety/UI work are complete.
+This document describes the target architecture and the C++/Win32/SQLite implementation now being built on development. The application remains a proof of concept until the remaining safety work is complete and the user's manual target-system test is documented sufficiently to reproduce its conditions. The user reports having tested it; exact build and scenarios remain unrecorded.
 
 ## Responsibilities and dependency direction
 
@@ -164,9 +164,9 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-The implementation baseline at commit `a8a11c0b5543b899054d2c285c460da437e4d297` passed:
+The implementation baseline at commit `bda018b0ee5924c736b9388cf4a6efa45dc1bdfb` passed:
 
-- [Core tests run 43644095785](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095785): Ubuntu core tests and modern Windows SDK Win32 compile/store tests.
-- [XP-targeted build run 43644095824](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824): w64devkit x86 build, SQLite store tests, PE32/i386 + GUI subsystem 5.01 + import inspection; artefact [14133187960](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824), `BiblioLED-XP-PoC`, SHA-256 `db9a7f2e887d71abfe51449d65584b0e5a453341c5a350b7b78bab61dd553f02`.
+- [Core tests run 43652481224](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481224): Ubuntu core tests and modern Windows SDK Win32 compile/store tests.
+- [XP-targeted build run 43652481252](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252): w64devkit x86 build, all 7 XP-targeted tests, PE32/i386 + GUI subsystem 5.01 + import inspection; artefact [14135909694](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252), `BiblioLED-XP-PoC`, SHA-256 `7f3942f71828c9f5e4f0e05b9b68003f9d432ceb33cae620c15527e3f01d7585`.
 
-These are CI/build checks, not execution evidence from a physical Windows XP SP3 installation.
+The user reports having tested the application manually, but the precise artefact, Windows build and scenarios have not yet been captured. CI checks are not themselves runtime evidence from a physical Windows XP SP3 installation.
