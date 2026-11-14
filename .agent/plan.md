@@ -66,7 +66,7 @@ The live-settings and native-path corrections pass Linux Core tests, modern Win3
 
 ### Phase 4 — Application functionality and interface
 
-- [ ] Implement the business rules independently of the GUI.
+- [x] Extract date parsing, calendar-day expiry, operational visibility, quota windows and remaining-quota calculation into portable core code; test these rules without the GUI.
 - [ ] Implement the main active-loans overview.
 - [x] Implement the separate searchable/filterable history window; show all records including expired/future entries, filter by title/type/date/ID, and support edit/delete.
 - [ ] Implement revised statistics.

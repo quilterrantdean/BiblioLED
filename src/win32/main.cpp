@@ -3,6 +3,7 @@
 #include <commdlg.h>
 
 #include "biblioled/loan_store.h"
+#include "biblioled/loan_rules.h"
 #include "biblioled/audit_log.h"
 #include "resource.h"
 #include "history_dialog.h"
@@ -62,7 +63,16 @@ struct RecordDialogContext {
 
 struct VisibleLoan {
     biblioled::LoanRecord record;
+    std::time_t loan_time;
     std::time_t expiry;
+    long days_remaining;
+
+    VisibleLoan()
+        : loan_time(static_cast<std::time_t>(-1)),
+          expiry(static_cast<std::time_t>(-1)),
+          days_remaining(0)
+    {
+    }
 };
 
 HINSTANCE gInstance = NULL;
@@ -406,76 +416,6 @@ bool WriteSettings(const std::wstring& path,
     return true;
 }
 
-std::time_t ParseDateTime(const std::string& value)
-{
-    int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int consumed = 0;
-
-    if (std::sscanf(value.c_str(), "%d-%d-%d %d:%d%n",
-                    &year, &month, &day, &hour, &minute, &consumed) != 5 ||
-        consumed != static_cast<int>(value.size())) {
-        return static_cast<std::time_t>(-1);
-    }
-
-    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31 ||
-        hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        return static_cast<std::time_t>(-1);
-    }
-
-    std::tm parts = {};
-    parts.tm_year = year - 1900;
-    parts.tm_mon = month - 1;
-    parts.tm_mday = day;
-    parts.tm_hour = hour;
-    parts.tm_min = minute;
-    parts.tm_isdst = -1;
-
-    const std::time_t result = std::mktime(&parts);
-    if (result == static_cast<std::time_t>(-1)) return result;
-
-    const std::tm* checked = std::localtime(&result);
-    if (!checked ||
-        checked->tm_year != year - 1900 ||
-        checked->tm_mon != month - 1 ||
-        checked->tm_mday != day ||
-        checked->tm_hour != hour ||
-        checked->tm_min != minute) {
-        return static_cast<std::time_t>(-1);
-    }
-
-    return result;
-}
-
-std::string FormatDateTime(std::time_t value, const char* format)
-{
-    const std::tm* local = std::localtime(&value);
-    if (!local) return std::string();
-
-    char buffer[64] = {0};
-    if (std::strftime(buffer, sizeof(buffer), format, local) == 0) return std::string();
-    return buffer;
-}
-
-std::time_t AddDays(std::time_t value, int days)
-{
-    const std::tm* current = std::localtime(&value);
-    if (!current) return static_cast<std::time_t>(-1);
-
-    std::tm adjusted = *current;
-    adjusted.tm_mday += days;
-    adjusted.tm_isdst = -1;
-    return std::mktime(&adjusted);
-}
-
-std::string CurrentDateTime()
-{
-    return FormatDateTime(std::time(NULL), "%Y-%m-%d %H:%M");
-}
-
 std::wstring GetControlText(HWND dialog, int control_id)
 {
     wchar_t buffer[512] = {0};
@@ -516,7 +456,8 @@ INT_PTR CALLBACK LoanDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM
             SetDlgItemTextW(dialog, IDC_LOAN_TYPE, L"Livro");
             SendDlgItemMessageW(dialog, IDC_LOAN_TYPE, CB_SETCURSEL, 0, 0);
 
-            const std::string now = CurrentDateTime();
+            const std::string now =
+                biblioled::FormatLocalDateTime(std::time(NULL), "%Y-%m-%d %H:%M");
             SetDlgItemTextW(dialog, IDC_LOAN_DATE,
                 Utf8ToWide(now.substr(0, 10)).c_str());
             SetDlgItemTextW(dialog, IDC_LOAN_TIME,
@@ -549,7 +490,7 @@ INT_PTR CALLBACK LoanDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM
         }
 
         const std::string loan_date = WideToUtf8(date) + " " + WideToUtf8(time);
-        if (ParseDateTime(loan_date) == static_cast<std::time_t>(-1)) {
+        if (biblioled::ParseLoanDateTime(loan_date) == static_cast<std::time_t>(-1)) {
             MessageBoxW(dialog,
                 L"Data ou hora inválida. Utilize AAAA-MM-DD e HH:MM.",
                 L"BiblioLED", MB_OK | MB_ICONWARNING);
@@ -755,24 +696,22 @@ void RefreshList()
     int invalid_dates = 0;
 
     for (size_t i = 0; i < records.size(); ++i) {
-        const std::time_t loan_time = ParseDateTime(records[i].loan_date);
-        if (loan_time == static_cast<std::time_t>(-1)) {
+        biblioled::LoanEvaluation evaluation;
+        if (!biblioled::EvaluateLoanDateTime(
+                records[i].loan_date, gSettings.loan_duration_days,
+                now, &evaluation)) {
             ++invalid_dates;
             continue;
         }
 
-        const std::time_t expiry = AddDays(loan_time, gSettings.loan_duration_days);
-        if (expiry == static_cast<std::time_t>(-1)) {
-            ++invalid_dates;
-            continue;
-        }
-
-        // Pre-entered future records are shown. Expired records remain in the
-        // full history and are omitted from this operational view.
-        if (expiry >= now) {
+        // Future records remain visible and continue to reserve quota.
+        // Expired records remain available in the separate history window.
+        if (evaluation.visible_in_operational_list) {
             VisibleLoan item;
             item.record = records[i];
-            item.expiry = expiry;
+            item.loan_time = evaluation.loan_time;
+            item.expiry = evaluation.expiry_time;
+            item.days_remaining = evaluation.days_remaining;
             visible.push_back(item);
         }
     }
@@ -789,15 +728,12 @@ void RefreshList()
         const biblioled::LoanRecord& record = visible[i].record;
         const std::wstring title = Utf8ToWide(record.title);
         const std::wstring type = record.type == "audiolivro" ? L"Audiolivro" : L"Livro";
-        const std::time_t loan_time = ParseDateTime(record.loan_date);
         const std::wstring loan_date = Utf8ToWide(
-            FormatDateTime(loan_time, "%d/%m/%Y %H:%M"));
+            biblioled::FormatLocalDateTime(visible[i].loan_time, "%d/%m/%Y %H:%M"));
         const std::wstring expiry = Utf8ToWide(
-            FormatDateTime(visible[i].expiry, "%d/%m/%Y %H:%M"));
-        const long days_left = static_cast<long>(
-            std::difftime(visible[i].expiry, now) / 86400.0);
+            biblioled::FormatLocalDateTime(visible[i].expiry, "%d/%m/%Y %H:%M"));
         wchar_t days[32] = {0};
-        _snwprintf(days, 31, L"%ld", days_left);
+        _snwprintf(days, 31, L"%ld", visible[i].days_remaining);
 
         LVITEMW row = {};
         row.mask = LVIF_TEXT | LVIF_PARAM;
@@ -817,33 +753,42 @@ void RefreshList()
 
     int daily_count = 0;
     int monthly_count = 0;
-    const std::string today_start = FormatDateTime(now, "%Y-%m-%d") + " 00:00";
-    const std::time_t month_start = AddDays(now, -gSettings.monthly_window_days);
-    const std::string monthly_start = FormatDateTime(month_start, "%Y-%m-%d %H:%M");
+    biblioled::QuotaWindowBounds quota_windows;
+    if (!biblioled::BuildQuotaWindowBounds(
+            now, gSettings.monthly_window_days, &quota_windows)) {
+        ShowStoreError(L"Não foi possível calcular as janelas de disponibilidade.",
+                       "Invalid local date/time or monthly window.");
+        return;
+    }
 
-    if (!gStore.CountSince(today_start, &daily_count, &error) ||
-        !gStore.CountSince(monthly_start, &monthly_count, &error)) {
+    // CountSince deliberately has no upper bound: future-dated records reserve quota.
+    if (!gStore.CountSince(quota_windows.daily_since, &daily_count, &error) ||
+        !gStore.CountSince(quota_windows.monthly_since, &monthly_count, &error)) {
         ShowStoreError(L"Não foi possível calcular a disponibilidade.", error);
         return;
     }
 
-    const int daily_available = (gSettings.daily_limit > daily_count)
-        ? gSettings.daily_limit - daily_count : 0;
-    const int monthly_available = (gSettings.monthly_limit > monthly_count)
-        ? gSettings.monthly_limit - monthly_count : 0;
+    biblioled::QuotaAvailability availability;
+    if (!biblioled::CalculateQuotaAvailability(
+            gSettings.daily_limit, daily_count,
+            gSettings.monthly_limit, monthly_count, &availability)) {
+        ShowStoreError(L"Não foi possível calcular a disponibilidade.",
+                       "Invalid quota limit or loan count.");
+        return;
+    }
 
     wchar_t quota[256] = {0};
     _snwprintf(quota, 255,
         L"Disponibilidade: hoje %d/%d livres  |  últimos %d dias %d/%d livres",
-        daily_available, gSettings.daily_limit,
-        gSettings.monthly_window_days, monthly_available, gSettings.monthly_limit);
+        availability.daily_remaining, gSettings.daily_limit,
+        gSettings.monthly_window_days, availability.monthly_remaining, gSettings.monthly_limit);
     SetWindowTextW(gQuotaLabel, quota);
 
     wchar_t status[256] = {0};
     _snwprintf(status, 255,
         L"%u empréstimo(s) apresentados  |  Actualizado às %ls%ls%ls%ls",
         static_cast<unsigned int>(visible.size()),
-        Utf8ToWide(FormatDateTime(now, "%H:%M:%S")).c_str(),
+        Utf8ToWide(biblioled::FormatLocalDateTime(now, "%H:%M:%S")).c_str(),
         invalid_dates ? L"  |  Existem registos com datas inválidas" : L"",
         gStore.MigrationRequired()
             ? L"  |  Só leitura: migração por confirmar" : L"",

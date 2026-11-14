@@ -107,7 +107,7 @@ The external append-only UTF-8 text log is implemented at `logs/audit.log`, with
 
 When file logging is deliberately disabled, internal SQLite audit events continue to be recorded and external synchronisation pauses; the backlog is replayed when logging is re-enabled. When logging is enabled but synchronisation fails, the application remains readable but blocks further database mutations until the log is healthy again. The user can press F5 to retry synchronisation after correcting the underlying file-system problem, without restarting the application.
 
-## Main UI and secondary windows
+## Business rules\n\nDate parsing, local calendar-day arithmetic, loan expiry/visibility, quota-window boundaries and remaining-quota calculations live in the portable `biblioled_core` library (`loan_rules.*`). The Win32 interface calls these functions, and `loan_rules_tests` exercises them without starting the GUI or opening SQLite. Future-dated loans remain visible and reserve quota; expired loans stay in history.\n\n## Main UI and secondary windows
 
 - Main window: active loans and current operational information; do not make the full history the main view.
 - History: separate native Win32 dialog; all records including expired and future-dated loans; immediate case-insensitive filtering by title, type, date, and ID, plus a type selector. Search/display strings are cached at load time to avoid repeated conversions and database queries while typing. Edit/delete operations are routed through the existing LoanStore methods and transactional audit path; F5 reloads from SQLite. The history list is refreshed after a successful mutation.

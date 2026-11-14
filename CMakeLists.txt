@@ -54,6 +54,7 @@ else()
 endif()
 
 add_library(biblioled_core
+    src/core/loan_rules.cpp
     src/core/loan_store.cpp
     src/infrastructure/backup_compression.cpp
     src/infrastructure/backup_retention.cpp
@@ -126,6 +127,10 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(loan_rules_tests tests/loan_rules_tests.cpp)
+    target_link_libraries(loan_rules_tests PRIVATE biblioled_core)
+    add_test(NAME loan_rules_tests COMMAND loan_rules_tests)
+
     add_executable(loan_store_tests tests/loan_store_tests.cpp)
     target_link_libraries(loan_store_tests PRIVATE biblioled_core)
     add_test(NAME loan_store_tests COMMAND loan_store_tests)
