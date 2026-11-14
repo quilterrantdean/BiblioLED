@@ -186,6 +186,89 @@ void DeleteSelected(HWND dialog,HistoryContext* context)
         Reload(dialog,context);
     UpdateActions(dialog,context);
 }
+
+void LayoutControls(HWND dialog)
+{
+    RECT client={};
+    GetClientRect(dialog,&client);
+    const int width=client.right-client.left;
+    const int height=client.bottom-client.top;
+    const int margin=8;
+    const int top=28;
+    const int footer=30;
+    const int type_width=112;
+    const int search_x=50;
+    const int search_width=width-search_x-margin-type_width-8;
+
+    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_SEARCH),search_x,5,
+               search_width>80?search_width:80,20,TRUE);
+    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_TYPE),width-margin-type_width,5,
+               type_width,100,TRUE);
+    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_LIST),margin,top,
+               width-2*margin>0?width-2*margin:0,
+               height-top-footer>0?height-top-footer:0,TRUE);
+
+    const int button_y=height-25;
+    const int close_x=width-margin-48;
+    const int delete_x=close_x-6-56;
+    const int edit_x=delete_x-6-48;
+    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_STATUS),margin,button_y+3,
+               edit_x-margin-10>0?edit_x-margin-10:0,16,TRUE);
+    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_EDIT),edit_x,button_y,48,20,TRUE);
+    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_DELETE),delete_x,button_y,56,20,TRUE);
+    MoveWindow(GetDlgItem(dialog,IDOK),close_x,button_y,48,20,TRUE);
+}
+
+void ShowHistoryContextMenu(HWND dialog,HistoryContext* context,POINT screen_point)
+{
+    if(!context) return;
+    HWND list=GetDlgItem(dialog,IDC_HISTORY_LIST);
+    if(screen_point.x==-1 && screen_point.y==-1) {
+        const int selected=ListView_GetNextItem(list,-1,LVNI_SELECTED);
+        if(selected>=0) {
+            RECT item={};
+            if(ListView_GetItemRect(list,selected,&item,LVIR_BOUNDS)) {
+                screen_point.x=item.left+(item.right-item.left)/2;
+                screen_point.y=item.top+(item.bottom-item.top)/2;
+                ClientToScreen(list,&screen_point);
+            } else {
+                GetCursorPos(&screen_point);
+            }
+        } else {
+            GetCursorPos(&screen_point);
+        }
+    } else {
+        POINT client_point=screen_point;
+        ScreenToClient(list,&client_point);
+        LVHITTESTINFO hit={};
+        hit.pt=client_point;
+        const int index=ListView_HitTest(list,&hit);
+        if(index>=0) {
+            ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+            ListView_SetItemState(list,index,LVIS_SELECTED|LVIS_FOCUSED,
+                                  LVIS_SELECTED|LVIS_FOCUSED);
+        }
+    }
+
+    const BOOL can_edit=context->store &&
+        !context->store->MigrationRequired() &&
+        !context->store->ExternalAuditLogBlocked();
+    const BOOL has_selection=SelectedId(dialog)>0;
+    HMENU popup=CreatePopupMenu();
+    if(!popup) return;
+    AppendMenuW(popup,MF_STRING|((can_edit&&has_selection)?MF_ENABLED:MF_GRAYED),
+                IDC_HISTORY_EDIT,L"Editar");
+    AppendMenuW(popup,MF_STRING|((can_edit&&has_selection)?MF_ENABLED:MF_GRAYED),
+                IDC_HISTORY_DELETE,L"Eliminar");
+    SetForegroundWindow(dialog);
+    const UINT command=TrackPopupMenu(popup,
+        TPM_RIGHTBUTTON|TPM_RETURNCMD|TPM_NONOTIFY,
+        screen_point.x,screen_point.y,0,dialog,NULL);
+    DestroyMenu(popup);
+    if(command==IDC_HISTORY_EDIT) EditSelected(dialog,context);
+    else if(command==IDC_HISTORY_DELETE) DeleteSelected(dialog,context);
+}
+
 INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lParam)
 {
     HistoryContext* context=reinterpret_cast<HistoryContext*>(
@@ -202,7 +285,8 @@ INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lPara
         SendDlgItemMessageW(dialog,IDC_HISTORY_TYPE,CB_SETCURSEL,0,0);
         HWND list=GetDlgItem(dialog,IDC_HISTORY_LIST);
         ListView_SetExtendedListViewStyle(list,
-            LVS_EX_FULLROWSELECT|LVS_EX_GRIDLINES|LVS_EX_DOUBLEBUFFER);
+            LVS_EX_FULLROWSELECT|LVS_EX_GRIDLINES|LVS_EX_DOUBLEBUFFER|
+            LVS_EX_HEADERDRAGDROP);
         const wchar_t* labels[]={L"ID",L"Título",L"Tipo",L"Data e hora"};
         const int widths[]={48,245,88,130};
         for(int i=0;i<4;++i) {
@@ -221,8 +305,29 @@ INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lPara
             return TRUE;
         }
         RefreshList(dialog,context);
+        LayoutControls(dialog);
         SetFocus(GetDlgItem(dialog,IDC_HISTORY_SEARCH));
         return FALSE;
+    }
+    if(message==WM_GETMINMAXINFO) {
+        MINMAXINFO* limits=reinterpret_cast<MINMAXINFO*>(lParam);
+        if(limits) {
+            limits->ptMinTrackSize.x=640;
+            limits->ptMinTrackSize.y=360;
+            return TRUE;
+        }
+    }
+    if(message==WM_SIZE && context) {
+        LayoutControls(dialog);
+        return TRUE;
+    }
+    if(message==WM_CONTEXTMENU && context &&
+       reinterpret_cast<HWND>(wParam)==GetDlgItem(dialog,IDC_HISTORY_LIST)) {
+        POINT point;
+        point.x=static_cast<short>(LOWORD(lParam));
+        point.y=static_cast<short>(HIWORD(lParam));
+        ShowHistoryContextMenu(dialog,context,point);
+        return TRUE;
     }
     if(message==WM_COMMAND && context) {
         const int id=LOWORD(wParam), notification=HIWORD(wParam);
@@ -239,6 +344,13 @@ INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lPara
     if(message==WM_NOTIFY && context) {
         const NMHDR* header=reinterpret_cast<const NMHDR*>(lParam);
         if(header && header->idFrom==IDC_HISTORY_LIST) {
+            if(header->code==NM_RCLICK) {
+                const NMLISTVIEW* click=reinterpret_cast<const NMLISTVIEW*>(lParam);
+                POINT point=click?click->ptAction:POINT();
+                ClientToScreen(GetDlgItem(dialog,IDC_HISTORY_LIST),&point);
+                ShowHistoryContextMenu(dialog,context,point);
+                return TRUE;
+            }
             if(header->code==LVN_ITEMACTIVATE) {
                 EditSelected(dialog,context); return TRUE;
             }

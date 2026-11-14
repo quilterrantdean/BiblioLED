@@ -20,6 +20,16 @@ struct StatisticsContext {
     StatisticsContext() : store(NULL) {}
 };
 
+std::wstring Utf8ToWide(const std::string& value)
+{
+    if(value.empty()) return std::wstring();
+    const int length=MultiByteToWideChar(CP_UTF8,0,value.c_str(),-1,NULL,0);
+    if(length<=1) return std::wstring();
+    std::wstring result(static_cast<size_t>(length),L'\\0');
+    MultiByteToWideChar(CP_UTF8,0,value.c_str(),-1,&result[0],length);
+    result.resize(static_cast<size_t>(length-1));
+    return result;
+}
 std::wstring Number(int value)
 {
     wchar_t buffer[32]={0};
@@ -201,7 +211,7 @@ bool Reload(HWND dialog,StatisticsContext* context)
     std::string error;
     if(!context->store->GetAll(&context->records,&error)) {
         std::wstring message=L"Não foi possível ler os empréstimos.\n\n";
-        message+=std::wstring(error.begin(),error.end());
+        message+=Utf8ToWide(error);
         MessageBoxW(dialog,message.c_str(),L"Estatísticas",MB_OK|MB_ICONERROR);
         return false;
     }
@@ -253,7 +263,6 @@ INT_PTR CALLBACK StatisticsProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lP
             UpdateStatistics(dialog,context,SelectedYear(dialog));
             return TRUE;
         }
-        if(id==IDC_STATS_REFRESH) { Reload(dialog,context); return TRUE; }
         if(id==IDOK || id==IDCANCEL) { EndDialog(dialog,id); return TRUE; }
     }
     if(message==WM_NOTIFY && context) {
@@ -262,10 +271,6 @@ INT_PTR CALLBACK StatisticsProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lP
             ShowPage(dialog);
             return TRUE;
         }
-    }
-    if(message==WM_KEYDOWN && wParam==VK_F5 && context) {
-        Reload(dialog,context);
-        return TRUE;
     }
     return FALSE;
 }

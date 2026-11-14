@@ -161,7 +161,7 @@ jobs:
             dados esperada desaparecer depois da inicialização.
 
           Definições de cópias:
-          - Ficheiro > Definições de cópias permite escolher gzip/zlib e nível 0–9.
+          - Opções > Definições de cópias permite escolher gzip/zlib e nível 0–9.
           - Os valores ficam em config\settings.ini, secção [backups].
           - As alterações são aplicadas imediatamente às próximas cópias criadas,
             sem reiniciar a aplicação. Uma cópia automática válida já criada hoje
@@ -175,7 +175,8 @@ jobs:
           a sincronização do ficheiro fica pendente até voltar a ser activada.
           Se o log estiver activado mas não puder ser escrito, as alterações à base de
           dados ficam bloqueadas até a sincronização recuperar. Depois de corrigir
-          o problema, prima F5 para tentar novamente sem reiniciar a aplicação.
+          o problema, escolha Ficheiro > Tentar sincronizar registo de auditoria,
+          sem reiniciar a aplicação.
 
           Ainda faltam recuperação guiada, futuras migrações de esquema e outras funcionalidades da aplicação final. O registo interno de auditoria
           não tem visualizador.

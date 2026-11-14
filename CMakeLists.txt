@@ -92,6 +92,9 @@ if(WIN32)
         src/infrastructure/audit_log.cpp
     )
     target_include_directories(BiblioLED PRIVATE src/win32)
+    target_compile_options(BiblioLED PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+    )
     target_compile_definitions(BiblioLED PRIVATE
         WINVER=0x0501
         _WIN32_WINNT=0x0501

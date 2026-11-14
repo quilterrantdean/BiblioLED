@@ -109,17 +109,19 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 
 All automated tests use generated databases and temporary backup files. The user's real database has not been copied, opened, migrated, or modified. Do not use the current prototype with real data.
 
-## Pending user-approved Win32 UI refinements
+## Implemented Win32 UI refinements
 
-The following are confirmed requirements for the next UI work; they are not yet implemented:
+The following changes are now in the application source; the new CI run is the compile/test gate, and visual confirmation of resource glyphs remains a manual check:
 
-- Add a top-level **Opções** menu and move general/backup settings there from **Ficheiro**.
-- Investigate garbled Portuguese characters in secondary dialogs. The main window/menu are correct. Inspect `src/win32/dialogs.rc`, resource compiler code-page behaviour, and UTF-8-to-wide conversion paths before choosing a fix; do not assume fonts are at fault.
-- Make the history dialog resizable, enable header drag-and-drop for column reordering, and implement a right-click context menu for the selected record. Preserve double-click editing.
-- Remove the statistics manual refresh button/handler. Read a fresh snapshot when the dialog opens and recalculate year-dependent views from that cached snapshot; no periodic database polling.
-- Main-list reads must be event-driven: startup and successful create/edit/delete/restore. Remove manual refresh UI and the "Actualizado às ..." timestamp; do not add timer polling.
-- Implement functioning Win32 keyboard accelerators. Current menu captions display shortcut hints, but there is no complete accelerator-table/`TranslateAcceleratorW` path.
-- The current F5 handler also retries external audit-log synchronisation. Preserve this recovery operation under an explicit command if F5 is removed as a general refresh shortcut.
+- Settings commands are grouped under the **Opções** menu.
+- Main-window manual refresh UI and its "Actualizado às ..." timestamp have been removed. List reads remain event-driven; no timer or periodic SQLite polling exists.
+- Audit-log recovery is available through an explicit **Ficheiro** menu command and is no longer bound to F5.
+- The main window uses a Win32 accelerator table for Ctrl+N and Ctrl+H. List activation handles Enter; Delete is handled through the list-view key notification.
+- The history dialog is resizable with a minimum size, header drag-and-drop and a right-click context menu for edit/delete. Existing double-click editing remains.
+- Statistics no longer has a manual refresh button or F5 reload path; it reads the complete record snapshot on open and calculates year changes from memory.
+- `dialogs.rc` declares UTF-8 code page 65001 and MSVC C++ compilation is explicitly UTF-8. Statistics error messages now use a UTF-8-to-wide conversion helper.
+
+The rendering of Portuguese resource strings still needs visual confirmation on the target Windows installation; a successful resource compilation does not guarantee glyph display.
 
 ## XP-targeted build baseline
 

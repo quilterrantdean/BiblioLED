@@ -4,11 +4,11 @@
 
 **Stage:** the C++11/Win32/SQLite proof of concept includes automatic/manual/safety backups with compressed restore and retention, explicit schema migration and missing-database protection, transactional SQLite auditing with recoverable rotating external logs, the embedded icon and persistent main-table columns, searchable history, general and backup settings dialogs, About, read-only two-area statistics, CSV export, and portable loan-date/quota/statistics modules with dedicated tests.
 
-The last fully validated implementation baseline before the current documentation update is commit `a8a11c0b5543b899054d2c285c460da437e4d297` on `development`. The `Core tests` run [43644095785](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095785) passed both the Ubuntu core-test job and the modern Windows SDK Win32 compile/store-test job. The `XP-targeted Win32 build` run [43644095824](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824) passed using the pinned w64devkit x86 toolchain, ran the SQLite store tests, inspected the PE32/i386 executable, GUI subsystem 5.01 and imports, and published artefact [14133187960](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824). The artefact is `BiblioLED-XP-PoC`, SHA-256 `db9a7f2e887d71abfe51449d65584b0e5a453341c5a350b7b78bab61dd553f02`.
+The last fully validated implementation baseline before the current UI refinement pass was commit `a8a11c0b5543b899054d2c285c460da437e4d297` on `development`. The `Core tests` run [43644095785](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095785) passed both the Ubuntu core-test job and the modern Windows SDK Win32 compile/store-test job. The `XP-targeted Win32 build` run [43644095824](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824) passed using the pinned w64devkit x86 toolchain, ran the SQLite store tests, inspected the PE32/i386 executable, GUI subsystem 5.01 and imports, and published artefact [14133187960](https://github.com/quilterrantdean/BiblioLED/actions/runs/43644095824). The artefact is `BiblioLED-XP-PoC`, SHA-256 `db9a7f2e887d71abfe51449d65584b0e5a453341c5a350b7b78bab61dd553f02`.
 
 On 2026-11-14, the Actions history cleanup removed the 223 older runs and preserved exactly those two successful runs (225 total before cleanup, 2 afterwards). This is a historical cleanup record; subsequent pushes can naturally create new runs. The branch comparison at that point showed `development` 129 commits ahead of `main`, with no commits behind. The `main` branch remains the unchanged Python reference.
 
-These CI checks establish successful builds and tests on GitHub-hosted modern runners, plus PE-level XP-target checks. They do **not** establish that the application executes correctly on a physical Windows XP SP3 system. Actual XP runtime validation remains outstanding.
+These CI checks establish successful builds and tests on GitHub-hosted modern runners, plus PE-level XP-target checks. The user has reported having tested the application manually; the exact tested artefact, operating-system build and exercised scenarios have not yet been recorded, so do not treat this as a fully documented XP compatibility sign-off.
 
 The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
@@ -84,17 +84,17 @@ The current CI validation baseline, run identifiers, XP artefact and remaining p
 - [x] Make the main table columns reorderable by dragging their headers.
 - [x] Persist column display order and individual widths in `config/settings.ini`; invalid settings files are preserved and are never overwritten by layout saving.
 
-### User-approved UI refinements (pending implementation)
+### UI refinement implementation
 
-The following work has been requested and agreed. It is not yet implemented; do not treat it as completed merely because it is documented here.
+- [x] Added the top-level **Opções** menu; general and backup settings have been moved out of **Ficheiro**.
+- [x] Added an explicit **Ficheiro > Tentar sincronizar registo de auditoria...** recovery command. Removed F5 as a main-window refresh/retry shortcut without losing the audit-log recovery path.
+- [x] Removed the main-window refresh button and menu command, and removed the "Actualizado às ..." timestamp. The main list remains event-driven: startup, successful CRUD operations and successful database restore. No periodic polling was added.
+- [x] Added a Win32 accelerator table and message-loop translation for Ctrl+N and Ctrl+H. Existing list-view activation handles Enter; Delete is handled from the list-view key notification.
+- [x] Made the history dialog resizable, added a minimum tracking size, enabled header drag-and-drop and added a right-click Edit/Delete context menu. Double-click editing remains.
+- [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
+- [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
 
-- Add a top-level **Opções** menu and move the general-settings and backup-settings commands out of **Ficheiro** into it.
-- Correct the Portuguese character/encoding defects in secondary dialogs. The main window and main menu currently display correctly; investigate the resource compiler, `.rc` source encoding/code-page handling, and UTF-8-to-wide conversions before changing fonts or applying a superficial workaround.
-- Make the history dialog resizable. Enable native header drag-and-drop so the user can reorder its columns, and add a right-click context menu for the selected record. Preserve the existing double-click-to-edit behaviour and the keyboard edit/delete commands.
-- Remove the statistics dialog's manual refresh button and redundant refresh handler. Load a fresh record snapshot when the dialog opens; changing the selected year should recalculate from that in-memory snapshot. Do not poll SQLite periodically.
-- Make main-list refresh event-driven: refresh at application startup and immediately after successful create/edit/delete operations or database restore. Do not poll SQLite on a timer. Remove the redundant manual list-refresh command/button and the "Actualizado às ..." status timestamp.
-- Fix keyboard shortcuts that are currently advertised in menu captions but do not consistently invoke their actions. Use a real Win32 accelerator table and `TranslateAcceleratorW`, and test the actual keyboard paths rather than relying on displayed shortcut text alone.
-- **Audit-log recovery caveat:** the existing implementation also binds F5 to retry external audit-log synchronisation after a logging failure. Removing F5 as a general refresh shortcut must not remove this recovery capability. Reassign it to a clear, explicit recovery command before removing the F5 binding altogether.
+All changes above are implementation-complete in the current development commit, pending the new CI runs. The UI resource encoding fix must still be confirmed visually on the user's target system; CI compilation alone cannot prove rendered glyphs.
 
 ### Phase 5 — Verification and delivery
 
@@ -112,7 +112,7 @@ The following work has been requested and agreed. It is not yet implemented; do 
 
 - Confirm w64devkit x86 as the final compiler/toolchain after the Windows XP SP3 runtime test.
 - Exact external-log synchronisation behaviour when file logging is deliberately disabled.
-- Low-impact UI details (final column widths, menu commands, and progressive history-loading threshold for very large histories).
+- Progressive history-loading threshold for very large histories. Final menu placement and refresh behaviour are now implemented according to the confirmed decisions.
 
 Resolve these during implementation unless they materially change stored data or the agreed user experience. The UI refinements above are already user-approved; do not ask the user to repeat those decisions. Preserve the audit-log recovery capability when changing the F5 interaction.
 

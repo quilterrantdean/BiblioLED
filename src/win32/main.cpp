@@ -84,6 +84,7 @@ HWND gQuotaLabel = NULL;
 HWND gStatusLabel = NULL;
 HANDLE gInstanceMutex = NULL;
 HICON gApplicationIcon = NULL;
+HACCEL gMainAccelerators = NULL;
 std::wstring gApplicationDirectory;
 std::wstring gSettingsPath;
 bool gSettingsFileValid = false;
@@ -788,9 +789,8 @@ void RefreshList()
 
     wchar_t status[256] = {0};
     _snwprintf(status, 255,
-        L"%u empréstimo(s) apresentados  |  Actualizado às %ls%ls%ls%ls",
+        L"%u empréstimo(s) apresentados%ls%ls%ls",
         static_cast<unsigned int>(visible.size()),
-        Utf8ToWide(biblioled::FormatLocalDateTime(now, "%H:%M:%S")).c_str(),
         invalid_dates ? L"  |  Existem registos com datas inválidas" : L"",
         gStore.MigrationRequired()
             ? L"  |  Só leitura: migração por confirmar" : L"",
@@ -1047,29 +1047,33 @@ HMENU CreateApplicationMenu()
     HMENU file_menu = CreatePopupMenu();
     HMENU record_menu = CreatePopupMenu();
     HMENU view_menu = CreatePopupMenu();
+    HMENU options_menu = CreatePopupMenu();
     HMENU help_menu = CreatePopupMenu();
 
     const UINT write_menu_flags = gStore.MigrationRequired() ? MF_GRAYED : MF_STRING;
     AppendMenuW(file_menu, write_menu_flags, IDM_NEW, L"Novo registo\tCtrl+N");
     AppendMenuW(file_menu, MF_STRING, IDM_BACKUP, L"Criar cópia de segurança...");
     AppendMenuW(file_menu, MF_STRING, IDM_RESTORE, L"Repor a partir de cópia...");
-    AppendMenuW(file_menu, MF_STRING, IDM_GENERAL_SETTINGS, L"Definições gerais...");
     AppendMenuW(file_menu, MF_STRING, IDM_EXPORT_CSV, L"Exportar histórico para CSV...");
-    AppendMenuW(file_menu, MF_STRING, IDM_BACKUP_SETTINGS, L"Definições de cópias...");
+    AppendMenuW(file_menu, MF_STRING, IDM_RETRY_AUDIT_SYNC,
+                L"Tentar sincronizar registo de auditoria...");
     AppendMenuW(file_menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(file_menu, MF_STRING, IDM_EXIT, L"Sair");
+
+    AppendMenuW(options_menu, MF_STRING, IDM_GENERAL_SETTINGS, L"Definições gerais...");
+    AppendMenuW(options_menu, MF_STRING, IDM_BACKUP_SETTINGS, L"Definições de cópias...");
 
     AppendMenuW(record_menu, write_menu_flags, IDM_EDIT, L"Editar\tEnter");
     AppendMenuW(record_menu, write_menu_flags, IDM_DELETE, L"Eliminar\tDelete");
 
     AppendMenuW(view_menu, MF_STRING, IDM_HISTORY, L"Histórico\tCtrl+H");
     AppendMenuW(view_menu, MF_STRING, IDM_STATISTICS, L"Estatísticas...");
-    AppendMenuW(view_menu, MF_STRING, IDM_REFRESH, L"Actualizar\tF5");
     AppendMenuW(help_menu, MF_STRING, IDM_ABOUT, L"Sobre");
 
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(file_menu), L"Ficheiro");
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(record_menu), L"Registo");
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(view_menu), L"Ver");
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(options_menu), L"Opções");
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(help_menu), L"Ajuda");
     return menu;
 }
@@ -1084,8 +1088,6 @@ void CreateChildControls(HWND window)
         74, 6, 62, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_EDIT), gInstance, NULL);
     CreateWindowW(L"BUTTON", L"Eliminar", write_button_style,
         140, 6, 66, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_DELETE), gInstance, NULL);
-    CreateWindowW(L"BUTTON", L"Actualizar", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        210, 6, 78, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_REFRESH), gInstance, NULL);
 
     gQuotaLabel = CreateWindowW(L"STATIC", L"Disponibilidade",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
@@ -1509,10 +1511,8 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         case IDM_STATISTICS:
             biblioled::win32::ShowStatisticsDialog(gInstance,gMainWindow,&gStore);
             return 0;
-        case IDM_REFRESH:
-        case IDC_BUTTON_REFRESH:
+        case IDM_RETRY_AUDIT_SYNC:
             SynchronizeExternalAuditLog(true);
-            RefreshList();
             return 0;
         case IDM_EXIT:
             DestroyWindow(window);
@@ -1550,13 +1550,16 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         if (reinterpret_cast<NMHDR*>(lParam)->idFrom == IDC_LOAN_LIST &&
             reinterpret_cast<NMHDR*>(lParam)->code == LVN_KEYDOWN) {
             const NMLVKEYDOWN* key = reinterpret_cast<const NMLVKEYDOWN*>(lParam);
-            if (key->wVKey == 'H' && (GetKeyState(VK_CONTROL) & 0x8000)) {
-                biblioled::win32::ShowHistoryDialog(gInstance,window,&gStore);
+            if (key->wVKey == VK_DELETE) {
+                DeleteLoan();
                 return 0;
             }
-            if (key->wVKey == VK_F5) {
-                SynchronizeExternalAuditLog(true);
-                RefreshList();
+            if (key->wVKey == 'N' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                AddLoan();
+                return 0;
+            }
+            if (key->wVKey == 'H' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                biblioled::win32::ShowHistoryDialog(gInstance,window,&gStore);
                 return 0;
             }
         }
@@ -1568,16 +1571,15 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         break;
 
     case WM_KEYDOWN:
+        if (wParam == 'N' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+            AddLoan();
+            return 0;
+        }
         if (wParam == 'H' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             biblioled::win32::ShowHistoryDialog(gInstance,window,&gStore);
             return 0;
         }
-        if (wParam == VK_F5) {
-            SynchronizeExternalAuditLog(true);
-            RefreshList();
-            return 0;
-        }
-        if (wParam == VK_DELETE) {
+        if (wParam == VK_DELETE && GetFocus() == gLoanList) {
             DeleteLoan();
             return 0;
         }
@@ -1777,14 +1779,31 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         SendMessageW(gMainWindow, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(gApplicationIcon));
     }
 
+    ACCEL accelerators[2] = {};
+    accelerators[0].fVirt = FVIRTKEY | FCONTROL;
+    accelerators[0].key = 'N';
+    accelerators[0].cmd = IDM_NEW;
+    accelerators[1].fVirt = FVIRTKEY | FCONTROL;
+    accelerators[1].key = 'H';
+    accelerators[1].cmd = IDM_HISTORY;
+    gMainAccelerators = CreateAcceleratorTableW(accelerators, 2);
+
     ShowWindow(gMainWindow, show_command);
     UpdateWindow(gMainWindow);
 
     MSG message;
     while (GetMessageW(&message, NULL, 0, 0) > 0) {
+        if (gMainAccelerators &&
+            TranslateAcceleratorW(gMainWindow, gMainAccelerators, &message)) {
+            continue;
+        }
         TranslateMessage(&message);
         DispatchMessageW(&message);
     }
 
+    if (gMainAccelerators) {
+        DestroyAcceleratorTable(gMainAccelerators);
+        gMainAccelerators = NULL;
+    }
     return static_cast<int>(message.wParam);
 }
