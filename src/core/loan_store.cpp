@@ -827,13 +827,23 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
     }
 
     std::string validation_error;
-    if (!ValidateDatabaseFile(backup_path, &validation_error)) {
+    std::string decoded_backup_path;
+    std::string decoded_temporary_path;
+    if (!DecodeBackupFile(backup_path, &decoded_backup_path,
+                          &decoded_temporary_path, &validation_error)) {
+        SetError(error, "The selected backup could not be decompressed: " + validation_error);
+        return false;
+    }
+    ScopedBackupFile decoded_cleanup;
+    decoded_cleanup.path = decoded_temporary_path;
+
+    if (!ValidateDatabaseFile(decoded_backup_path, &validation_error)) {
         SetError(error, "The selected backup is invalid: " + validation_error);
         return false;
     }
 
     sqlite3* source_db = NULL;
-    int rc = sqlite3_open_v2(backup_path.c_str(), &source_db, SQLITE_OPEN_READONLY, NULL);
+    int rc = sqlite3_open_v2(decoded_backup_path.c_str(), &source_db, SQLITE_OPEN_READONLY, NULL);
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(source_db, "Could not open the selected backup"));
         if (source_db) sqlite3_close(source_db);
@@ -858,7 +868,7 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
         return false;
     }
 
-    const std::string safety_backup = MakeBackupPath();
+    const std::string safety_backup = MakeBackupPath("safety_restore");
     if (safety_backup.empty()) {
         SetError(error, "Could not choose a name for the pre-restore backup. The current database was not changed.");
         sqlite3_close(source_db);
@@ -900,11 +910,19 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
 
     if (!restored) {
         sqlite3* fallback_db = NULL;
-        const int fallback_open = sqlite3_open_v2(
-            safety_backup.c_str(), &fallback_db, SQLITE_OPEN_READONLY, NULL);
+        std::string fallback_source_path;
+        std::string fallback_temporary_path;
+        std::string rollback_error;
+        bool fallback_decoded = DecodeBackupFile(
+            safety_backup, &fallback_source_path, &fallback_temporary_path,
+            &rollback_error);
+        ScopedBackupFile fallback_cleanup;
+        fallback_cleanup.path = fallback_temporary_path;
+        const int fallback_open = fallback_decoded
+            ? sqlite3_open_v2(fallback_source_path.c_str(), &fallback_db, SQLITE_OPEN_READONLY, NULL)
+            : SQLITE_ERROR;
         bool rolled_back = false;
         if (fallback_open == SQLITE_OK && fallback_db) {
-            std::string rollback_error;
             int fallback_version = -1;
             bool fallback_has_audit = false;
             rolled_back = ReadUserVersion(fallback_db, &fallback_version, &rollback_error) &&
@@ -927,7 +945,8 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
             }
         } else {
             if (fallback_db) sqlite3_close(fallback_db);
-            restore_error += " Could not open the pre-restore backup for rollback.";
+            restore_error += " Could not open or decompress the pre-restore backup for rollback.";
+            if (!rollback_error.empty()) restore_error += " " + rollback_error;
         }
 
         if (rolled_back) {
@@ -943,10 +962,6 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
 
     schema_version_ = restored_version;
     migration_required_ = (restored_version == 0);
-    if (!session_backup_done_) {
-        session_backup_done_ = true;
-        last_session_backup_path_ = safety_backup;
-    }
     return true;
 }
 
@@ -998,7 +1013,7 @@ bool LoanStore::MigrateLegacySchema(std::string* backup_path, std::string* error
         return false;
     }
 
-    const std::string safety_backup = MakeBackupPath();
+    const std::string safety_backup = MakeBackupPath("safety_migration");
     if (safety_backup.empty()) {
         SetError(error, "Could not choose a name for the migration backup. The database was not changed.");
         return false;
@@ -1008,11 +1023,6 @@ bool LoanStore::MigrateLegacySchema(std::string* backup_path, std::string* error
         return false;
     }
     if (backup_path) *backup_path = safety_backup;
-    if (!session_backup_done_) {
-        session_backup_done_ = true;
-        last_session_backup_path_ = safety_backup;
-    }
-
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) {
         if (error && !error->empty()) *error = "Could not start the schema migration: " + *error;
         return false;
@@ -1188,7 +1198,7 @@ bool LoanStore::RecordAuditEvent(const std::string& action,
         SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
-    if (!EnsureSessionBackup(error)) return false;
+    // Audit-only writes do not change loan data and must not trigger backups.
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
     if (!InsertAuditEvent(db_, action.c_str(), 0, NULL, NULL, details, error)) {
@@ -1298,7 +1308,7 @@ bool LoanStore::Insert(LoanRecord* record, std::string* error)
         SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
-    if (!EnsureSessionBackup(error)) return false;
+    if (!EnsureAutomaticBackup(error)) return false;
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
     sqlite3_stmt* statement = NULL;
