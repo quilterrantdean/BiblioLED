@@ -447,7 +447,9 @@ LoanStore::LoanStore()
     : db_(NULL),
       session_backup_done_(false),
       external_audit_log_enabled_(false),
-      external_audit_log_healthy_(true)
+      external_audit_log_healthy_(true),
+      backup_compression_format_("gzip"),
+      backup_compression_level_(6)
 {
 }
 
@@ -570,6 +572,17 @@ bool LoanStore::IsOpen() const
     return db_ != NULL;
 }
 
+void LoanStore::SetBackupCompression(const std::string& format, int level)
+{
+    if ((format == "gzip" || format == "zlib") && level >= 0 && level <= 9) {
+        backup_compression_format_ = format;
+        backup_compression_level_ = level;
+    } else {
+        backup_compression_format_ = "gzip";
+        backup_compression_level_ = 6;
+    }
+}
+
 int LoanStore::SchemaVersion() const
 {
     return schema_version_;
@@ -601,22 +614,36 @@ const std::string& LoanStore::LastSessionBackupPath() const
     return last_session_backup_path_;
 }
 
-std::string LoanStore::MakeBackupPath() const
+std::string LoanStore::MakeBackupPath(const std::string& category) const
 {
     const std::time_t now = std::time(NULL);
     const std::tm* local = std::localtime(&now);
     if (!local) return std::string();
 
     char timestamp[32] = {0};
-    if (std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", local) == 0) {
+    char date[16] = {0};
+    if (std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", local) == 0 ||
+        std::strftime(date, sizeof(date), "%Y%m%d", local) == 0) {
         return std::string();
     }
 
+    const std::string extension =
+        BackupCompressionExtension(CompressionFormatFromName(backup_compression_format_));
+
     for (int suffix = 0; suffix < 1000; ++suffix) {
         std::ostringstream filename;
-        filename << "BiblioLED_" << timestamp;
-        if (suffix > 0) filename << "_" << suffix;
-        filename << ".sqlite";
+        filename << "BiblioLED_" << category << "_";
+        if (category == "auto") {
+            filename << date;
+            if (suffix > 0) {
+                filename << "_" << timestamp;
+                if (suffix > 1) filename << "_" << suffix;
+            }
+        } else {
+            filename << timestamp;
+            if (suffix > 0) filename << "_" << suffix;
+        }
+        filename << extension;
 
         const std::string candidate = JoinPath(backup_directory_, filename.str());
         if (!FileExists(candidate)) return candidate;
@@ -626,15 +653,21 @@ std::string LoanStore::MakeBackupPath() const
 
 bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* error)
 {
+    const std::string raw_path = MakeTemporaryBackupPath(path, "sqlite_snapshot");
+    const std::string compressed_path = MakeTemporaryBackupPath(path, "compressed");
+    const std::string verify_path = MakeTemporaryBackupPath(path, "verify_sqlite");
+    if (raw_path.empty() || compressed_path.empty() || verify_path.empty()) {
+        SetError(error, "Could not reserve temporary files for the backup operation.");
+        return false;
+    }
+
     sqlite3* backup_db = NULL;
     int rc = sqlite3_open_v2(
-        path.c_str(), &backup_db,
+        raw_path.c_str(), &backup_db,
         SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXCLUSIVE, NULL);
     if (rc != SQLITE_OK) {
-        SetError(error, SqliteError(backup_db, "Could not create the SQLite backup"));
+        SetError(error, SqliteError(backup_db, "Could not create the temporary SQLite snapshot"));
         if (backup_db) sqlite3_close(backup_db);
-        // The path may belong to an earlier backup if a timestamp collision
-        // or external race occurred. Never remove a file we did not create.
         return false;
     }
 
@@ -646,22 +679,53 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
     if (!copied || close_rc != SQLITE_OK) {
         std::string message = "SQLite backup failed";
         if (!copy_error.empty()) message += ": " + copy_error;
-        if (close_rc != SQLITE_OK) message += ": could not close backup file";
+        if (close_rc != SQLITE_OK) message += ": could not close the snapshot file";
         SetError(error, message);
-        std::remove(path.c_str());
+        RemoveBackupFile(raw_path);
         return false;
     }
 
     std::string validation_error;
-    if (!ValidateDatabaseFile(path, &validation_error)) {
-        SetError(error, "The SQLite backup failed integrity validation: " + validation_error);
-        std::remove(path.c_str());
+    if (!ValidateDatabaseFile(raw_path, &validation_error)) {
+        SetError(error, "The SQLite snapshot failed integrity validation: " + validation_error);
+        RemoveBackupFile(raw_path);
         return false;
     }
+
+    const BackupCompressionFormat format =
+        CompressionFormatFromName(backup_compression_format_);
+    if (!CompressBackupFile(raw_path, compressed_path, format,
+                            backup_compression_level_, error)) {
+        RemoveBackupFile(raw_path);
+        return false;
+    }
+
+    if (!DecompressBackupFile(compressed_path, verify_path, format, error) ||
+        !ValidateDatabaseFile(verify_path, &validation_error)) {
+        if (error && error->empty()) {
+            *error = "The compressed backup failed its SQLite round-trip integrity check: " +
+                     validation_error;
+        }
+        RemoveBackupFile(raw_path);
+        RemoveBackupFile(compressed_path);
+        RemoveBackupFile(verify_path);
+        return false;
+    }
+
+    if (!MoveBackupFile(compressed_path, path)) {
+        SetError(error, "The verified compressed backup could not be moved to its final name.");
+        RemoveBackupFile(raw_path);
+        RemoveBackupFile(compressed_path);
+        RemoveBackupFile(verify_path);
+        return false;
+    }
+
+    RemoveBackupFile(raw_path);
+    RemoveBackupFile(verify_path);
     return true;
 }
 
-bool LoanStore::EnsureSessionBackup(std::string* error)
+bool LoanStore::EnsureAutomaticBackup(std::string* error)
 {
     if (session_backup_done_) return true;
     if (backup_directory_.empty()) {
@@ -669,21 +733,61 @@ bool LoanStore::EnsureSessionBackup(std::string* error)
         return false;
     }
 
-    const std::string path = MakeBackupPath();
+    const std::time_t now = std::time(NULL);
+    const std::tm* local = std::localtime(&now);
+    if (!local) {
+        SetError(error, "Could not determine the local date for the automatic backup.");
+        return false;
+    }
+    char date[16] = {0};
+    if (std::strftime(date, sizeof(date), "%Y%m%d", local) == 0) {
+        SetError(error, "Could not format the local date for the automatic backup.");
+        return false;
+    }
+
+    const std::string prefix = JoinPath(backup_directory_,
+        std::string("BiblioLED_auto_") + date);
+    const std::string candidates[] = {
+        prefix + ".sqlite.gz",
+        prefix + ".sqlite.zlib",
+        prefix + ".sqlite"
+    };
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+        if (!FileExists(candidates[i])) continue;
+        std::string decoded_path;
+        std::string temporary_path;
+        std::string validation_error;
+        if (DecodeBackupFile(candidates[i], &decoded_path, &temporary_path,
+                             &validation_error) &&
+            ValidateDatabaseFile(decoded_path, &validation_error)) {
+            if (!temporary_path.empty()) RemoveBackupFile(temporary_path);
+            last_session_backup_path_ = candidates[i];
+            session_backup_done_ = true;
+            return true;
+        }
+        if (!temporary_path.empty()) RemoveBackupFile(temporary_path);
+        // Preserve an invalid daily file. A new uniquely named snapshot is
+        // created below rather than overwriting evidence of corruption.
+    }
+
+    const std::string path = MakeBackupPath("auto");
     if (path.empty()) {
-        SetError(error, "Could not choose a unique name for the session backup. The database was not changed.");
+        SetError(error, "Could not choose a unique name for the daily automatic backup. The database was not changed.");
         return false;
     }
 
     if (!CreateAndValidateBackup(path, error)) {
-        if (error && !error->empty()) {
-            *error += ". The database was not changed.";
-        }
+        if (error && !error->empty()) *error += ". The database was not changed.";
         return false;
     }
 
     last_session_backup_path_ = path;
     session_backup_done_ = true;
+
+    // Retention is deliberately best-effort: a cleanup failure must not make
+    // an already-created, validated safety snapshot unusable.
+    std::string retention_error;
+    PruneAutomaticBackups(backup_directory_, &retention_error);
     return true;
 }
 
@@ -694,7 +798,7 @@ bool LoanStore::CreateManualBackup(std::string* backup_path, std::string* error)
         return false;
     }
 
-    const std::string path = MakeBackupPath();
+    const std::string path = MakeBackupPath("manual");
     if (path.empty()) {
         SetError(error, "Could not choose a unique name for the manual backup.");
         return false;
