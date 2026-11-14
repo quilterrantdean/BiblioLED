@@ -129,6 +129,14 @@ if(BUILD_TESTING)
     target_link_libraries(loan_store_tests PRIVATE biblioled_core)
     add_test(NAME loan_store_tests COMMAND loan_store_tests)
 
+    add_executable(backup_compression_tests tests/backup_compression_tests.cpp)
+    target_link_libraries(backup_compression_tests PRIVATE biblioled_core)
+    add_test(NAME backup_compression_tests COMMAND backup_compression_tests)
+
+    add_executable(backup_retention_tests tests/backup_retention_tests.cpp)
+    target_link_libraries(backup_retention_tests PRIVATE biblioled_core)
+    add_test(NAME backup_retention_tests COMMAND backup_retention_tests)
+
     if(WIN32)
         add_executable(audit_log_tests
             tests/audit_log_tests.cpp
