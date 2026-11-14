@@ -56,6 +56,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; F5 retries synchronisation without requiring an application restart.
 - [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
 - [ ] Extend audit coverage to settings changes, exports, warnings, errors, and failures.
+- [ ] Rework automatic backup policy: prevent audit-only events (startup/shutdown and operational audit rows) from triggering data-safety backups; evaluate a daily pre-change snapshot and bounded retention for automatic backups only.
+- [ ] Evaluate an existing minimal streaming compression library and archive format for SQLite backups; validate compressed round-trips, corruption handling, restore compatibility, and XP x86 builds. Continue to accept existing uncompressed `.sqlite` backups.
 
 Note: the durable startup event is a SQLite mutation, so each normal launch triggers the existing automatic pre-first-mutation session backup. This applies even when external file logging is disabled; the SQLite event remains authoritative.
 
