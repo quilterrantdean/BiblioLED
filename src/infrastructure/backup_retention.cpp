@@ -123,20 +123,70 @@ long long DaysFromCivil(int year, unsigned month, unsigned day)
            static_cast<long long>(day_of_era) - 719468;
 }
 
+bool IsAsciiDigits(const std::string& value, size_t start, size_t count)
+{
+    if (start > value.size() || count > value.size() - start) return false;
+    for (size_t i = start; i < start + count; ++i) {
+        if (value[i] < '0' || value[i] > '9') return false;
+    }
+    return true;
+}
+
 bool ParseBackupDate(const std::string& name, int* year, int* month, int* day)
 {
-    if (name.compare(0, 15, "BiblioLED_auto_") != 0 || name.size() < 23) return false;
-    const size_t start = 15;
-    for (size_t i = start; i < start + 8; ++i) {
-        if (name[i] < '0' || name[i] > '9') return false;
+    const std::string prefix = "BiblioLED_auto_";
+    if (name.compare(0, prefix.size(), prefix) != 0 ||
+        name.size() < prefix.size() + 8 + 7) return false;
+
+    const char* extensions[] = {".sqlite.gz", ".sqlite.zlib", ".sqlite"};
+    size_t extension_size = 0;
+    for (size_t i = 0; i < sizeof(extensions) / sizeof(extensions[0]); ++i) {
+        const std::string extension(extensions[i]);
+        if (name.size() >= extension.size() &&
+            name.compare(name.size() - extension.size(), extension.size(), extension) == 0) {
+            extension_size = extension.size();
+            break;
+        }
     }
-    *year = (name[start] - '0') * 1000 + (name[start + 1] - '0') * 100 +
-            (name[start + 2] - '0') * 10 + name[start + 3] - '0';
-    *month = (name[start + 4] - '0') * 10 + name[start + 5] - '0';
-    *day = (name[start + 6] - '0') * 10 + name[start + 7] - '0';
-    if (*year < 1970 || *month < 1 || *month > 12 || *day < 1 || *day > 31) return false;
-    return name.compare(start + 8, 7, ".sqlite") == 0 ||
-           name.compare(start + 8, 1, "_") == 0;
+    if (!extension_size) return false;
+
+    const size_t stem_end = name.size() - extension_size;
+    const size_t date_start = prefix.size();
+    if (!IsAsciiDigits(name, date_start, 8)) return false;
+
+    // The only optional suffix produced by MakeBackupPath is
+    // _YYYYMMDD_HHMMSS[_N]. Do not prune similarly prefixed unknown files.
+    const size_t suffix_start = date_start + 8;
+    const size_t suffix_size = stem_end - suffix_start;
+    if (suffix_size != 0) {
+        if (suffix_size < 16 || name[suffix_start] != '_' ||
+            !IsAsciiDigits(name, suffix_start + 1, 8) ||
+            name[suffix_start + 9] != '_' ||
+            !IsAsciiDigits(name, suffix_start + 10, 6)) return false;
+
+        const size_t numeric_suffix = suffix_start + 16;
+        if (numeric_suffix < stem_end) {
+            if (name[numeric_suffix] != '_' ||
+                !IsAsciiDigits(name, numeric_suffix + 1,
+                               stem_end - numeric_suffix - 1) ||
+                stem_end - numeric_suffix - 1 > 3) return false;
+        }
+    }
+
+    *year = (name[date_start] - '0') * 1000 + (name[date_start + 1] - '0') * 100 +
+            (name[date_start + 2] - '0') * 10 + name[date_start + 3] - '0';
+    *month = (name[date_start + 4] - '0') * 10 + name[date_start + 5] - '0';
+    *day = (name[date_start + 6] - '0') * 10 + name[date_start + 7] - '0';
+
+    if (*year < 1970 || *month < 1 || *month > 12 || *day < 1) return false;
+    static const int days_in_month[] = {
+        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    };
+    int maximum_day = days_in_month[*month - 1];
+    const bool leap_year = ((*year % 4 == 0) && (*year % 100 != 0)) ||
+                           (*year % 400 == 0);
+    if (*month == 2 && leap_year) maximum_day = 29;
+    return *day <= maximum_day;
 }
 
 long long CurrentDayOrdinal()
