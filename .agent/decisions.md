@@ -33,8 +33,8 @@ This file records decisions explicitly agreed with the user. Status labels disti
 | D-016 | Settings are managed in the application. Changes are saved but only take effect on the next application launch. Operational values must not be hardcoded into the executable. | Confirmed |
 | D-017 | The application is fully portable: executable, settings, database, backups, exports, logs, and resources are contained in one organised application folder. No AppData dependency, registry installation, service, or installer is required. | Confirmed |
 | D-018 | Missing settings are created with defaults. Invalid settings are preserved; the application warns and uses defaults in memory. When the user chooses to recreate an invalid file, preserve the original with an `.invalid` suffix. | Confirmed |
-| D-019 | Database backups are uncompressed SQLite files. Automatic backups are created immediately before the first database modification in each session; no backup is created for a read-only session. | Confirmed |
-| D-020 | Retain all backups indefinitely. No automatic retention or deletion policy; the user manages cleanup manually. | Confirmed |
+| D-019 | Current prototype: database backups are uncompressed SQLite files. Automatic backups are created immediately before the first database modification in each session; no backup is created for a read-only session. | Under review |
+| D-020 | Current prototype: retain all backups indefinitely. No automatic retention or deletion policy; the user manages cleanup manually. | Under review |
 | D-021 | A manual full-database backup is a separate operation from exporting selected/all records to CSV or another record format. | Confirmed |
 | D-022 | Before restoring a backup, create and validate a backup of the current database, even if the current session has not modified it. | Confirmed |
 | D-023 | Validate every backup immediately after creation using SQLite integrity checking. Validate a candidate backup's integrity and schema compatibility before restore. | Confirmed |
