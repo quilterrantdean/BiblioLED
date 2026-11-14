@@ -2,9 +2,9 @@
 
 ## Current status
 
-**Stage:** first C++/Win32/SQLite proof of concept builds and passes Linux, modern Win32, and XP-targeted w64devkit CI; Windows XP runtime validation remains outstanding.
+**Stage:** the Win32/SQLite foundation now has session and manual backups, verified restore, missing-database protection, schema version 1, explicit legacy migration, and transactional internal audit events. Linux, modern Win32, and XP-targeted w64devkit CI pass on commit bc5b024. Actual Windows XP SP3 runtime validation remains outstanding.
 
-The initial requirements and architecture are documented. The first implementation slice contains a SQLite store, native Win32 main window with basic loan CRUD, settings file, isolated store tests, and CI for Linux, modern Win32, and the XP-targeted w64devkit x86 build. All three checks pass on commit 40df8aee. The XP-targeted build passes its SQLite test and PE32/i386/subsystem 5.01 checks. A disposable test artefact is published. The application has not yet been run on Windows XP. The user's real database has not been opened or modified.
+The initial C++11/Win32/SQLite application is still a proof of concept, not the complete replacement. The current XP-targeted workflow builds with pinned w64devkit x86, runs the extended SQLite tests, checks the PE target/imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
 The `development` branch was created from `main` and now contains the first C++/Win32/SQLite prototype. All development commits remain confined to this branch.
 
@@ -45,13 +45,14 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Establish the initial project structure and CMake build configuration.
 - [ ] Implement the portable path model.
 - [ ] Implement settings loading, validation, and persistence.
-- [ ] Implement SQLite schema versioning.
-- [ ] Implement safe migration from the current database schema, with explicit confirmation.
+- [x] Implement SQLite schema versioning (PRAGMA user_version): new databases use version 1; the existing loans-only schema is recognised as version 0.
+- [x] Implement the explicit, backed-up, transactional version 0 to 1 migration. It adds the internal audit table and indexes without rewriting loan rows.
 - [x] Implement SQLite online backups before the first data mutation in each session, with integrity validation and fail-closed behaviour.
 - [x] Implement manual SQLite backups and a confirmed restore workflow with a verified pre-restore safety copy.
 - [x] Detect a missing database after initialisation and refuse silent recreation.
-- [ ] Implement guided missing-database recovery, schema migrations, and recovery reporting.
-- [ ] Implement diagnostic and audit logging.
+- [ ] Implement guided missing/corrupt-database recovery and reporting.
+- [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
+- [ ] Synchronise internal audit events to the external append-only UTF-8 log and implement log rotation; settle the behaviour when file logging is disabled.
 
 ### Phase 4 — Application functionality and interface
 
@@ -79,7 +80,6 @@ The main window remains an operational overview of active loans and useful curre
 - Confirm w64devkit x86 as the final compiler/toolchain after the Windows XP SP3 runtime test.
 - Exact external-log synchronisation behaviour when file logging is deliberately disabled.
 - Low-impact UI details (final column widths, menu commands, and progressive history-loading threshold).
-- Final settings-file format and any schema-version marker.
 
 Resolve these during implementation unless they materially change stored data or the agreed user experience.
 

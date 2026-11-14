@@ -86,14 +86,18 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 - Confirmed restore from a selected SQLite file. The source must pass integrity and schema checks. A second validated backup of the current database is created before replacement; after replacement the database is checked again. The code attempts to roll back from the pre-restore copy if post-restore verification fails.
 - Backup filenames are created with exclusive-create semantics so an existing backup is not overwritten after a collision.
 - A `config/database.initialized` marker distinguishes first use from a missing database. If the marker exists but `data/biblioteca.sqlite` is absent, startup stops instead of silently creating an empty database.
-- Isolated SQLite tests cover CRUD, UTF-8, future-dated quota counts, backup snapshots, one backup per session, manual backup, restore, pre-restore safety copies, invalid restore-source rejection, and fail-closed behaviour.
-- GitHub Actions: Linux core tests, modern Win32 compile/tests, and a separate w64devkit x86 XP-targeted build with PE architecture/subsystem/import checks and a disposable ZIP artifact.
+- Schema versions use SQLite PRAGMA user_version: new databases are version 1; the existing loans-only schema is version 0 and is opened read-only until explicit confirmation.
+- Version 0 to 1 migration creates and validates a full backup first, then transactionally creates the audit_events table and indexes, records the migration, and verifies the result. Existing loan rows are not rewritten or discarded; the original version-0 backup remains unchanged.
+- Create/edit/delete operations insert internal audit events in the same SQLite transaction as the loan change. Events include action, timestamp, loan ID, before/after values, and details. If the audit insert fails, the associated loan operation rolls back. The migration event is also recorded.
+- The store exposes a read API for internal audit events. External append-only text-log synchronisation is not yet implemented.
+- Isolated SQLite tests cover CRUD, UTF-8, future-dated quota counts, automatic/manual backup snapshots, restore and pre-restore safety copies, invalid restore-source rejection, backup failure, explicit legacy migration, future/malformed schema rejection, audit snapshots, and rollback when an audit insert fails.
+- GitHub Actions: Linux core tests, modern Win32 compile/tests, and a separate w64devkit x86 XP-targeted build with PE architecture/subsystem/import checks and a disposable ZIP artefact.
 
 ### Remaining work
 
 - Guided recovery when the expected database is missing or corrupt. The marker currently stops silent recreation and explains the problem; it does not yet offer an in-app recovery wizard.
-- Explicit schema versioning and confirmed, transactional migrations from the legacy SQLite schema.
-- Transactional internal audit events and synchronisation with the external text log, including the agreed behaviour when file logging is disabled.
+- Add later schema migration versions as product requirements evolve; the first version 0 to 1 migration is implemented.
+- Synchronise internal audit events to the external append-only text log, including recovery after interrupted writes and the agreed behaviour when file logging is disabled.
 - Full application settings UI, history window, statistics, export, About dialog, and the final modular business-rules layer.
 - Broader failure-injection, interrupted-operation, and restore-rollback tests.
 - Actual execution and measurement on Windows XP SP3. The CI runner is modern Windows; its XP-targeted toolchain and PE checks do not prove execution on the XP kernel.
@@ -107,5 +111,5 @@ All automated tests use generated databases and temporary backup files. The user
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest passing XP-targeted workflow at commit `64b9063e22833296320946dc42ca400717accda3` compiled the application, ran the SQLite store tests, checked the executable, and published a disposable test artefact. This is a target-build check, not proof of runtime compatibility on Windows XP SP3.
+The latest passing XP-targeted workflow at commit `bc5b0246b95573fe671fc17a3fa3d362a5691388` compiled the application, ran the extended SQLite store tests (including migration and audit rollback), checked the executable, and published a disposable test artefact. This is a target-build check, not proof of runtime compatibility on Windows XP SP3.
 

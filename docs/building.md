@@ -56,9 +56,9 @@ cmake --build --preset xp-x86-w64devkit --parallel
 ctest --preset xp-x86-w64devkit
 ```
 
-The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `64b9063e22833296320946dc42ca400717accda3` passed compilation, the SQLite store tests, PE inspection, and artifact upload.
+The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `bc5b0246b95573fe671fc17a3fa3d362a5691388` passed compilation, the extended SQLite store tests (including migration and audit-failure rollback), PE inspection, and artifact upload.
 
-These checks establish an XP-oriented build target, not proof that the application runs on XP. The current test ZIP includes automatic per-session backups before the first mutation, manual backup creation, confirmed restore with a pre-restore safety copy, and a marker that prevents silent recreation when an initialized database has gone missing. It still lacks schema migrations, audit logging, guided recovery, and the complete application. Do not use it with the real application data.
+These checks establish an XP-oriented build target, not proof that the application runs on XP. The current test ZIP includes automatic per-session backups before the first mutation, manual backup creation, confirmed restore with a pre-restore safety copy, and a marker that prevents silent recreation when an initialized database has gone missing. It creates new databases at schema version 1. Existing loans-only databases are detected as version 0 and require explicit confirmation before a backed-up transaction adds the internal audit table. Loan changes and their audit events are committed atomically. External text-log synchronisation, guided recovery, later migrations, and the complete application remain outstanding. Do not use it with the real application data.
 
 ## XP compatibility note
 
@@ -80,3 +80,15 @@ Both jobs passed for the initial proof-of-concept branch head. The Windows runne
 ## Missing-database protection
 
 After the database has opened successfully for the first time, the application writes `config/database.initialized`. On later launches, if this marker exists but `data/biblioteca.sqlite` is missing, startup stops with an explanatory message. It does not create an empty replacement. The marker is retained when replacing application binaries and should be kept with the configuration directory.
+
+
+## SQLite schema version and legacy migration
+
+The application uses SQLite PRAGMA user_version to identify the schema:
+
+- Version 0: the legacy loans(id, title, loan_date, type) table. The application can read it, but blocks changes until the user explicitly confirms migration.
+- Version 1: the same loans table plus audit_events and its indexes. New databases are created directly at this version.
+
+The version 0 to 1 migration first creates and validates a complete SQLite backup. It then uses a transaction to add the audit table/indexes, records a schema_migration event, sets user_version=1, and verifies the result. It does not rewrite loan rows. If the migration is declined or fails, the application remains read-only and the version 0 database remains unchanged.
+
+Every loan create/edit/delete and its internal audit event are committed in the same SQLite transaction. The event stores the action, timestamp, loan ID, before/after values, and details. If the audit write fails, the loan change is rolled back. The internal audit event read API is currently a store-level facility; an in-app audit viewer and external text-log synchronisation are not yet implemented.

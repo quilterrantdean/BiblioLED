@@ -139,7 +139,13 @@ jobs:
           Esta compilação serve apenas para ensaio.
           Não é uma versão de utilização diária nem está preparada para dados reais.
 
-          Protecções já incluídas:
+          Protecções e persistência já incluídas:
+          - Novas bases de dados criadas no esquema SQLite versão 1.
+          - Bases antigas (versão 0) só são alteradas depois de confirmação explícita.
+            Antes da migração é criada e validada uma cópia integral; a migração é
+            transaccional e preserva os empréstimos existentes.
+          - Cada criação, edição ou eliminação grava o evento interno de auditoria
+            na mesma transacção SQLite que altera o empréstimo.
           - Uma cópia SQLite validada antes da primeira alteração de cada sessão.
           - Cópias manuais separadas.
           - Reposição confirmada, depois de validar a origem e criar uma cópia de
@@ -147,8 +153,9 @@ jobs:
           - Um marcador impede a criação silenciosa de uma base vazia se a base de
             dados esperada desaparecer depois da inicialização.
 
-          Ainda faltam migrações de esquema, registo de auditoria, recuperação guiada
-          e outras funcionalidades da aplicação final.
+          Ainda faltam sincronização do registo interno com o ficheiro de log externo,
+          recuperação guiada, futuras migrações de esquema e outras funcionalidades
+          da aplicação final. O registo interno de auditoria não tem visualizador.
 
           Ensaio sugerido (apenas numa pasta temporária):
           1. Extraia este artefacto para uma pasta nova e vazia.

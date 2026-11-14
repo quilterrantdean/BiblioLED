@@ -6,7 +6,7 @@ Personal application for recording and managing the user's own BiblioLED loans. 
 
 The `development` branch contains an early C++ / Win32 / SQLite proof of concept. The legacy Python/Tkinter implementation remains in the repository as a functional reference while the replacement is developed.
 
-The new prototype has passed XP-targeted build checks but has not yet been run on Windows XP itself. It includes automatic per-session backups, manual backups, confirmed restore with a pre-restore safety copy, and protection against silently recreating a missing initialized database. Schema migrations, audit logging, guided recovery, and the complete application remain outstanding. It is still a test build and must not be used with the user's real database.
+The new prototype has passed XP-targeted build checks but has not yet been run on Windows XP itself. It includes automatic per-session backups, manual backups, confirmed restore with a pre-restore safety copy, protection against silently recreating a missing initialized database, schema version 1, an explicit backed-up migration from the legacy version 0 schema, and internal audit events committed atomically with loan changes. External text-log synchronisation, guided recovery, later migrations, and the complete application remain outstanding. It is still a test build and must not be used with the user's real database.
 
 ## Current direction
 
@@ -16,6 +16,7 @@ The new prototype has passed XP-targeted build checks but has not yet been run o
 - C++11 and CMake are used for the initial proof of concept.
 - The initial XP-targeted compiler baseline is the x86 edition of w64devkit; the dedicated workflow pins a release and checks the resulting PE target.
 - SQLite 3.53.4 is pinned for the XP prototype because SQLite 3.54.0 introduced a Windows SRW-lock dependency unavailable on XP.
+- SQLite user_version=1 identifies the current schema. Legacy version 0 databases require explicit, backed-up migration before writes.
 - User data, settings, backups, exports, and logs will remain in the portable application folder.
 
 ## Build and tests
