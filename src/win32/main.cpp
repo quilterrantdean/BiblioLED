@@ -573,8 +573,8 @@ void RestoreDatabaseFromBackup()
         JoinPath(gApplicationDirectory, L"data\\backups");
 
     static const wchar_t filter[] =
-        L"Base de dados SQLite (*.sqlite)\\0*.sqlite\\0"
-        L"Todos os ficheiros (*.*)\\0*.*\\0\\0";
+        L"Base de dados SQLite (*.sqlite)\0*.sqlite\0"
+        L"Todos os ficheiros (*.*)\0*.*\0\0";
 
     OPENFILENAMEW dialog = {};
     dialog.lStructSize = sizeof(dialog);
