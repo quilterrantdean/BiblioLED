@@ -8,8 +8,8 @@ The C++ proof of concept uses C++11, CMake, native Win32 controls, and SQLite.
 
 - CMake 3.24 or later.
 - A C/C++ toolchain capable of producing a 32-bit Windows XP-compatible executable.
-- For the Windows build, network access at first configure so CMake can download the pinned SQLite 3.53.4 amalgamation. CMake verifies the archive SHA3-256 hash before use.
-- On non-Windows hosts, the core test target uses the system SQLite development package.
+- For the Windows build, network access at first configure so CMake can download the pinned SQLite 3.53.4 amalgamation and zlib 1.4 source archive. CMake verifies both archives against their pinned hashes before use; zlib is built statically.
+- On non-Windows hosts, the core test target uses the system SQLite and zlib development packages (for Debian/Ubuntu: `libsqlite3-dev` and `zlib1g-dev`).
 
 The initial XP-targeted compiler baseline is the **x86 edition of w64devkit**. Upstream documents that this edition supports Windows XP or later and requires a Pentium 4-class processor with SSE2. CI pins w64devkit 2.10.0 by SHA-256; the local workflow below uses the same CMake preset. The separate modern-MSVC job remains a source/Win32 compile check, not XP validation.
 
@@ -108,13 +108,24 @@ widths=320,100,130,130,55
 
 The width values are in pixels. Layout is loaded at startup and saved after a column move, resize, or normal shutdown. An invalid settings file is preserved and is not overwritten merely to save table layout preferences.
 
-## Current backup behaviour and planned review
+## Backup formats, cadence and retention
 
-The current proof of concept stores uncompressed `.sqlite` backups and creates an automatic snapshot before the first SQLite mutation in each application session. The startup audit event is currently a SQLite mutation, so this means a snapshot is created on each normal launch, even when no loan data is changed. All backups are currently retained indefinitely.
+New backups use the statically linked zlib 1.4 library. The supported wrappers are gzip (`.sqlite.gz`) and zlib (`.sqlite.zlib`); raw DEFLATE is not used. The format and compression level (0–9, default 6) are set in the application backup-settings dialog and stored in `config/settings.ini`:
 
-This behaviour is being reviewed because it creates too many copies. The proposed direction is to stop audit-only events from triggering data-safety snapshots, consider one automatic snapshot before the first loan-data change per calendar day, and apply a bounded retention policy to automatic snapshots only. Manual backups and pre-restore/migration safety copies should not be removed by automatic retention. No new policy or compression format has been adopted yet.
+```ini
+[backups]
+compression_format=gzip
+compression_level=6
+```
 
-Any compression implementation must use an existing library, stream data rather than load the entire database into memory, verify the compressed round-trip, and still run SQLite integrity/schema validation before restore. Existing uncompressed `.sqlite` backups will remain supported.
+A backup is streamed through fixed-size buffers. Creation first makes a temporary SQLite Online Backup snapshot and checks it with `PRAGMA integrity_check`. The snapshot is then compressed, decompressed again to a temporary file, and checked a second time. Only after both checks succeed is the compressed file moved to its final name. A failed backup blocks the pending loan-data mutation.
+
+Automatic backups are created at most once per local calendar day, immediately before the first actual loan-data change that day. A valid same-day snapshot is reused. Startup/shutdown events, other audit-only writes, settings changes, and read-only sessions do not trigger automatic backups.
+
+Only automatic backups are subject to rolling retention: keep the latest 7 daily snapshots, then one per week for the following 4 weeks, then one per month for the following 12 months. Pruning runs only after a new automatic snapshot has been created and validated. Manual backups and safety backups made before restore or migration are stored separately and are never removed by this policy. Unrecognised or malformed filenames are preserved.
+
+Restore accepts both compressed formats and older uncompressed `.sqlite` files. Compressed files are decompressed to a temporary SQLite database and checked for stream integrity, SQLite integrity and schema compatibility before the current database is backed up and replaced. Restore verification and the safety-copy rollback path remain in place.
+
 
 ## External audit log
 
