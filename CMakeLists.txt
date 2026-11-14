@@ -56,6 +56,7 @@ endif()
 add_library(biblioled_core
     src/core/loan_store.cpp
     src/infrastructure/backup_compression.cpp
+    src/infrastructure/backup_retention.cpp
 )
 target_include_directories(biblioled_core PUBLIC include)
 
