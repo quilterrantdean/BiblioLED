@@ -1,4 +1,6 @@
 #include "biblioled/loan_store.h"
+#include "biblioled/backup_compression.h"
+#include "biblioled/backup_retention.h"
 
 #include <sqlite3.h>
 
@@ -6,6 +8,7 @@
 #include <ctime>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace biblioled {
 namespace {
@@ -356,6 +359,78 @@ bool ValidateDatabaseFile(const std::string& path, std::string* error)
         if (error) *error = "Could not close the backup after validation.";
     }
     return valid;
+}
+
+std::string MakeTemporaryBackupPath(const std::string& base,
+                                      const std::string& purpose)
+{
+    for (int suffix = 0; suffix < 1000; ++suffix) {
+        std::ostringstream name;
+        name << base << "." << purpose << "_" << suffix << ".tmp";
+        if (!FileExists(name.str())) return name.str();
+    }
+    return std::string();
+}
+
+bool HasSuffix(const std::string& value, const char* suffix)
+{
+    const std::string ending(suffix);
+    return value.size() >= ending.size() &&
+           value.compare(value.size() - ending.size(), ending.size(), ending) == 0;
+}
+
+bool DecodeBackupFile(const std::string& path,
+                      std::string* sqlite_path,
+                      std::string* temporary_path,
+                      std::string* error)
+{
+    if (temporary_path) temporary_path->clear();
+    if (HasSuffix(path, ".sqlite.gz") || HasSuffix(path, ".gz")) {
+        const std::string decoded = MakeTemporaryBackupPath(path, "decoded_sqlite");
+        if (decoded.empty()) {
+            if (error) *error = "Could not choose a temporary path for backup decompression.";
+            return false;
+        }
+        if (!DecompressBackupFile(path, decoded,
+                BackupCompressionFormat::Gzip, error)) {
+            RemoveBackupFile(decoded);
+            return false;
+        }
+        if (sqlite_path) *sqlite_path = decoded;
+        if (temporary_path) *temporary_path = decoded;
+        return true;
+    }
+    if (HasSuffix(path, ".sqlite.zlib") || HasSuffix(path, ".zlib")) {
+        const std::string decoded = MakeTemporaryBackupPath(path, "decoded_sqlite");
+        if (decoded.empty()) {
+            if (error) *error = "Could not choose a temporary path for backup decompression.";
+            return false;
+        }
+        if (!DecompressBackupFile(path, decoded,
+                BackupCompressionFormat::Zlib, error)) {
+            RemoveBackupFile(decoded);
+            return false;
+        }
+        if (sqlite_path) *sqlite_path = decoded;
+        if (temporary_path) *temporary_path = decoded;
+        return true;
+    }
+    if (sqlite_path) *sqlite_path = path;
+    return true;
+}
+
+struct ScopedBackupFile {
+    std::string path;
+    ~ScopedBackupFile()
+    {
+        if (!path.empty()) RemoveBackupFile(path);
+    }
+};
+
+BackupCompressionFormat CompressionFormatFromName(const std::string& name)
+{
+    return name == "zlib" ? BackupCompressionFormat::Zlib
+                          : BackupCompressionFormat::Gzip;
 }
 
 std::string SqliteError(sqlite3* db, const std::string& operation)
