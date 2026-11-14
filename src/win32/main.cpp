@@ -1121,13 +1121,42 @@ void LayoutControls(HWND window)
     }
 }
 
+INT_PTR CALLBACK AboutDialogProc(HWND dialog, UINT message,
+                                            WPARAM wParam, LPARAM)
+{
+    if (message == WM_INITDIALOG) {
+        HICON icon = gApplicationIcon
+            ? gApplicationIcon
+            : LoadIconW(gInstance, MAKEINTRESOURCEW(IDI_BIBLIOLED));
+        if (icon) {
+            SendDlgItemMessageW(dialog, IDC_ABOUT_ICON, STM_SETICON,
+                                reinterpret_cast<WPARAM>(icon), 0);
+        }
+
+        std::wstring version = L"Versão: ";
+        version += Utf8ToWide(BIBLIOLED_VERSION);
+        SetDlgItemTextW(dialog, IDC_ABOUT_VERSION, version.c_str());
+
+        std::wstring build = L"Compilação: ";
+        build += Utf8ToWide(std::string(__DATE__) + " " + __TIME__);
+        SetDlgItemTextW(dialog, IDC_ABOUT_BUILD, build.c_str());
+        return TRUE;
+    }
+
+    if (message == WM_COMMAND &&
+        (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)) {
+        EndDialog(dialog, LOWORD(wParam));
+        return TRUE;
+    }
+    return FALSE;
+}
+
 void ShowAbout()
 {
-    std::wstring text = L"BiblioLED\nVersão ";
-    text += Utf8ToWide(BIBLIOLED_VERSION);
-    text += L"\nGestor pessoal de empréstimos";
-    MessageBoxW(gMainWindow, text.c_str(), L"Sobre", MB_OK | MB_ICONINFORMATION);
+    DialogBoxParamW(gInstance, MAKEINTRESOURCEW(IDD_ABOUT_DIALOG),
+                    gMainWindow, AboutDialogProc, 0);
 }
+
 
 INT_PTR CALLBACK BackupSettingsDialogProc(HWND dialog, UINT message,
                                                 WPARAM wParam, LPARAM lParam)

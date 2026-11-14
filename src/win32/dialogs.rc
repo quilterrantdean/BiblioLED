@@ -43,6 +43,23 @@ BEGIN
     DEFPUSHBUTTON "Fechar", IDOK, 319, 198, 33, 18
 END
 
+IDD_ABOUT_DIALOG DIALOG 0, 0, 250, 132
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Sobre o BiblioLED"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL     "", IDC_ABOUT_ICON, "Static",
+                SS_ICON | WS_CHILD | WS_VISIBLE, 10, 12, 32, 32
+    LTEXT       "BiblioLED", IDC_ABOUT_NAME, 52, 12, 185, 12
+    LTEXT       "Gestor pessoal de empréstimos BiblioLED",
+                IDC_ABOUT_DESCRIPTION, 52, 29, 185, 20
+    LTEXT       "", IDC_ABOUT_VERSION, 52, 58, 185, 10
+    LTEXT       "", IDC_ABOUT_BUILD, 52, 73, 185, 10
+    LTEXT       "Alvo: Windows XP SP3 (32 bits)",
+                IDC_ABOUT_TARGET, 52, 88, 185, 10
+    DEFPUSHBUTTON "Fechar", IDOK, 188, 109, 52, 16
+END
+
 IDD_GENERAL_SETTINGS_DIALOG DIALOG 0, 0, 270, 184
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Definições gerais"

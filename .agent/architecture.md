@@ -112,7 +112,7 @@ When file logging is deliberately disabled, internal SQLite audit events continu
 - Main window: active loans and current operational information; do not make the full history the main view.
 - History: separate native Win32 dialog; all records including expired and future-dated loans; immediate case-insensitive filtering by title, type, date, and ID, plus a type selector. Search/display strings are cached at load time to avoid repeated conversions and database queries while typing. Edit/delete operations are routed through the existing LoanStore methods and transactional audit path; F5 reloads from SQLite. The history list is refreshed after a successful mutation.
 - Statistics: general/evolution and usage-pattern views; no reading-progress or streak tracking.
-- About: existing icon, application name, version, short description, and build date.
+- About: native Win32 dialog displaying the embedded application icon, application name, version, short description, compile date/time, and XP SP3 x86 target.
 - Appearance: compact native Windows utility, prioritising legibility and functional density over decoration.
 - Main table columns are reorderable by dragging headers. Store display order and widths per logical column in the existing settings.ini and restore them at startup. Do not rewrite an invalid settings file merely to save UI preferences.
 
