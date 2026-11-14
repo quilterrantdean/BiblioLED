@@ -5,10 +5,18 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
 
 namespace {
 
@@ -31,6 +39,114 @@ bool Execute(sqlite3* db, const char* sql)
     }
     sqlite3_free(message);
     return rc == SQLITE_OK;
+}
+
+bool FileExists(const std::string& path)
+{
+    std::ifstream input(path.c_str(), std::ios::binary);
+    return input.good();
+}
+
+bool MakeDirectory(const std::string& path)
+{
+#ifdef _WIN32
+    if (CreateDirectoryA(path.c_str(), NULL)) return true;
+    return GetLastError() == ERROR_ALREADY_EXISTS;
+#else
+    if (mkdir(path.c_str(), 0700) == 0) return true;
+    struct stat info;
+    return stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
+#endif
+}
+
+std::string CurrentDateStamp()
+{
+    const std::time_t now = std::time(NULL);
+    const std::tm* local = std::localtime(&now);
+    if (!local) return std::string();
+    char date[16] = {0};
+    if (std::strftime(date, sizeof(date), "%Y%m%d", local) == 0) return std::string();
+    return date;
+}
+
+bool HasFileWithPrefix(const std::string& directory, const std::string& prefix)
+{
+#ifdef _WIN32
+    WIN32_FIND_DATAA data;
+    const std::string pattern = directory + "\\" + prefix + "*";
+    HANDLE find = FindFirstFileA(pattern.c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE) return false;
+    bool found = false;
+    do {
+        if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            found = true;
+            break;
+        }
+    } while (FindNextFileA(find, &data));
+    FindClose(find);
+    return found;
+#else
+    DIR* dir = opendir(directory.c_str());
+    if (!dir) return false;
+    struct dirent* entry = NULL;
+    bool found = false;
+    while ((entry = readdir(dir)) != NULL) {
+        const std::string name(entry->d_name);
+        if (name.compare(0, prefix.size(), prefix) == 0) {
+            found = true;
+            break;
+        }
+    }
+    closedir(dir);
+    return found;
+#endif
+}
+
+bool RemoveFilesWithPrefix(const std::string& directory, const std::string& prefix)
+{
+#ifdef _WIN32
+    WIN32_FIND_DATAA data;
+    const std::string pattern = directory + "\\" + prefix + "*";
+    HANDLE find = FindFirstFileA(pattern.c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE) return true;
+    bool ok = true;
+    do {
+        if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            const std::string path = directory + "\\" + data.cFileName;
+            if (!DeleteFileA(path.c_str())) ok = false;
+        }
+    } while (FindNextFileA(find, &data));
+    FindClose(find);
+    return ok;
+#else
+    DIR* dir = opendir(directory.c_str());
+    if (!dir) return false;
+    struct dirent* entry = NULL;
+    bool ok = true;
+    while ((entry = readdir(dir)) != NULL) {
+        const std::string name(entry->d_name);
+        if (name.compare(0, prefix.size(), prefix) == 0) {
+            if (std::remove((directory + "/" + name).c_str()) != 0) ok = false;
+        }
+    }
+    closedir(dir);
+    return ok;
+#endif
+}
+
+bool CreateUnrelatedSqliteFile(const std::string& path)
+{
+    sqlite3* db = NULL;
+    if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
+    const bool ok = Execute(db,
+        "CREATE TABLE unrelated_data (value TEXT NOT NULL);"
+        "INSERT INTO unrelated_data (value) VALUES ('valid SQLite, wrong application schema');"
+        "PRAGMA user_version = 99;");
+    const int close_rc = sqlite3_close(db);
+    return ok && close_rc == SQLITE_OK;
 }
 
 bool CreateLegacyDatabase(const std::string& path, int version)
@@ -159,6 +275,47 @@ int main()
         audit_only_store.Close();
     }
     RemoveDatabaseFiles(audit_only_database);
+
+    // An existing same-day SQLite file must not be reused unless it is a valid
+    // BiblioLED schema. Preserve an unrelated but structurally valid SQLite file.
+    const std::string candidate_backup_dir = database + ".candidate-backups";
+    const std::string candidate_database = database + ".candidate.sqlite";
+    Check(MakeDirectory(candidate_backup_dir),
+          "isolated daily-candidate backup directory should be created");
+    const std::string candidate_date = CurrentDateStamp();
+    const std::string candidate_prefix = "BiblioLED_auto_" + candidate_date;
+    const std::string unrelated_candidate =
+        candidate_backup_dir + "/" + candidate_prefix + ".sqlite";
+    Check(CreateUnrelatedSqliteFile(unrelated_candidate),
+          "unrelated but integrity-valid SQLite candidate should be created");
+    biblioled::LoanStore candidate_store;
+    Check(candidate_store.Open(candidate_database, candidate_backup_dir, &error),
+          "daily-candidate test database should open");
+    if (candidate_store.IsOpen()) {
+        biblioled::LoanRecord candidate_loan;
+        candidate_loan.title = "Candidate schema validation";
+        candidate_loan.loan_date = "2099-01-01 10:00";
+        candidate_loan.type = "livro";
+        Check(candidate_store.Insert(&candidate_loan, &error),
+              "loan mutation should create a proper daily snapshot when the candidate schema is invalid");
+        Check(!FileExists(unrelated_candidate),
+              "unrelated same-day SQLite file must be moved out of the automatic namespace");
+        Check(HasFileWithPrefix(candidate_backup_dir,
+                                "BiblioLED_invalid_auto_" + candidate_date + "_"),
+              "unrelated SQLite candidate should be preserved under an invalid-backup name");
+        Check(candidate_store.LastSessionBackupPath().find(".sqlite.gz") != std::string::npos,
+              "a valid compressed BiblioLED daily snapshot should replace the invalid candidate");
+        const std::string candidate_daily_backup = candidate_store.LastSessionBackupPath();
+        candidate_store.Close();
+        RemoveDatabaseFiles(candidate_daily_backup);
+    }
+    RemoveDatabaseFiles(candidate_database);
+    RemoveFilesWithPrefix(candidate_backup_dir, "BiblioLED_invalid_auto_");
+#ifdef _WIN32
+    RemoveDirectoryA(candidate_backup_dir.c_str());
+#else
+    rmdir(candidate_backup_dir.c_str());
+#endif
 
     // CRUD writes and audit rows must commit or roll back together.
     biblioled::LoanRecord book;
