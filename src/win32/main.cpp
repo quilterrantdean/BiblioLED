@@ -926,6 +926,76 @@ void CreateManualDatabaseBackup()
                 MB_OK | MB_ICONINFORMATION);
 }
 
+bool PromptAndRecoverDatabase(const std::wstring& database_path,
+                               const std::wstring& backup_directory,
+                               const std::wstring& reason,
+                               std::string* selected_backup_path,
+                               std::string* preserved_database_path)
+{
+    std::wstring prompt =
+        L"A base de dados não está disponível ou não pode ser aberta.\n\n";
+    prompt += reason;
+    prompt +=
+        L"\n\nPode tentar recuperar a base de dados a partir de uma cópia "
+        L"de segurança válida. A operação só avança depois de seleccionar "
+        L"e confirmar uma cópia.\n\nPretende seleccionar uma cópia agora?";
+
+    if (MessageBoxW(NULL, prompt.c_str(), L"Recuperação da base de dados",
+                    MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) != IDYES) {
+        return false;
+    }
+
+    wchar_t filename[MAX_PATH] = {0};
+    static const wchar_t filter[] =
+        L"Cópias SQLite (*.sqlite;*.sqlite.gz;*.sqlite.zlib)\0"
+        L"*.sqlite;*.sqlite.gz;*.sqlite.zlib\0"
+        L"Todos os ficheiros (*.*)\0*.*\0\0";
+
+    OPENFILENAMEW dialog = {};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = NULL;
+    dialog.lpstrFilter = filter;
+    dialog.nFilterIndex = 1;
+    dialog.lpstrFile = filename;
+    dialog.nMaxFile = MAX_PATH;
+    dialog.lpstrInitialDir = backup_directory.c_str();
+    dialog.lpstrTitle = L"Seleccionar cópia de segurança para recuperação";
+    dialog.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST |
+                   OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+
+    if (!GetOpenFileNameW(&dialog)) return false;
+
+    const std::wstring selected(filename);
+    std::wstring confirmation =
+        L"A base de dados será reconstruída com os dados da cópia seleccionada. "
+        L"Os registos posteriores à data dessa cópia poderão não estar presentes.\n\n"
+        L"A cópia seleccionada não será alterada. Se existir uma base de dados "
+        L"anterior, o ficheiro e os respectivos ficheiros auxiliares SQLite "
+        L"serão preservados com outro nome antes da instalação.\n\n";
+    confirmation += selected;
+    confirmation += L"\n\nPretende continuar?";
+
+    if (MessageBoxW(NULL, confirmation.c_str(), L"Confirmar recuperação",
+                    MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) != IDYES) {
+        return false;
+    }
+
+    std::string preserved;
+    std::string error;
+    if (!gStore.RecoverFromBackup(
+            WideToUtf8(database_path), WideToUtf8(selected), &preserved, &error)) {
+        std::wstring message = L"Não foi possível recuperar a base de dados.\n\n";
+        message += Utf8ToWide(error);
+        MessageBoxW(NULL, message.c_str(), L"Recuperação falhada",
+                    MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    if (selected_backup_path) *selected_backup_path = WideToUtf8(selected);
+    if (preserved_database_path) *preserved_database_path = preserved;
+    return true;
+}
+
 void RestoreDatabaseFromBackup()
 {
     wchar_t filename[MAX_PATH] = {0};
@@ -1678,31 +1748,53 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     const bool database_exists = FileExistsW(database_path);
     const bool database_marker_exists = FileExistsW(database_marker);
 
-    if (!database_exists && database_marker_exists) {
-        std::wstring message =
-            L"A base de dados esperada não foi encontrada:\n\n";
-        message += database_path;
-        message +=
-            L"\n\nPor segurança, não foi criada uma base de dados vazia. "
-            L"Reponha a base de dados ou uma cópia de segurança e tente novamente.";
-        MessageBoxW(NULL, message.c_str(), L"BiblioLED",
-                    MB_OK | MB_ICONERROR);
-        if (gInstanceMutex) CloseHandle(gInstanceMutex);
-        return 1;
-    }
-
     const std::string database_utf8 = WideToUtf8(database_path);
     std::string database_error;
     const std::wstring backup_directory =
         JoinPath(gApplicationDirectory, L"data\\backups");
     const std::string backup_directory_utf8 = WideToUtf8(backup_directory);
-    if (!gStore.Open(database_utf8, backup_directory_utf8, &database_error)) {
-        MessageBoxW(NULL,
-            (L"Não foi possível abrir a base de dados.\n\n" +
-             Utf8ToWide(database_error)).c_str(),
-            L"BiblioLED", MB_OK | MB_ICONERROR);
-        if (gInstanceMutex) CloseHandle(gInstanceMutex);
-        return 1;
+    std::string recovery_backup_path;
+    std::string recovery_preserved_path;
+    bool recovery_performed = false;
+
+    if (!database_exists && database_marker_exists) {
+        std::wstring reason = L"O ficheiro esperado não foi encontrado:\\n\\n";
+        reason += database_path;
+        if (!PromptAndRecoverDatabase(
+                database_path, backup_directory, reason,
+                &recovery_backup_path, &recovery_preserved_path)) {
+            if (gInstanceMutex) CloseHandle(gInstanceMutex);
+            return 1;
+        }
+        recovery_performed = true;
+    }
+
+    if (!recovery_performed &&
+        !gStore.Open(database_utf8, backup_directory_utf8, &database_error)) {
+        std::wstring reason =
+            L"Não foi possível abrir a base de dados esperada:\\n\\n";
+        reason += Utf8ToWide(database_error);
+        if (!PromptAndRecoverDatabase(
+                database_path, backup_directory, reason,
+                &recovery_backup_path, &recovery_preserved_path)) {
+            if (gInstanceMutex) CloseHandle(gInstanceMutex);
+            return 1;
+        }
+        recovery_performed = true;
+    }
+
+    if (recovery_performed) {
+        database_error.clear();
+        if (!gStore.Open(database_utf8, backup_directory_utf8, &database_error)) {
+            std::wstring message =
+                L"A cópia foi instalada, mas a base de dados recuperada "
+                L"não abriu correctamente:\\n\\n";
+            message += Utf8ToWide(database_error);
+            MessageBoxW(NULL, message.c_str(), L"BiblioLED",
+                        MB_OK | MB_ICONERROR);
+            if (gInstanceMutex) CloseHandle(gInstanceMutex);
+            return 1;
+        }
     }
     gStore.SetBackupCompression(
         gSettings.backup_compression_format,
@@ -1720,6 +1812,28 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     OfferLegacyMigration(NULL);
+    if (recovery_performed) {
+        std::wstring recovered_message =
+            L"A base de dados foi recuperada e validada a partir da cópia seleccionada.\n\n";
+        recovered_message += L"Cópia utilizada:\n";
+        recovered_message += Utf8ToWide(recovery_backup_path);
+        if (!recovery_preserved_path.empty()) {
+            recovered_message += L"\n\nA base de dados anterior foi preservada em:\n";
+            recovered_message += Utf8ToWide(recovery_preserved_path);
+        }
+        MessageBoxW(NULL, recovered_message.c_str(), L"Recuperação concluída",
+                    MB_OK | MB_ICONINFORMATION);
+    }
+    if (recovery_performed && !gStore.MigrationRequired()) {
+        std::string recovery_error;
+        std::string details = "source=" + recovery_backup_path +
+            "; preserved=" + recovery_preserved_path;
+        if (!gStore.RecordAuditEvent("database_recovery", details, &recovery_error)) {
+            ShowStoreError(
+                L"A base de dados foi recuperada, mas não foi possível registar a operação na auditoria.",
+                recovery_error);
+        }
+    }
     if (!gStore.MigrationRequired()) {
         std::string startup_error;
         if (!gStore.RecordAuditEvent(
