@@ -178,7 +178,7 @@ jobs:
           o problema, escolha Ficheiro > Tentar sincronizar registo de auditoria,
           sem reiniciar a aplicação.
 
-          Ainda faltam recuperação guiada, futuras migrações de esquema e outras funcionalidades da aplicação final. O registo interno de auditoria
+          A recuperação guiada de bases de dados em falta/corrompidas está implementada: a aplicação valida uma cópia seleccionada, preserva a base anterior e os ficheiros auxiliares SQLite antes de instalar a cópia validada. Continuam a faltar futuras migrações de esquema e outras funcionalidades da aplicação final. O registo interno de auditoria
           não tem visualizador.
 
           Ensaio sugerido (apenas numa pasta temporária):
@@ -199,10 +199,17 @@ jobs:
           8. Arraste os cabeçalhos das colunas, feche e volte a abrir; confirme que
              a ordem e as larguras são mantidas.
           9. Abra logs\audit.log e confirme que as operações aparecem no log.
-          10. Opcional: feche a aplicação, renomeie data\biblioteca.sqlite para
-              biblioteca.sqlite.test e volte a iniciar. A aplicação deverá parar e
-              explicar que a base de dados falta; não deverá criar uma base vazia.
-              Depois volte a colocar o ficheiro no nome original.
+          10. Opcional: teste a recuperação apenas nesta pasta descartável.
+              a) Para simular uma base em falta, feche a aplicação, renomeie
+                 data\biblioteca.sqlite para biblioteca.sqlite.missing-test e volte
+                 a iniciar. Escolha uma cópia válida em data\backups e confirme a
+                 recuperação. A aplicação deverá reabrir a base recuperada.
+              b) Para simular corrupção, feche a aplicação, copie a base para
+                 biblioteca.sqlite.before-corrupt-test e substitua o ficheiro
+                 data\biblioteca.sqlite por texto simples. Ao iniciar, escolha uma
+                 cópia válida. Confirme que a aplicação recupera e preserva o ficheiro
+                 danificado com o sufixo .recovery_preserved_...
+              Não execute estes ensaios na pasta com dados reais.
           11. Abra Ver > Histórico (Ctrl+H). Confirme que aparecem registos
               expirados e futuros. Pesquise por título, data e ID, filtre por
               Livro/Audiolivro, edite um registo fictício e elimine outro.

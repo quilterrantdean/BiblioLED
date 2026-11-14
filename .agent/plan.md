@@ -13,7 +13,7 @@ On 2026-11-14, Actions history cleanup removed 223 older workflow runs and prese
 
 The user reports having tested the application manually. The exact tested artefact, Windows build and exercised scenarios have not yet been recorded; do not treat this as formal target-runtime sign-off. CI PE/build checks are not a substitute for testing on the target machine.
 
-The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
+The application remains a proof of concept, not the complete replacement. Guided startup recovery is now implemented and covered by isolated store tests, but interrupted-install failure injection, broader audit coverage and final target-system verification remain. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
 The `development` branch was created from `main` and now contains the first C++/Win32/SQLite prototype. All development commits remain confined to this branch.
 
@@ -59,7 +59,9 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Implement one automatic SQLite Online Backup snapshot before the first loan-data mutation per local calendar day; audit-only events and settings changes do not trigger it. Reuse a valid same-day snapshot and fail closed if a new snapshot cannot be created.
 - [x] Implement compressed manual backups and a confirmed restore workflow with a separately classified, verified pre-restore safety copy; keep legacy uncompressed `.sqlite` backups restorable.
 - [x] Detect a missing database after initialisation and refuse silent recreation.
-- [ ] Implement guided missing/corrupt-database recovery and reporting.
+- [x] Implement guided missing/corrupt-database recovery and reporting.
+  - At startup, a missing previously initialised database or a database that cannot be opened offers an explicit backup-selection and confirmation flow. The selected backup is decompressed and schema/integrity checked, copied into a staging database, checked again, and installed only after the existing database and SQLite sidecars have been preserved under a recovery filename.
+  - A failed candidate validation leaves the expected database and sidecars untouched. Recovery is never automatic; the selected backup is retained, and the application reopens the installed database before continuing.
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
 - [x] Synchronise internal audit events to the external append-only UTF-8 log using stable event fingerprints; recover an incomplete final line and rotate archives at the configured size.
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; retry through **Ficheiro > Tentar sincronizar registo de auditoria...**.
@@ -102,7 +104,7 @@ All changes above are implementation-complete and passed the Core and XP-targete
 
 ### Phase 5 — Verification and delivery
 
-- [ ] Continue expanding automated coverage for recovery, migration, settings persistence and UI workflows. Existing loan-rule, statistics, backup/compression, retention, audit and store tests run on synthetic/isolated data; the latest Linux, modern Win32 and XP-targeted CI runs pass.
+- [ ] Continue expanding automated coverage for interrupted recovery/install failures, rollback, migration, settings persistence and UI workflows. The store suite now covers recovery from a missing database, preservation of a corrupt database and SQLite sidecars, rejection of an invalid candidate without touching the destination, and reopening the recovered database. All tests use synthetic/isolated data.
 - [ ] Add static analysis and dependency checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
