@@ -55,11 +55,24 @@ endif()
 
 add_library(biblioled_core
     src/core/loan_store.cpp
+    src/infrastructure/backup_compression.cpp
 )
 target_include_directories(biblioled_core PUBLIC include)
 
 if(WIN32)
-    target_link_libraries(biblioled_core PUBLIC sqlite3)
+    # zlib is built statically; only its stream API is used by the backup layer.
+    set(ZLIB_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_STATIC ON CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_MINIZIP OFF CACHE BOOL "" FORCE)
+    set(ZLIB_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(zlib
+        URL https://zlib.net/fossils/zlib-1.4.tar.gz
+        URL_HASH SHA256=02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584
+    )
+    FetchContent_MakeAvailable(zlib)
+
+    target_link_libraries(biblioled_core PUBLIC sqlite3 zlibstatic)
     target_compile_definitions(biblioled_core PRIVATE
         WINVER=0x0501
         _WIN32_WINNT=0x0501
@@ -100,7 +113,8 @@ if(WIN32)
         VERBATIM
     )
 else()
-    target_link_libraries(biblioled_core PUBLIC SQLite::SQLite3)
+    find_package(ZLIB REQUIRED)
+    target_link_libraries(biblioled_core PUBLIC SQLite::SQLite3 ZLIB::ZLIB)
 endif()
 
 if(MSVC)
