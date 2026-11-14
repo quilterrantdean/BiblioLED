@@ -138,6 +138,21 @@ int main()
               "automatic backup placeholder should be created");
     }
 
+    std::string today_date;
+    Check(DateForAge(0, &today_date), "today's backup date should be generated");
+    const std::string daily_prefix = "BiblioLED_auto_" + today_date;
+    const std::string earlier_same_day = daily_prefix + "_20261114_120000.sqlite.gz";
+    const std::string later_same_day = daily_prefix + "_20261114_130000.sqlite.gz";
+    Check(WriteDummy(JoinPath(directory, earlier_same_day)),
+          "first timestamp-suffixed daily backup should be created");
+    Check(WriteDummy(JoinPath(directory, later_same_day)),
+          "second timestamp-suffixed daily backup should be created");
+
+    Check(WriteDummy(JoinPath(directory, "BiblioLED_auto_20260231.sqlite.gz")),
+          "invalid calendar date backup name should be created");
+    Check(WriteDummy(JoinPath(directory, daily_prefix + "_garbage.sqlite.gz")),
+          "malformed automatic backup suffix should be created");
+
     Check(WriteDummy(JoinPath(directory, "BiblioLED_manual_20261114_120000.sqlite.gz")),
           "manual backup placeholder should be created");
     Check(WriteDummy(JoinPath(directory, "BiblioLED_safety_restore_20261114_120000.sqlite.gz")),
@@ -156,20 +171,33 @@ int main()
     bool manual_kept = false;
     bool safety_kept = false;
     bool unknown_kept = false;
+    bool latest_same_day_kept = false;
+    bool earlier_same_day_removed = true;
+    bool base_same_day_removed = true;
+    bool invalid_calendar_date_kept = false;
+    bool malformed_suffix_kept = false;
     for (size_t i = 0; i < names.size(); ++i) {
         if (names[i].compare(0, 15, "BiblioLED_auto_") == 0) ++automatic_count;
         if (names[i].find("BiblioLED_manual_") == 0) manual_kept = true;
         if (names[i].find("BiblioLED_safety_") == 0) safety_kept = true;
         if (names[i] == "BiblioLED_auto_unrecognised.sqlite.gz") unknown_kept = true;
+        if (names[i] == later_same_day) latest_same_day_kept = true;
+        if (names[i] == earlier_same_day) earlier_same_day_removed = false;
+        if (names[i] == daily_prefix + ".sqlite.gz") base_same_day_removed = false;
+        if (names[i] == "BiblioLED_auto_20260231.sqlite.gz") invalid_calendar_date_kept = true;
+        if (names[i] == daily_prefix + "_garbage.sqlite.gz") malformed_suffix_kept = true;
     }
 
     // 7 daily + 4 consecutive weekly periods + 12 calendar-month snapshots,
-    // plus the malformed file which must be preserved rather than guessed at.
-    Check(automatic_count == 24,
-          "retention should keep 7 daily, 4 weekly, 12 monthly and the unknown file");
+    // plus three unrecognised/malformed files preserved rather than guessed at.
+    Check(automatic_count == 26,
+          "retention should keep 7 daily, 4 weekly, 12 monthly and three malformed/unknown files");
+    Check(latest_same_day_kept && earlier_same_day_removed && base_same_day_removed,
+          "retention should recognise timestamp suffixes and keep only the latest same-day snapshot");
     Check(manual_kept, "manual backups must never be auto-pruned");
     Check(safety_kept, "restore/migration safety backups must never be auto-pruned");
-    Check(unknown_kept, "unrecognised backup filenames must be preserved");
+    Check(unknown_kept && invalid_calendar_date_kept && malformed_suffix_kept,
+          "unrecognised or malformed automatic backup filenames must be preserved");
 
     RemoveDirectoryFiles(directory);
     if (failures != 0) {
