@@ -52,7 +52,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Detect a missing database after initialisation and refuse silent recreation.
 - [ ] Implement guided missing/corrupt-database recovery and reporting.
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
-- [ ] Synchronise internal audit events to the external append-only UTF-8 log and implement log rotation; settle the behaviour when file logging is disabled.
+- [ ] Synchronise internal audit events to the external append-only UTF-8 log, recover missing entries after interruption, and rotate archives at the configured size.
+- [ ] When file logging is disabled, retain internal audit events in SQLite and pause external synchronisation; when re-enabled, synchronise the backlog. Database mutations remain available while logging is deliberately disabled.
 
 ### Phase 4 — Application functionality and interface
 
@@ -61,7 +62,9 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Implement the separate searchable/filterable history window.
 - [ ] Implement revised statistics.
 - [ ] Implement settings and the About dialog.
-- [ ] Preserve the existing application icon from the repository.
+- [x] Embed the existing application icon as a Win32 resource in `BiblioLED.exe`; do not ship or require a separate `.ico` file.
+- [ ] Make the main table columns reorderable by dragging their headers.
+- [ ] Persist column display order and individual widths in `config/settings.ini`, without overwriting an invalid settings file.
 
 ### Phase 5 — Verification and delivery
 

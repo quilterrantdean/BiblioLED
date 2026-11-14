@@ -19,6 +19,8 @@ This file records decisions explicitly agreed with the user. Status labels disti
 | D-011 | Follow the active Windows visual theme and use native Win32 controls where practical. | Confirmed |
 | D-053 | Future-dated loan records are shown in the main loan list in the same way as other records and immediately reserve capacity against the daily and monthly limits when entered. Their expiry is calculated from the loan date recorded for them. | Confirmed |
 | D-054 | The main table is labelled simply “Empréstimos”. It includes future-dated loans, while loans whose expiry date has passed are omitted from the main view and remain available in the full history. | Confirmed |
+| D-055 | The application icon must be embedded as a native Win32 resource in `BiblioLED.exe`. The executable must not require a separate `.ico` file at runtime or in the portable distribution. Keep the source icon in the repository for resource compilation. | Confirmed |
+| D-056 | The main loan table's columns must be user-reorderable by dragging the headers. The display order and individual column widths must persist between launches, stored in the existing portable `config/settings.ini` file. Invalid settings files must remain preserved; UI preferences must not overwrite an invalid settings file. | Confirmed |
 
 ## Data, settings, and portability
 

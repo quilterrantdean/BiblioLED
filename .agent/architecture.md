@@ -63,9 +63,9 @@ Suggested shape (final names may change with the chosen implementation):
 
 ```text
 BiblioLED/
-  BiblioLED.exe
+  BiblioLED.exe  (application icon embedded as a Win32 resource)
   config/
-    settings file
+    settings.ini  (application settings and persistent table layout)
   data/
     biblioteca.sqlite
     backups/
@@ -75,7 +75,7 @@ BiblioLED/
     port.ico
 ```
 
-All paths are resolved from the executable directory. The existing application icon is retained. Program updates must not overwrite user data, settings, backups, exports, or logs.
+All paths are resolved from the executable directory. The existing application icon is compiled into BiblioLED.exe as a Win32 resource; the portable distribution does not need a separate icon file. The loan table supports header drag-and-drop; its display order and per-column widths are persisted in config/settings.ini. Program updates must not overwrite user data, settings, backups, exports, or logs.
 
 ## Database safety model
 
@@ -109,6 +109,7 @@ The external append-only UTF-8 text log is not yet implemented. The intended nex
 - Statistics: general/evolution and usage-pattern views; no reading-progress or streak tracking.
 - About: existing icon, application name, version, short description, and build date.
 - Appearance: compact native Windows utility, prioritising legibility and functional density over decoration.
+- Main table columns are reorderable by dragging headers. Store display order and widths per logical column in the existing settings.ini and restore them at startup. Do not rewrite an invalid settings file merely to save UI preferences.
 
 
 ## Initial proof-of-concept implementation
