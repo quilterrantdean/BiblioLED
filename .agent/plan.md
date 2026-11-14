@@ -59,9 +59,10 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Separate audit-only writes (including startup/shutdown and settings changes) from loan-data backup triggers.
 - [x] Implement the approved automatic-backup retention policy: 7 daily, 4 weekly, and 12 monthly snapshots. Only recognised automatic backups are pruned; manual and restore/migration safety backups are preserved. Unknown filenames are preserved.
 - [x] Integrate statically linked zlib 1.4 for streaming gzip and zlib wrappers. Verify compressed round-trips and SQLite integrity; keep `.sqlite` backups compatible.
-- [x] Add backup settings for format (`gzip` or `zlib`) and compression level (0–9, default 6) to `config/settings.ini` and a dedicated Win32 dialog. Changes apply on the next launch.
+- [x] Add backup settings for format (`gzip` or `zlib`) and compression level (0–9, default 6) to `config/settings.ini` and a dedicated Win32 dialog. Changes are applied immediately to the open `LoanStore`, without restarting; a valid same-day automatic snapshot remains reused.
+- [x] Use native filesystem path separators for generated backup paths (`\\` on Windows, `/` on POSIX), avoiding mixed separators in messages and file operations.
 
-The new compression, retention, restore-compatibility, and Win32/XP-targeted build tests are awaiting the latest CI results.
+The live-settings and native-path corrections are undergoing fresh CI validation.
 
 ### Phase 4 — Application functionality and interface
 
