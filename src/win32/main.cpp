@@ -33,13 +33,16 @@ struct AppSettings {
     int loan_duration_days;
     bool diagnostics_enabled;
     unsigned long audit_log_max_size_bytes;
+    std::string backup_compression_format;
+    int backup_compression_level;
     int column_order[kColumnCount];
     int column_widths[kColumnCount];
 
     AppSettings()
         : daily_limit(5), monthly_limit(20),
           monthly_window_days(30), loan_duration_days(21),
-          diagnostics_enabled(true), audit_log_max_size_bytes(5UL * 1024UL * 1024UL)
+          diagnostics_enabled(true), audit_log_max_size_bytes(5UL * 1024UL * 1024UL),
+          backup_compression_format("gzip"), backup_compression_level(6)
     {
         for (int i = 0; i < kColumnCount; ++i) column_order[i] = i;
         column_widths[0] = 320;
@@ -251,6 +254,10 @@ bool WriteDefaultSettings(const std::wstring& path)
               "enabled=1\r\n"
               "max_log_size_bytes=5242880\r\n"
               "\r\n"
+              "[backups]\r\n"
+              "compression_format=gzip\r\n"
+              "compression_level=6\r\n"
+              "\r\n"
               "[columns]\r\n"
               "order=0,1,2,3,4\r\n"
               "widths=320,100,130,130,55\r\n";
@@ -310,6 +317,12 @@ bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* 
             int log_size = 0;
             valid = ParsePositiveInteger(value, 65536, 1073741824, &log_size);
             if (valid) loaded.audit_log_max_size_bytes = static_cast<unsigned long>(log_size);
+        } else if (key == "compression_format") {
+            valid = value == "gzip" || value == "zlib";
+            if (valid) loaded.backup_compression_format = value;
+        } else if (key == "compression_level") {
+            valid = ParsePositiveInteger(value, 0, 9, &parsed);
+            if (valid) loaded.backup_compression_level = parsed;
         } else if (key == "order") {
             valid = ParseIntegerList(value, 0, kColumnCount - 1,
                                      loaded.column_order, kColumnCount, true);
@@ -356,6 +369,10 @@ bool WriteSettings(const std::wstring& path,
                   "[diagnostics]\r\n"
                << "enabled=" << (settings.diagnostics_enabled ? 1 : 0) << "\r\n"
                << "max_log_size_bytes=" << settings.audit_log_max_size_bytes << "\r\n"
+                  "\r\n"
+                  "[backups]\r\n"
+               << "compression_format=" << settings.backup_compression_format << "\r\n"
+               << "compression_level=" << settings.backup_compression_level << "\r\n"
                   "\r\n"
                   "[columns]\r\n"
                << "order=" << IntegerListToString(settings.column_order, kColumnCount) << "\r\n"
@@ -859,7 +876,7 @@ void RestoreDatabaseFromBackup()
         JoinPath(gApplicationDirectory, L"data\\backups");
 
     static const wchar_t filter[] =
-        L"Base de dados SQLite (*.sqlite)\0*.sqlite\0"
+        L"Cópias SQLite (*.sqlite;*.sqlite.gz;*.sqlite.zlib)\0*.sqlite;*.sqlite.gz;*.sqlite.zlib\0"
         L"Todos os ficheiros (*.*)\0*.*\0\0";
 
     OPENFILENAMEW dialog = {};
@@ -974,6 +991,7 @@ HMENU CreateApplicationMenu()
     AppendMenuW(file_menu, write_menu_flags, IDM_NEW, L"Novo registo\tCtrl+N");
     AppendMenuW(file_menu, MF_STRING, IDM_BACKUP, L"Criar cópia de segurança...");
     AppendMenuW(file_menu, MF_STRING, IDM_RESTORE, L"Repor a partir de cópia...");
+    AppendMenuW(file_menu, MF_STRING, IDM_BACKUP_SETTINGS, L"Definições de cópias...");
     AppendMenuW(file_menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(file_menu, MF_STRING, IDM_EXIT, L"Sair");
 
@@ -1131,6 +1149,9 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         case IDM_RESTORE:
             RestoreDatabaseFromBackup();
             return 0;
+        case IDM_BACKUP_SETTINGS:
+            ShowBackupSettings();
+            return 0;
         case IDM_ABOUT:
             ShowAbout();
             return 0;
@@ -1287,6 +1308,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         if (gInstanceMutex) CloseHandle(gInstanceMutex);
         return 1;
     }
+    gStore.SetBackupCompression(
+        gSettings.backup_compression_format,
+        gSettings.backup_compression_level);
 
     if (!database_marker_exists) {
         std::wstring marker_error;
