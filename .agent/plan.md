@@ -48,7 +48,8 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Implement SQLite schema versioning.
 - [ ] Implement safe migration from the current database schema, with explicit confirmation.
 - [x] Implement SQLite online backups before the first data mutation in each session, with integrity validation and fail-closed behaviour.
-- [ ] Implement manual backup, restore, and recovery flows.
+- [x] Implement manual SQLite backups and a confirmed restore workflow with a verified pre-restore safety copy.
+- [ ] Implement missing-database recovery, schema migrations, and recovery reporting.
 - [ ] Implement diagnostic and audit logging.
 
 ### Phase 4 — Application functionality and interface

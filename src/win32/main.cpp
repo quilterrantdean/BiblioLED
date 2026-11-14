@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <commctrl.h>
+#include <commdlg.h>
 
 #include "biblioled/loan_store.h"
 #include "resource.h"
@@ -550,6 +551,70 @@ void AddLoan()
     RefreshList();
 }
 
+void CreateManualDatabaseBackup()
+{
+    std::string backup_path;
+    std::string error;
+    if (!gStore.CreateManualBackup(&backup_path, &error)) {
+        ShowStoreError(L"Não foi possível criar a cópia de segurança.", error);
+        return;
+    }
+
+    std::wstring message = L"Cópia de segurança criada e validada:\n\n";
+    message += Utf8ToWide(backup_path);
+    MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED",
+                MB_OK | MB_ICONINFORMATION);
+}
+
+void RestoreDatabaseFromBackup()
+{
+    wchar_t filename[MAX_PATH] = {0};
+    const std::wstring backup_directory =
+        JoinPath(gApplicationDirectory, L"data\\backups");
+
+    static const wchar_t filter[] =
+        L"Base de dados SQLite (*.sqlite)\\0*.sqlite\\0"
+        L"Todos os ficheiros (*.*)\\0*.*\\0\\0";
+
+    OPENFILENAMEW dialog = {};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = gMainWindow;
+    dialog.lpstrFilter = filter;
+    dialog.nFilterIndex = 1;
+    dialog.lpstrFile = filename;
+    dialog.nMaxFile = MAX_PATH;
+    dialog.lpstrInitialDir = backup_directory.c_str();
+    dialog.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST |
+                   OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+
+    if (!GetOpenFileNameW(&dialog)) return;
+
+    const std::wstring selected = filename;
+    std::wstring confirmation =
+        L"A reposição irá substituir todos os registos pelos dados da cópia seleccionada.\n\n";
+    confirmation += L"Antes de continuar, será criada e validada uma cópia da base de dados actual.\n\n";
+    confirmation += selected;
+    confirmation += L"\n\nPretende continuar?";
+
+    if (MessageBoxW(gMainWindow, confirmation.c_str(), L"Confirmar reposição",
+                    MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) != IDYES) {
+        return;
+    }
+
+    std::string safety_backup;
+    std::string error;
+    if (!gStore.RestoreFromBackup(WideToUtf8(selected), &safety_backup, &error)) {
+        ShowStoreError(L"Não foi possível repor a cópia de segurança.", error);
+        return;
+    }
+
+    RefreshList();
+    std::wstring message = L"Base de dados reposta. A versão anterior foi salvaguardada em:\n\n";
+    message += Utf8ToWide(safety_backup);
+    MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED",
+                MB_OK | MB_ICONINFORMATION);
+}
+
 void EditLoan()
 {
     const int id = SelectedRecordId();
@@ -605,6 +670,8 @@ HMENU CreateApplicationMenu()
     HMENU help_menu = CreatePopupMenu();
 
     AppendMenuW(file_menu, MF_STRING, IDM_NEW, L"Novo registo\tCtrl+N");
+    AppendMenuW(file_menu, MF_STRING, IDM_BACKUP, L"Criar cópia de segurança...");
+    AppendMenuW(file_menu, MF_STRING, IDM_RESTORE, L"Repor a partir de cópia...");
     AppendMenuW(file_menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(file_menu, MF_STRING, IDM_EXIT, L"Sair");
 
@@ -727,6 +794,12 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             return 0;
         case IDM_EXIT:
             DestroyWindow(window);
+            return 0;
+        case IDM_BACKUP:
+            CreateManualDatabaseBackup();
+            return 0;
+        case IDM_RESTORE:
+            RestoreDatabaseFromBackup();
             return 0;
         case IDM_ABOUT:
             ShowAbout();

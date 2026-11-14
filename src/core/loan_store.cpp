@@ -43,6 +43,44 @@ bool HasColumn(sqlite3* db, const char* column_name)
     return found;
 }
 
+bool HasExpectedSchema(sqlite3* db)
+{
+    return HasColumn(db, "id") &&
+           HasColumn(db, "title") &&
+           HasColumn(db, "loan_date") &&
+           HasColumn(db, "type");
+}
+
+bool CopyDatabase(sqlite3* source, sqlite3* destination, std::string* error)
+{
+    sqlite3_backup* backup = sqlite3_backup_init(destination, "main", source, "main");
+    if (!backup) {
+        if (error) *error = sqlite3_errmsg(destination);
+        return false;
+    }
+
+    int rc = SQLITE_OK;
+    int busy_attempts = 0;
+    while (true) {
+        rc = sqlite3_backup_step(backup, -1);
+        if (rc == SQLITE_DONE) break;
+        if (rc == SQLITE_OK) continue;
+        if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED) {
+            if (++busy_attempts >= 200) break;
+            sqlite3_sleep(25);
+            continue;
+        }
+        break;
+    }
+
+    const int finish_rc = sqlite3_backup_finish(backup);
+    if (rc != SQLITE_DONE || finish_rc != SQLITE_OK) {
+        if (error) *error = sqlite3_errmsg(destination);
+        return false;
+    }
+    return true;
+}
+
 bool ValidateDatabaseFile(const std::string& path, std::string* error)
 {
     sqlite3* check_db = NULL;
@@ -222,42 +260,21 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
         path.c_str(), &backup_db,
         SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL);
     if (rc != SQLITE_OK) {
-        SetError(error, SqliteError(backup_db, "Could not create the session backup"));
+        SetError(error, SqliteError(backup_db, "Could not create the SQLite backup"));
         if (backup_db) sqlite3_close(backup_db);
         std::remove(path.c_str());
         return false;
     }
 
     sqlite3_busy_timeout(backup_db, 3000);
-    sqlite3_backup* backup = sqlite3_backup_init(backup_db, "main", db_, "main");
-    if (!backup) {
-        SetError(error, SqliteError(backup_db, "Could not initialise the SQLite backup"));
-        sqlite3_close(backup_db);
-        std::remove(path.c_str());
-        return false;
-    }
-
-    rc = SQLITE_OK;
-    int attempts = 0;
-    while (attempts < 200) {
-        rc = sqlite3_backup_step(backup, -1);
-        if (rc == SQLITE_DONE) break;
-        if (rc == SQLITE_OK) continue;
-        if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED) {
-            ++attempts;
-            sqlite3_sleep(25);
-            continue;
-        }
-        break;
-    }
-
-    const int finish_rc = sqlite3_backup_finish(backup);
-    const std::string backup_error = sqlite3_errmsg(backup_db);
+    std::string copy_error;
+    const bool copied = CopyDatabase(db_, backup_db, &copy_error);
     const int close_rc = sqlite3_close(backup_db);
 
-    if (rc != SQLITE_DONE || finish_rc != SQLITE_OK || close_rc != SQLITE_OK) {
+    if (!copied || close_rc != SQLITE_OK) {
         std::string message = "SQLite backup failed";
-        if (!backup_error.empty()) message += ": " + backup_error;
+        if (!copy_error.empty()) message += ": " + copy_error;
+        if (close_rc != SQLITE_OK) message += ": could not close backup file";
         SetError(error, message);
         std::remove(path.c_str());
         return false;
@@ -265,7 +282,7 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
 
     std::string validation_error;
     if (!ValidateDatabaseFile(path, &validation_error)) {
-        SetError(error, "The session backup failed integrity validation: " + validation_error);
+        SetError(error, "The SQLite backup failed integrity validation: " + validation_error);
         std::remove(path.c_str());
         return false;
     }
@@ -298,6 +315,119 @@ bool LoanStore::EnsureSessionBackup(std::string* error)
     return true;
 }
 
+bool LoanStore::CreateManualBackup(std::string* backup_path, std::string* error)
+{
+    if (!db_) {
+        SetError(error, "Database is not open.");
+        return false;
+    }
+
+    const std::string path = MakeBackupPath();
+    if (path.empty()) {
+        SetError(error, "Could not choose a unique name for the manual backup.");
+        return false;
+    }
+    if (!CreateAndValidateBackup(path, error)) return false;
+
+    if (backup_path) *backup_path = path;
+    return true;
+}
+
+bool LoanStore::RestoreFromBackup(const std::string& backup_path,
+                                  std::string* current_backup_path,
+                                  std::string* error)
+{
+    if (!db_ || backup_path.empty()) {
+        SetError(error, "An open database and a backup path are required.");
+        return false;
+    }
+    if (backup_path == database_path_) {
+        SetError(error, "The selected backup is the currently open database.");
+        return false;
+    }
+
+    std::string validation_error;
+    if (!ValidateDatabaseFile(backup_path, &validation_error)) {
+        SetError(error, "The selected backup is invalid: " + validation_error);
+        return false;
+    }
+
+    sqlite3* source_db = NULL;
+    int rc = sqlite3_open_v2(backup_path.c_str(), &source_db, SQLITE_OPEN_READONLY, NULL);
+    if (rc != SQLITE_OK) {
+        SetError(error, SqliteError(source_db, "Could not open the selected backup"));
+        if (source_db) sqlite3_close(source_db);
+        return false;
+    }
+
+    if (!HasExpectedSchema(source_db)) {
+        SetError(error, "The selected backup does not have a compatible loans schema. The current database was not changed.");
+        sqlite3_close(source_db);
+        return false;
+    }
+
+    const std::string safety_backup = MakeBackupPath();
+    if (safety_backup.empty()) {
+        SetError(error, "Could not choose a name for the pre-restore backup. The current database was not changed.");
+        sqlite3_close(source_db);
+        return false;
+    }
+    if (!CreateAndValidateBackup(safety_backup, error)) {
+        sqlite3_close(source_db);
+        if (error && !error->empty()) *error += ". The current database was not changed.";
+        return false;
+    }
+    if (current_backup_path) *current_backup_path = safety_backup;
+
+    std::string restore_error;
+    bool restored = CopyDatabase(source_db, db_, &restore_error);
+    const int source_close_rc = sqlite3_close(source_db);
+    if (source_close_rc != SQLITE_OK) {
+        restored = false;
+        restore_error = "Could not close the selected backup after copying.";
+    }
+
+    if (restored) {
+        restored = QuickCheck(&restore_error) && ValidateExistingSchema(&restore_error);
+    }
+
+    if (!restored) {
+        sqlite3* fallback_db = NULL;
+        const int fallback_open = sqlite3_open_v2(
+            safety_backup.c_str(), &fallback_db, SQLITE_OPEN_READONLY, NULL);
+        bool rolled_back = false;
+        if (fallback_open == SQLITE_OK && fallback_db) {
+            std::string rollback_error;
+            rolled_back = CopyDatabase(fallback_db, db_, &rollback_error);
+            sqlite3_close(fallback_db);
+            if (rolled_back) {
+                rolled_back = QuickCheck(&rollback_error) &&
+                              ValidateExistingSchema(&rollback_error);
+            }
+            if (!rolled_back && !rollback_error.empty()) {
+                restore_error += " Rollback attempt also failed: " + rollback_error;
+            }
+        } else {
+            if (fallback_db) sqlite3_close(fallback_db);
+            restore_error += " Could not open the pre-restore backup for rollback.";
+        }
+
+        if (rolled_back) {
+            SetError(error, "Restore was not completed. The original database was restored from the safety copy. " + restore_error);
+        } else {
+            SetError(error, "Restore failed and automatic rollback could not be verified. Preserve the safety backup at: " +
+                            safety_backup + ". " + restore_error);
+        }
+        return false;
+    }
+
+    if (!session_backup_done_) {
+        session_backup_done_ = true;
+        last_session_backup_path_ = safety_backup;
+    }
+    return true;
+}
+
 bool LoanStore::CreateInitialSchema(std::string* error)
 {
     static const char* sql =
@@ -321,10 +451,7 @@ bool LoanStore::CreateInitialSchema(std::string* error)
 
 bool LoanStore::ValidateExistingSchema(std::string* error)
 {
-    if (!HasColumn(db_, "id") ||
-        !HasColumn(db_, "title") ||
-        !HasColumn(db_, "loan_date") ||
-        !HasColumn(db_, "type")) {
+    if (!HasExpectedSchema(db_)) {
         SetError(error,
             "The existing database does not contain the expected loans schema. "
             "It has not been modified.");

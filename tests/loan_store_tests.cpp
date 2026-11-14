@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -100,6 +101,26 @@ int main()
     Check(store.LastSessionBackupPath() == first_backup,
           "update in the same session should not create a second backup");
 
+    std::string manual_backup;
+    Check(store.CreateManualBackup(&manual_backup, &error),
+          "manual backup should be created and validated");
+    Check(!manual_backup.empty() && manual_backup != first_backup,
+          "manual backup should be a separate file");
+    backups.push_back(manual_backup);
+
+    biblioled::LoanStore manual_reader;
+    Check(manual_reader.Open(manual_backup, ".", &error),
+          "manual backup should open");
+    if (manual_reader.IsOpen()) {
+        Check(manual_reader.GetAll(&records, &error) && records.size() == 2,
+              "manual backup should contain the current records");
+        Check(manual_reader.GetById(book.id, &loaded, &error),
+              "manual backup should contain the edited record");
+        Check(loaded.title == "Título alterado",
+              "manual backup should capture the current title");
+        manual_reader.Close();
+    }
+
     int count = 0;
     Check(store.CountSince("2099-01-01 00:00", &count, &error),
           "count since date should succeed");
@@ -140,8 +161,49 @@ int main()
           "delete in the same session should reuse the session backup");
     Check(!reopened.GetById(audio.id, &loaded, &error),
           "deleted record should no longer be found");
-    Check(reopened.QuickCheck(&error), "quick_check should pass after CRUD operations");
+
+    std::string pre_restore_backup;
+    Check(reopened.RestoreFromBackup(second_backup, &pre_restore_backup, &error),
+          "restore from a valid backup should succeed");
+    Check(!pre_restore_backup.empty() && pre_restore_backup != second_backup,
+          "restore must create a separate safety copy of the current database");
+    backups.push_back(pre_restore_backup);
+
+    biblioled::LoanStore pre_restore_reader;
+    Check(pre_restore_reader.Open(pre_restore_backup, ".", &error),
+          "pre-restore safety copy should open");
+    if (pre_restore_reader.IsOpen()) {
+        Check(pre_restore_reader.GetAll(&records, &error) && records.size() == 1,
+              "pre-restore safety copy should contain the state before restore");
+        Check(pre_restore_reader.GetById(book.id, &loaded, &error),
+              "pre-restore safety copy should retain the current record");
+        Check(loaded.title == "Alteração na segunda sessão",
+              "pre-restore safety copy should retain the current title");
+        pre_restore_reader.Close();
+    }
+
+    Check(reopened.GetAll(&records, &error) && records.size() == 2,
+          "restore should replace the database with the selected snapshot");
+    Check(reopened.GetById(book.id, &loaded, &error),
+          "restored database should contain the original record");
+    Check(loaded.title == "Título alterado",
+          "restore should recover the title captured in the selected snapshot");
+    Check(reopened.GetById(audio.id, &loaded, &error),
+          "restore should recover records removed after the selected snapshot");
+
+    const std::string invalid_backup = database + ".invalid-backup.sqlite";
+    {
+        std::ofstream invalid(invalid_backup.c_str(), std::ios::out | std::ios::binary);
+        invalid << "This is not a SQLite database.";
+    }
+    Check(!reopened.RestoreFromBackup(invalid_backup, NULL, &error),
+          "restore should reject a non-SQLite file");
+    Check(reopened.GetAll(&records, &error) && records.size() == 2,
+          "invalid restore source must not change the current database");
+
+    Check(reopened.QuickCheck(&error), "quick_check should pass after restore");
     reopened.Close();
+    std::remove(invalid_backup.c_str());
 
     biblioled::LoanStore blocked;
     const std::string blocked_database = database + ".blocked.sqlite";

@@ -82,7 +82,7 @@ if(WIN32)
         NOMINMAX
         BIBLIOLED_VERSION="${PROJECT_VERSION}"
     )
-    target_link_libraries(BiblioLED PRIVATE biblioled_core comctl32)
+    target_link_libraries(BiblioLED PRIVATE biblioled_core comctl32 comdlg32)
 
     if(MSVC)
         target_link_options(BiblioLED PRIVATE "/SUBSYSTEM:WINDOWS,5.01" "/MANIFEST:NO")

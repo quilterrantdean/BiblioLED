@@ -30,6 +30,10 @@ public:
               std::string* error);
     void Close();
     bool IsOpen() const;
+    bool CreateManualBackup(std::string* backup_path, std::string* error);
+    bool RestoreFromBackup(const std::string& backup_path,
+                           std::string* current_backup_path,
+                           std::string* error);
 
     bool HasSessionBackup() const;
     const std::string& LastSessionBackupPath() const;

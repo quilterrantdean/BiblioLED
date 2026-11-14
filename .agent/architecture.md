@@ -86,8 +86,11 @@ All paths are resolved from the executable directory. The existing application i
 - Test databases are always isolated from the user's real database.
 - Backups are standalone SQLite files, uncompressed, timestamped, and retained until the user deletes them.
 - Before the first data mutation in each session, create one backup using SQLite's online-backup API; subsequent mutations in that session reuse it.
-- Validate the completed backup with `PRAGMA integrity_check` before allowing the pending mutation.
-- If backup creation or validation fails, reject the mutation and keep the database available for reads.
+- Manual backups are separate timestamped files and do not replace the automatic per-session backup.
+- Restore requires a compatible, integrity-checked source and explicit UI confirmation. Always create and validate a new backup of the current database immediately before restore.
+- Validate the completed backup with `PRAGMA integrity_check` before allowing the pending mutation or restore.
+- If backup creation or validation fails, reject the mutation/restore and keep the database available for reads.
+- Keep both the selected source backup and the pre-restore safety copy unchanged.
 - A backup is not considered valid merely because a file exists: validate its SQLite integrity.
 
 ## Audit logging model
@@ -123,6 +126,6 @@ tests/loan_store_tests.cpp
 
 The initial UI supports listing, creating, editing, and deleting loan records. It reads the existing `loans(id, title, loan_date, type)` table shape and creates that exact table only for a new database. It uses the portable folder beside the executable.
 
-The current implementation is deliberately a proof of concept, not the complete application. The store now makes and validates one automatic backup before the first data mutation in each session, and blocks changes if this fails. Manual backup/restore, missing-database recovery, schema migration, audit logging, history, statistics, and the settings dialog are not implemented yet.
+The current implementation is deliberately a proof of concept, not the complete application. The store now makes and validates one automatic backup before the first data mutation in each session, blocks changes if this fails, supports manual backups, and restores a validated backup only after creating a second safety copy of the current database. Missing-database recovery, schema migration, audit logging, history, statistics, and the settings dialog are not implemented yet.
 
 SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows builds. It is pinned because SQLite 3.54.0 introduced a Windows SRW-lock dependency that is not available on Windows XP. The pin must be revisited only after target-OS testing.

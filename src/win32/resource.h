@@ -14,6 +14,8 @@
 #define IDM_REFRESH    2004
 #define IDM_EXIT       2005
 #define IDM_ABOUT      2006
+#define IDM_BACKUP     2007
+#define IDM_RESTORE    2008
 
 #define IDC_BUTTON_NEW     3001
 #define IDC_BUTTON_EDIT    3002
