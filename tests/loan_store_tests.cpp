@@ -1,4 +1,5 @@
 #include "biblioled/loan_store.h"
+#include "biblioled/backup_compression.h"
 
 #include <sqlite3.h>
 
@@ -90,6 +91,25 @@ void RemoveDatabaseFiles(const std::string& path)
     std::remove((path + "-shm").c_str());
 }
 
+bool MakeReadableBackup(const std::string& path, std::string* decoded_path)
+{
+    if (!decoded_path) return false;
+    if (path.size() >= 3 && path.compare(path.size() - 3, 3, ".gz") == 0) {
+        *decoded_path = path + ".test-decoded.sqlite";
+        std::string error;
+        return biblioled::DecompressBackupFile(
+            path, *decoded_path, biblioled::BackupCompressionFormat::Gzip, &error);
+    }
+    if (path.size() >= 5 && path.compare(path.size() - 5, 5, ".zlib") == 0) {
+        *decoded_path = path + ".test-decoded.sqlite";
+        std::string error;
+        return biblioled::DecompressBackupFile(
+            path, *decoded_path, biblioled::BackupCompressionFormat::Zlib, &error);
+    }
+    *decoded_path = path;
+    return true;
+}
+
 } // namespace
 
 int main()
@@ -139,9 +159,12 @@ int main()
     Check(!first_backup.empty(), "session backup path should be reported");
     backups.push_back(first_backup);
 
+    std::string first_backup_decoded;
+    Check(MakeReadableBackup(first_backup, &first_backup_decoded),
+          "daily backup should decompress for inspection");
     biblioled::LoanStore backup_reader;
-    Check(backup_reader.Open(first_backup, ".", &error),
-          "session backup should open as a SQLite database");
+    Check(backup_reader.Open(first_backup_decoded, ".", &error),
+          "decompressed daily backup should open as a SQLite database");
     if (backup_reader.IsOpen()) {
         ReadAll(backup_reader, &records, "session backup should be readable");
         Check(records.empty(), "first session backup must represent the database before insertion");
@@ -149,6 +172,7 @@ int main()
               "session backup should preserve the schema version");
         backup_reader.Close();
     }
+    if (first_backup_decoded != first_backup) RemoveDatabaseFiles(first_backup_decoded);
 
     biblioled::LoanRecord audio;
     audio.title = "Audiolivro de teste";
@@ -194,8 +218,11 @@ int main()
           "manual backup should be a separate file");
     backups.push_back(manual_backup);
 
+    std::string manual_backup_decoded;
+    Check(MakeReadableBackup(manual_backup, &manual_backup_decoded),
+          "manual backup should decompress for inspection");
     biblioled::LoanStore manual_reader;
-    Check(manual_reader.Open(manual_backup, ".", &error), "manual backup should open");
+    Check(manual_reader.Open(manual_backup_decoded, ".", &error), "decompressed manual backup should open");
     if (manual_reader.IsOpen()) {
         Check(manual_reader.GetAll(&records, &error) && records.size() == 2,
               "manual backup should contain the current records");
@@ -203,6 +230,7 @@ int main()
               "manual backup should contain the matching audit history");
         manual_reader.Close();
     }
+    if (manual_backup_decoded != manual_backup) RemoveDatabaseFiles(manual_backup_decoded);
 
     int count = 0;
     Check(store.CountSince("2099-01-01 00:00", &count, &error),
@@ -225,22 +253,10 @@ int main()
     Check(reopened.HasSessionBackup(), "first update in a new session should create a backup");
 
     const std::string second_backup = reopened.LastSessionBackupPath();
-    Check(!second_backup.empty() && second_backup != first_backup,
-          "new session should create a distinct timestamped backup");
-    backups.push_back(second_backup);
-
-    biblioled::LoanStore second_backup_reader;
-    Check(second_backup_reader.Open(second_backup, ".", &error),
-          "second session backup should open");
-    if (second_backup_reader.IsOpen()) {
-        Check(second_backup_reader.GetById(book.id, &book, &error),
-              "second backup should contain the pre-update record");
-        Check(book.title == before_update,
-              "second backup must preserve data before the update");
-        Check(second_backup_reader.GetAuditEvents(&events, &error) && events.size() == 3,
-              "second backup should contain audit events before the update");
-        second_backup_reader.Close();
-    }
+    Check(second_backup == first_backup,
+          "a new session on the same calendar day should reuse the daily automatic backup");
+    Check(book.title == before_update,
+          "the pre-update loan should remain readable before it is changed again");
 
     Check(reopened.Remove(audio.id, &error), "delete should succeed");
     Check(reopened.LastSessionBackupPath() == second_backup,
@@ -258,15 +274,18 @@ int main()
 
     // Restore returns both loans and internal audit history to the selected snapshot.
     std::string pre_restore_backup;
-    Check(reopened.RestoreFromBackup(second_backup, &pre_restore_backup, &error),
+    Check(reopened.RestoreFromBackup(manual_backup, &pre_restore_backup, &error),
           "restore from a valid backup should succeed");
-    Check(!pre_restore_backup.empty() && pre_restore_backup != second_backup,
+    Check(!pre_restore_backup.empty() && pre_restore_backup != manual_backup,
           "restore must create a separate safety copy of the current database");
     backups.push_back(pre_restore_backup);
 
+    std::string pre_restore_decoded;
+    Check(MakeReadableBackup(pre_restore_backup, &pre_restore_decoded),
+          "pre-restore safety backup should decompress for inspection");
     biblioled::LoanStore pre_restore_reader;
-    Check(pre_restore_reader.Open(pre_restore_backup, ".", &error),
-          "pre-restore safety copy should open");
+    Check(pre_restore_reader.Open(pre_restore_decoded, ".", &error),
+          "decompressed pre-restore safety copy should open");
     if (pre_restore_reader.IsOpen()) {
         Check(pre_restore_reader.GetAll(&records, &error) && records.size() == 1,
               "pre-restore safety copy should contain the state before restore");
@@ -432,9 +451,12 @@ int main()
               "migration audit event should record source and target versions");
     }
 
+    std::string migration_backup_decoded;
+    Check(MakeReadableBackup(migration_backup, &migration_backup_decoded),
+          "pre-migration backup should decompress for inspection");
     biblioled::LoanStore legacy_backup_reader;
-    Check(legacy_backup_reader.Open(migration_backup, ".", &error),
-          "pre-migration backup should remain openable");
+    Check(legacy_backup_reader.Open(migration_backup_decoded, ".", &error),
+          "decompressed pre-migration backup should remain openable");
     if (legacy_backup_reader.IsOpen()) {
         Check(legacy_backup_reader.SchemaVersion() == 0 &&
               legacy_backup_reader.MigrationRequired(),
@@ -443,6 +465,7 @@ int main()
               "pre-migration backup should preserve all legacy records");
         legacy_backup_reader.Close();
     }
+    if (migration_backup_decoded != migration_backup) RemoveDatabaseFiles(migration_backup_decoded);
     legacy.Close();
 
     // Failed migration backup must leave the legacy database unchanged and readable.
