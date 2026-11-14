@@ -1193,6 +1193,10 @@ void ShowBackupSettings()
     }
 
     gSettings = edited;
+    gStore.SetBackupCompression(
+        gSettings.backup_compression_format,
+        gSettings.backup_compression_level);
+
     if (!gStore.MigrationRequired()) {
         std::ostringstream details;
         details << "backup_compression_format=" << old_format << "->"
@@ -1208,8 +1212,9 @@ void ShowBackupSettings()
     }
 
     MessageBoxW(gMainWindow,
-        L"As definições foram guardadas. Serão aplicadas às novas cópias de segurança "
-        L"a partir da próxima execução do BiblioLED.",
+        L"As definições foram guardadas e aplicadas imediatamente às próximas cópias "
+        L"de segurança que forem criadas. Uma cópia automática válida já existente "
+        L"para hoje será mantida.",
         L"Definições guardadas", MB_OK | MB_ICONINFORMATION);
 }
 
