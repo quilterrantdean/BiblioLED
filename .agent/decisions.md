@@ -56,7 +56,7 @@ This file records decisions explicitly agreed with the user. Status labels disti
 | D-034 | Record relevant application activity comprehensively: startup/shutdown, loan creation/edit/deletion, before/after values, settings changes, database operations, migrations, backups/restores, exports, warnings, errors, and failures. | Confirmed |
 | D-035 | No in-app log viewer or Explorer shortcut is required. The user will inspect files directly in the logs directory. | Confirmed |
 | D-036 | If logging is enabled and writing the audit log fails, block database mutations until logging is available again; allow read-only use and explain the failure. | Confirmed |
-| D-037 | Keep database changes and audit events consistent. The proposed approach is to record audit events transactionally in SQLite and synchronise the external text log so missing file entries can be recovered. The exact behaviour when file logging is deliberately disabled must be resolved during implementation. | Confirmed principle; implementation detail open |
+| D-037 | Keep database changes and audit events consistent. Store audit events transactionally in SQLite and synchronise them to the external append-only UTF-8 text log. Use stable event fingerprints to avoid duplicates and recover an incomplete final line after interruption. Rotate the active log at the configured size (default 5 MB), retaining all archives. When external logging is deliberately disabled, keep internal SQLite auditing and queue the external backlog; resume synchronisation when logging is re-enabled. When logging is enabled but the external log cannot be synchronised, allow reads but block further database mutations until it recovers. | Confirmed |
 
 ## Architecture, quality, and delivery
 

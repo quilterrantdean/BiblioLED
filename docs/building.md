@@ -56,9 +56,9 @@ cmake --build --preset xp-x86-w64devkit --parallel
 ctest --preset xp-x86-w64devkit
 ```
 
-The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `bc5b0246b95573fe671fc17a3fa3d362a5691388` passed compilation, the extended SQLite store tests (including migration and audit-failure rollback), PE inspection, and artifact upload.
+The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `d6ab5a8852ce90fb368f91278565b16fd2983660` passed compilation, both SQLite-store and audit-log tests, PE32/i386/GUI 5.01 and import checks, and artifact upload.
 
-These checks establish an XP-oriented build target, not proof that the application runs on XP. The current test ZIP includes automatic per-session backups before the first mutation, manual backup creation, confirmed restore with a pre-restore safety copy, and a marker that prevents silent recreation when an initialized database has gone missing. It creates new databases at schema version 1. Existing loans-only databases are detected as version 0 and require explicit confirmation before a backed-up transaction adds the internal audit table. Loan changes and their audit events are committed atomically. External text-log synchronisation, guided recovery, later migrations, and the complete application remain outstanding. Do not use it with the real application data.
+These checks establish an XP-oriented build target, not proof that the application runs on XP. The current test ZIP includes automatic per-session backups before the first mutation, manual backup creation, confirmed restore with a pre-restore safety copy, and a marker that prevents silent recreation when an initialized database has gone missing. It creates new databases at schema version 1. Existing loans-only databases are detected as version 0 and require explicit confirmation before a backed-up transaction adds the internal audit table. Loan changes and their audit events are committed atomically. Internal audit events are synchronised to `logs/audit.log`; incomplete final writes are recovered, duplicate events are avoided, and the active log is rotated at the configured size (default 5 MB). Disabling file logging pauses synchronisation but keeps internal SQLite auditing and allows mutations; re-enabling it synchronises the backlog. If enabled logging fails, mutations are blocked while reads remain available. The icon is embedded in the executable and table columns can be reordered and persisted in `config/settings.ini`. Guided recovery, later migrations, the complete settings UI, and the complete application remain outstanding. Do not use it with the real application data.
 
 ## XP compatibility note
 
@@ -92,3 +92,24 @@ The application uses SQLite PRAGMA user_version to identify the schema:
 The version 0 to 1 migration first creates and validates a complete SQLite backup. It then uses a transaction to add the audit table/indexes, records a schema_migration event, sets user_version=1, and verifies the result. It does not rewrite loan rows. If the migration is declined or fails, the application remains read-only and the version 0 database remains unchanged.
 
 Every loan create/edit/delete and its internal audit event are committed in the same SQLite transaction. The event stores the action, timestamp, loan ID, before/after values, and details. If the audit write fails, the loan change is rolled back. The internal audit event read API is currently a store-level facility; an in-app audit viewer and external text-log synchronisation are not yet implemented.
+
+
+## Embedded icon and persistent table layout
+
+The repository keeps `port.ico` as the source asset, but the Win32 resource compiler embeds it in `BiblioLED.exe`. The portable package therefore contains no separate `.ico` file and the executable does not load one at run time.
+
+The main list view enables native header drag-and-drop. The display order and width of each logical column are saved in `config/settings.ini` under `[columns]`:
+
+```ini
+[columns]
+order=0,1,2,3,4
+widths=320,100,130,130,55
+```
+
+The width values are in pixels. Layout is loaded at startup and saved after a column move, resize, or normal shutdown. An invalid settings file is preserved and is not overwritten merely to save table layout preferences.
+
+## External audit log
+
+SQLite `audit_events` remains the authoritative audit history. When diagnostics are enabled, committed events are synchronised to the UTF-8 append-only `logs/audit.log`. Timestamped `audit_*.log` archives are created when the configured size threshold (default 5 MB) would be exceeded. No archive is deleted automatically.
+
+Stable event fingerprints prevent duplication when synchronisation is repeated or resumed after a crash. An incomplete final line in the active log is truncated and replayed from SQLite. If diagnostics are deliberately disabled, events continue to be stored in SQLite and file synchronisation pauses; the backlog is replayed when diagnostics are re-enabled. If diagnostics remain enabled but the log cannot be updated, database mutations are blocked while reads remain available.

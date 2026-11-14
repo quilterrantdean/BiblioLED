@@ -76,7 +76,7 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 
 ### Implemented
 
-- C++11 core, CMake build, native Win32 application and existing `port.ico`.
+- C++11 core, CMake build, native Win32 application; `port.ico` is compiled into the executable as a Win32 icon resource. No separate icon file is required at runtime or in the portable ZIP.
 - SQLite 3.53.4 statically linked in Windows builds. This version is pinned for the XP target; SQLite 3.54.0 introduced a Windows SRW-lock dependency unavailable on XP.
 - Current table compatibility: `loans(id, title, loan_date, type)`; prepared-statement CRUD and quota counts.
 - Main Win32 window with loan list, create/edit/delete, delete confirmation, external INI limits, single-instance coordination, and application-relative storage paths.
@@ -89,15 +89,18 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 - Schema versions use SQLite PRAGMA user_version: new databases are version 1; the existing loans-only schema is version 0 and is opened read-only until explicit confirmation.
 - Version 0 to 1 migration creates and validates a full backup first, then transactionally creates the audit_events table and indexes, records the migration, and verifies the result. Existing loan rows are not rewritten or discarded; the original version-0 backup remains unchanged.
 - Create/edit/delete operations insert internal audit events in the same SQLite transaction as the loan change. Events include action, timestamp, loan ID, before/after values, and details. If the audit insert fails, the associated loan operation rolls back. The migration event is also recorded.
-- The store exposes a read API for internal audit events. External append-only text-log synchronisation is not yet implemented.
-- Isolated SQLite tests cover CRUD, UTF-8, future-dated quota counts, automatic/manual backup snapshots, restore and pre-restore safety copies, invalid restore-source rejection, backup failure, explicit legacy migration, future/malformed schema rejection, audit snapshots, and rollback when an audit insert fails.
+- The store exposes a read API for internal audit events. `src/infrastructure/audit_log.cpp` synchronises them to `logs/audit.log` using stable event fingerprints; it avoids duplicates across active and archived files and recovers an incomplete final line in the active log.
+- External audit logs rotate at the configured maximum size (default 5 MB), with timestamped archives retained indefinitely. If external logging is disabled, SQLite auditing continues and the file backlog is queued. If enabled logging fails, reads remain possible but the store blocks further mutations until synchronisation recovers.
+- The main table enables native header drag-and-drop. Logical column order and individual widths are loaded from and saved to `config/settings.ini`. Layout saving is disabled when the settings file was invalid, preserving the original file.
+- Isolated SQLite tests cover CRUD, UTF-8, future-dated quota counts, automatic/manual backup snapshots, restore and pre-restore safety copies, invalid restore-source rejection, backup failure, explicit legacy migration, future/malformed schema rejection, audit snapshots, rollback when an audit insert fails, and the disabled/enabled external-log mutation gate.
+- Windows-only audit-log tests cover idempotent replay, recovery of an incomplete active-log tail, size-based rotation, and duplicate detection across archives.
 - GitHub Actions: Linux core tests, modern Win32 compile/tests, and a separate w64devkit x86 XP-targeted build with PE architecture/subsystem/import checks and a disposable ZIP artefact.
 
 ### Remaining work
 
 - Guided recovery when the expected database is missing or corrupt. The marker currently stops silent recreation and explains the problem; it does not yet offer an in-app recovery wizard.
 - Add later schema migration versions as product requirements evolve; the first version 0 to 1 migration is implemented.
-- Synchronise internal audit events to the external append-only text log, including recovery after interrupted writes and the agreed behaviour when file logging is disabled.
+- Broader failure-injection, interrupted-operation, and restore-rollback tests.
 - Full application settings UI, history window, statistics, export, About dialog, and the final modular business-rules layer.
 - Broader failure-injection, interrupted-operation, and restore-rollback tests.
 - Actual execution and measurement on Windows XP SP3. The CI runner is modern Windows; its XP-targeted toolchain and PE checks do not prove execution on the XP kernel.
@@ -111,5 +114,5 @@ All automated tests use generated databases and temporary backup files. The user
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest passing XP-targeted workflow at commit `bc5b0246b95573fe671fc17a3fa3d362a5691388` compiled the application, ran the extended SQLite store tests (including migration and audit rollback), checked the executable, and published a disposable test artefact. This is a target-build check, not proof of runtime compatibility on Windows XP SP3.
+The latest passing XP-targeted workflow at commit `d6ab5a8852ce90fb368f91278565b16fd2983660` compiled the application, ran both loan-store and audit-log tests, checked the PE32/i386 GUI 5.01 executable and imports, and published a disposable ZIP that contains no separate icon file. This is a target-build check, not proof of runtime compatibility on Windows XP SP3.
 

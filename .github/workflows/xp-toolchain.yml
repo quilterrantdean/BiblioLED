@@ -154,18 +154,29 @@ jobs:
           - Um marcador impede a criação silenciosa de uma base vazia se a base de
             dados esperada desaparecer depois da inicialização.
 
-          Ainda faltam sincronização do registo interno com o ficheiro de log externo,
-          recuperação guiada, futuras migrações de esquema e outras funcionalidades
-          da aplicação final. O registo interno de auditoria não tem visualizador.
+          O log externo fica em logs\audit.log e roda para ficheiros datados quando
+          ultrapassa o limite configurado (5 MB por defeito). Uma linha final incompleta
+          é recuperada a partir da auditoria SQLite. Eventos já escritos não são repetidos.
+          Quando enabled=0 em config\settings.ini, a auditoria SQLite continua activa e
+          a sincronização do ficheiro fica pendente até voltar a ser activada.
+          Se o log estiver activado mas não puder ser escrito, as alterações à base de
+          dados ficam bloqueadas até a sincronização recuperar.
+          
+          Ainda faltam recuperação guiada, futuras migrações de esquema, a interface de
+          definições completa e outras funcionalidades da aplicação final. O registo
+          interno de auditoria não tem visualizador.
 
           Ensaio sugerido (apenas numa pasta temporária):
           1. Extraia este artefacto para uma pasta nova e vazia.
           2. Execute BiblioLED.exe e crie um registo fictício.
           3. Feche e volte a abrir; confirme que o registo permanece.
           4. Use Ficheiro > Criar cópia de segurança.
-          5. Crie/edite/elimine registos fictícios e teste Ficheiro > Repor a partir
+          5. Arraste os cabeçalhos das colunas para outra ordem e ajuste as larguras.
+             Feche e volte a abrir a aplicação; confirme que a disposição é mantida.
+          6. Crie/edite/elimine registos fictícios e teste Ficheiro > Repor a partir
              de cópia. Confirme que é criada uma cópia da versão anterior.
-          6. Opcional: feche a aplicação, renomeie data\biblioteca.sqlite para
+          7. Abra logs\audit.log e confirme que as operações aparecem no log.
+          8. Opcional: feche a aplicação, renomeie data\biblioteca.sqlite para
              biblioteca.sqlite.test e volte a iniciar. A aplicação deverá parar e
              explicar que a base de dados falta; não deverá criar uma base vazia.
              Depois volte a colocar o ficheiro no nome original.

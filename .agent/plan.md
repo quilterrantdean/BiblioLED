@@ -2,9 +2,9 @@
 
 ## Current status
 
-**Stage:** the Win32/SQLite foundation now has session and manual backups, verified restore, missing-database protection, schema version 1, explicit legacy migration, and transactional internal audit events. Linux, modern Win32, and XP-targeted w64devkit CI pass on commit bc5b024. Actual Windows XP SP3 runtime validation remains outstanding.
+**Stage:** the Win32/SQLite foundation now has session/manual backups, verified restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing, recoverable rotating external audit logs, an embedded executable icon, and persistent draggable table columns. Linux, modern Win32, and XP-targeted w64devkit CI pass on commit d6ab5a8. Actual Windows XP SP3 runtime validation remains outstanding.
 
-The initial C++11/Win32/SQLite application is still a proof of concept, not the complete replacement. The current XP-targeted workflow builds with pinned w64devkit x86, runs the extended SQLite tests, checks the PE target/imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
+The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
 The `development` branch was created from `main` and now contains the first C++/Win32/SQLite prototype. All development commits remain confined to this branch.
 
@@ -52,8 +52,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Detect a missing database after initialisation and refuse silent recreation.
 - [ ] Implement guided missing/corrupt-database recovery and reporting.
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
-- [ ] Synchronise internal audit events to the external append-only UTF-8 log, recover missing entries after interruption, and rotate archives at the configured size.
-- [ ] When file logging is disabled, retain internal audit events in SQLite and pause external synchronisation; when re-enabled, synchronise the backlog. Database mutations remain available while logging is deliberately disabled.
+- [x] Synchronise internal audit events to the external append-only UTF-8 log using stable event fingerprints; recover an incomplete final line and rotate archives at the configured size.
+- [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery.
 
 ### Phase 4 — Application functionality and interface
 
@@ -63,8 +63,8 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Implement revised statistics.
 - [ ] Implement settings and the About dialog.
 - [x] Embed the existing application icon as a Win32 resource in `BiblioLED.exe`; do not ship or require a separate `.ico` file.
-- [ ] Make the main table columns reorderable by dragging their headers.
-- [ ] Persist column display order and individual widths in `config/settings.ini`, without overwriting an invalid settings file.
+- [x] Make the main table columns reorderable by dragging their headers.
+- [x] Persist column display order and individual widths in `config/settings.ini`; invalid settings files are preserved and are never overwritten by layout saving.
 
 ### Phase 5 — Verification and delivery
 

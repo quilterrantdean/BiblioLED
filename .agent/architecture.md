@@ -71,11 +71,9 @@ BiblioLED/
     backups/
   exports/
   logs/
-  resources/
-    port.ico
 ```
 
-All paths are resolved from the executable directory. The existing application icon is compiled into BiblioLED.exe as a Win32 resource; the portable distribution does not need a separate icon file. The loan table supports header drag-and-drop; its display order and per-column widths are persisted in config/settings.ini. Program updates must not overwrite user data, settings, backups, exports, or logs.
+All paths are resolved from the executable directory. The existing application icon is compiled into BiblioLED.exe as a Win32 resource; the portable distribution does not need a separate icon file. Keep port.ico in the source repository as the resource input. The loan table supports header drag-and-drop; its display order and per-column widths are persisted in config/settings.ini. Program updates must not overwrite user data, settings, backups, exports, or logs.
 
 ## Database safety model
 
@@ -100,7 +98,9 @@ All paths are resolved from the executable directory. The existing application i
 
 Internal audit events are now stored in audit_events within the same SQLite transaction as the associated loan create/edit/delete. Events retain the action, timestamp, loan ID, before/after values, and details. If the event insert fails, the loan operation rolls back as well. The schema migration itself records a schema_migration event. A read API is available to retrieve these events.
 
-The external append-only UTF-8 text log is not yet implemented. The intended next step is to synchronise committed internal events to that log and recover missing file entries after an interrupted write. The exact behaviour when file logging is disabled remains open; internal audit records are retained in SQLite regardless.
+The external append-only UTF-8 text log is implemented at `logs/audit.log`, with timestamped `audit_*.log` archives. Each line includes an event fingerprint derived from its durable content and identity. Synchronisation scans the active log and archives to avoid duplicates, repairs an incomplete final line in the active log after an interrupted write, and appends any missing SQLite events. The active file is rotated before an append would exceed the configured maximum (default 5 MB); archives are never deleted automatically.
+
+When file logging is deliberately disabled, internal SQLite audit events continue to be recorded and external synchronisation pauses; the backlog is replayed when logging is re-enabled. When logging is enabled but synchronisation fails, the application remains readable but blocks further database mutations until the log is healthy again.
 
 ## Main UI and secondary windows
 
@@ -130,6 +130,6 @@ tests/loan_store_tests.cpp
 
 The initial UI supports listing, creating, editing, and deleting loan records. It reads the existing `loans(id, title, loan_date, type)` table shape and creates that exact table only for a new database. It uses the portable folder beside the executable.
 
-The current implementation is deliberately a proof of concept, not the complete application. The store makes and validates one automatic backup before the first data mutation in each session, blocks changes if this fails, supports separate manual backups, and restores a validated backup only after creating a second safety copy of the current database. A marker prevents silent recreation of a missing initialized database. Schema version 1 and an explicit, backed-up version 0 to 1 migration are implemented. Loan changes and internal audit events commit atomically. Guided recovery, external text-log synchronisation, further migrations, history, statistics, settings UI, and other application features remain outstanding.
+The current implementation is deliberately a proof of concept, not the complete application. The store makes and validates one automatic backup before the first data mutation in each session, blocks changes if this fails, supports separate manual backups, and restores a validated backup only after creating a second safety copy of the current database. A marker prevents silent recreation of a missing initialized database. Schema version 1 and an explicit, backed-up version 0 to 1 migration are implemented. Loan changes and internal audit events commit atomically. External audit events are synchronised to a recoverable rotating UTF-8 log with a durable backlog. The application icon is embedded in the executable, and main-table order/width preferences persist in settings.ini. Guided recovery, further migrations, history, statistics, full settings UI, and other application features remain outstanding.
 
 SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows builds. It is pinned because SQLite 3.54.0 introduced a Windows SRW-lock dependency that is not available on Windows XP. The pin must be revisited only after target-OS testing.
