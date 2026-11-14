@@ -163,7 +163,9 @@ jobs:
           Definições de cópias:
           - Ficheiro > Definições de cópias permite escolher gzip/zlib e nível 0–9.
           - Os valores ficam em config\settings.ini, secção [backups].
-          - As alterações só têm efeito no arranque seguinte.
+          - As alterações são aplicadas imediatamente às próximas cópias criadas,
+            sem reiniciar a aplicação. Uma cópia automática válida já criada hoje
+            continua a ser reutilizada.
           - O nível 6 é o valor predefinido.
 
           O log externo fica em logs\audit.log e roda para ficheiros datados quando
