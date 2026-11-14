@@ -370,7 +370,9 @@ std::string SqliteError(sqlite3* db, const std::string& operation)
 
 LoanStore::LoanStore()
     : db_(NULL),
-      session_backup_done_(false)
+      session_backup_done_(false),
+      external_audit_log_enabled_(false),
+      external_audit_log_healthy_(true)
 {
 }
 
@@ -484,6 +486,8 @@ void LoanStore::Close()
     session_backup_done_ = false;
     schema_version_ = -1;
     migration_required_ = false;
+    external_audit_log_enabled_ = false;
+    external_audit_log_healthy_ = true;
 }
 
 bool LoanStore::IsOpen() const
@@ -499,6 +503,17 @@ int LoanStore::SchemaVersion() const
 bool LoanStore::MigrationRequired() const
 {
     return migration_required_;
+}
+
+void LoanStore::SetExternalAuditLogStatus(bool enabled, bool healthy)
+{
+    external_audit_log_enabled_ = enabled;
+    external_audit_log_healthy_ = healthy;
+}
+
+bool LoanStore::ExternalAuditLogBlocked() const
+{
+    return external_audit_log_enabled_ && !external_audit_log_healthy_;
 }
 
 bool LoanStore::HasSessionBackup() const
@@ -621,6 +636,10 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
 {
     if (!db_ || backup_path.empty()) {
         SetError(error, "An open database and a backup path are required.");
+        return false;
+    }
+    if (ExternalAuditLogBlocked()) {
+        SetError(error, "The external audit log is unavailable. Database restore is blocked until logging is working again.");
         return false;
     }
     if (backup_path == database_path_) {
@@ -789,6 +808,10 @@ bool LoanStore::MigrateLegacySchema(std::string* backup_path, std::string* error
     }
     if (!migration_required_ || schema_version_ != 0) {
         SetError(error, "The database does not require the legacy schema migration.");
+        return false;
+    }
+    if (ExternalAuditLogBlocked()) {
+        SetError(error, "The external audit log is unavailable. Database migration is blocked until logging is working again.");
         return false;
     }
     if (backup_directory_.empty()) {
@@ -1062,6 +1085,10 @@ bool LoanStore::Insert(LoanRecord* record, std::string* error)
         SetError(error, "The legacy database must be migrated before it can be changed.");
         return false;
     }
+    if (ExternalAuditLogBlocked()) {
+        SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
+        return false;
+    }
     if (!EnsureSessionBackup(error)) return false;
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
@@ -1107,6 +1134,10 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
     }
     if (migration_required_) {
         SetError(error, "The legacy database must be migrated before it can be changed.");
+        return false;
+    }
+    if (ExternalAuditLogBlocked()) {
+        SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
     if (!EnsureSessionBackup(error)) return false;
@@ -1162,6 +1193,10 @@ bool LoanStore::Remove(int id, std::string* error)
     }
     if (migration_required_) {
         SetError(error, "The legacy database must be migrated before it can be changed.");
+        return false;
+    }
+    if (ExternalAuditLogBlocked()) {
+        SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
     if (!EnsureSessionBackup(error)) return false;

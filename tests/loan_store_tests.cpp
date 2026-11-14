@@ -315,13 +315,42 @@ int main()
     }
     if (raw) sqlite3_close(raw);
 
+    // Enabled external logging blocks later mutations after a sync failure,
+    // while deliberately disabled file logging does not block internal audit.
+    reopened.SetExternalAuditLogStatus(true, false);
+    Check(reopened.ExternalAuditLogBlocked(),
+          "enabled but unavailable external logging should expose blocked state");
+    biblioled::LoanRecord log_blocked;
+    log_blocked.title = "Bloqueado pelo log";
+    log_blocked.loan_date = "2099-02-02 10:00";
+    log_blocked.type = "livro";
+    Check(!reopened.Insert(&log_blocked, &error),
+          "unavailable enabled external logging should block a loan mutation");
+    Check(reopened.GetAll(&records, &error) && records.size() == 2,
+          "blocked mutation should leave loans unchanged");
+
+    reopened.SetExternalAuditLogStatus(false, false);
+    Check(!reopened.ExternalAuditLogBlocked(),
+          "deliberately disabled external logging should not block mutations");
+    biblioled::LoanRecord logging_disabled;
+    logging_disabled.title = "Registo com log externo desactivado";
+    logging_disabled.loan_date = "2099-02-03 10:00";
+    logging_disabled.type = "livro";
+    Check(reopened.Insert(&logging_disabled, &error),
+          "mutations should remain available while external logging is disabled");
+    Check(reopened.GetAll(&records, &error) && records.size() == 3,
+          "disabled external logging should still persist the loan");
+    Check(reopened.GetAuditEvents(&events, &error) && events.size() == 4,
+          "disabled external logging should still persist internal audit events");
+    reopened.SetExternalAuditLogStatus(true, true);
+
     {
         std::ofstream invalid(invalid_backup.c_str(), std::ios::out | std::ios::binary);
         invalid << "This is not a SQLite database.";
     }
     Check(!reopened.RestoreFromBackup(invalid_backup, NULL, &error),
           "restore should reject a non-SQLite file");
-    Check(reopened.GetAll(&records, &error) && records.size() == 2,
+    Check(reopened.GetAll(&records, &error) && records.size() == 3,
           "invalid restore source must not change the current database");
     Check(reopened.QuickCheck(&error), "quick_check should pass after restore and failure injection");
     reopened.Close();

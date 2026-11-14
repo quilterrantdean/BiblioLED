@@ -3,6 +3,7 @@
 #include <commdlg.h>
 
 #include "biblioled/loan_store.h"
+#include "biblioled/audit_log.h"
 #include "resource.h"
 
 #include <algorithm>
@@ -578,6 +579,47 @@ void ShowStoreError(const wchar_t* operation, const std::string& error)
     MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED", MB_OK | MB_ICONERROR);
 }
 
+bool SynchronizeExternalAuditLog(bool show_error)
+{
+    if (!gSettings.diagnostics_enabled) {
+        gStore.SetExternalAuditLogStatus(false, true);
+        UpdateWriteAccess(gMainWindow);
+        return true;
+    }
+
+    // A legacy database has no audit table until the user confirms migration.
+    // Its write operations are already blocked by the store.
+    if (gStore.MigrationRequired()) {
+        gStore.SetExternalAuditLogStatus(true, true);
+        UpdateWriteAccess(gMainWindow);
+        return true;
+    }
+
+    std::vector<biblioled::AuditEvent> events;
+    std::string error;
+    bool ok = gStore.GetAuditEvents(&events, &error);
+    int written = 0;
+
+    if (ok) {
+        const std::wstring log_directory =
+            JoinPath(gApplicationDirectory, L"logs");
+        ok = biblioled::SynchronizeAuditLog(
+            log_directory, events, gSettings.audit_log_max_size_bytes,
+            &written, &error);
+    }
+
+    gStore.SetExternalAuditLogStatus(true, ok);
+    UpdateWriteAccess(gMainWindow);
+
+    if (!ok && show_error) {
+        ShowStoreError(
+            L"Não foi possível sincronizar o registo de auditoria. "
+            L"As alterações à base de dados ficam bloqueadas até o log estar disponível.",
+            error);
+    }
+    return ok;
+}
+
 bool OfferLegacyMigration(HWND owner)
 {
     if (!gStore.MigrationRequired()) return true;
@@ -763,12 +805,14 @@ void RefreshList()
 
     wchar_t status[256] = {0};
     _snwprintf(status, 255,
-        L"%u empréstimo(s) apresentados  |  Actualizado às %ls%ls%ls",
+        L"%u empréstimo(s) apresentados  |  Actualizado às %ls%ls%ls%ls",
         static_cast<unsigned int>(visible.size()),
         Utf8ToWide(FormatDateTime(now, "%H:%M:%S")).c_str(),
         invalid_dates ? L"  |  Existem registos com datas inválidas" : L"",
         gStore.MigrationRequired()
-            ? L"  |  Só leitura: migração por confirmar" : L"");
+            ? L"  |  Só leitura: migração por confirmar" : L"",
+        gStore.ExternalAuditLogBlocked()
+            ? L"  |  Só leitura: log indisponível" : L"");
     SetWindowTextW(gStatusLabel, status);
 }
 
@@ -782,6 +826,7 @@ void AddLoan()
         ShowStoreError(L"Não foi possível criar o empréstimo.", error);
         return;
     }
+    SynchronizeExternalAuditLog(true);
     RefreshList();
 }
 
@@ -848,6 +893,7 @@ void RestoreDatabaseFromBackup()
                 MB_OK | MB_ICONINFORMATION);
 
     OfferLegacyMigration(gMainWindow);
+    SynchronizeExternalAuditLog(true);
     UpdateWriteAccess(gMainWindow);
     RefreshList();
 }
@@ -873,6 +919,7 @@ void EditLoan()
         ShowStoreError(L"Não foi possível guardar as alterações.", error);
         return;
     }
+    SynchronizeExternalAuditLog(true);
     RefreshList();
 }
 
@@ -895,6 +942,7 @@ void DeleteLoan()
         ShowStoreError(L"Não foi possível eliminar o empréstimo.", error);
         return;
     }
+    SynchronizeExternalAuditLog(true);
     RefreshList();
 }
 
@@ -969,7 +1017,8 @@ void CreateChildControls(HWND window)
 void UpdateWriteAccess(HWND window)
 {
     if (!window) return;
-    const BOOL enabled = gStore.MigrationRequired() ? FALSE : TRUE;
+    const BOOL enabled =
+        (gStore.MigrationRequired() || gStore.ExternalAuditLogBlocked()) ? FALSE : TRUE;
 
     EnableWindow(GetDlgItem(window, IDC_BUTTON_NEW), enabled);
     EnableWindow(GetDlgItem(window, IDC_BUTTON_EDIT), enabled);
@@ -1215,6 +1264,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     OfferLegacyMigration(NULL);
+    SynchronizeExternalAuditLog(true);
 
     INITCOMMONCONTROLSEX controls = {};
     controls.dwSize = sizeof(controls);

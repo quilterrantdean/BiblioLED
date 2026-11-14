@@ -59,6 +59,8 @@ public:
     bool GetAll(std::vector<LoanRecord>* records, std::string* error);
     bool GetById(int id, LoanRecord* record, std::string* error);
     bool GetAuditEvents(std::vector<AuditEvent>* events, std::string* error);
+    void SetExternalAuditLogStatus(bool enabled, bool healthy);
+    bool ExternalAuditLogBlocked() const;
     bool Insert(LoanRecord* record, std::string* error);
     bool Update(const LoanRecord& record, std::string* error);
     bool Remove(int id, std::string* error);
@@ -80,6 +82,8 @@ private:
     bool session_backup_done_;
     int schema_version_;
     bool migration_required_;
+    bool external_audit_log_enabled_;
+    bool external_audit_log_healthy_;
 };
 
 } // namespace biblioled

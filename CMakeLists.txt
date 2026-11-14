@@ -70,6 +70,7 @@ if(WIN32)
     add_executable(BiblioLED WIN32
         src/win32/main.cpp
         src/win32/dialogs.rc
+        src/infrastructure/audit_log.cpp
     )
     target_include_directories(BiblioLED PRIVATE src/win32)
     target_compile_definitions(BiblioLED PRIVATE
@@ -112,4 +113,19 @@ if(BUILD_TESTING)
     add_executable(loan_store_tests tests/loan_store_tests.cpp)
     target_link_libraries(loan_store_tests PRIVATE biblioled_core)
     add_test(NAME loan_store_tests COMMAND loan_store_tests)
+
+    if(WIN32)
+        add_executable(audit_log_tests
+            tests/audit_log_tests.cpp
+            src/infrastructure/audit_log.cpp
+        )
+        target_include_directories(audit_log_tests PRIVATE include)
+        target_compile_definitions(audit_log_tests PRIVATE
+            WINVER=0x0501
+            _WIN32_WINNT=0x0501
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX
+        )
+        add_test(NAME audit_log_tests COMMAND audit_log_tests)
+    endif()
 endif()
