@@ -329,6 +329,10 @@ int main()
 
     const std::string first_backup = store.LastSessionBackupPath();
     Check(!first_backup.empty(), "session backup path should be reported");
+#ifdef _WIN32
+    Check(first_backup.find('/') == std::string::npos,
+          "Windows automatic backup paths should use backslashes only");
+#endif
     backups.push_back(first_backup);
 
     std::string first_backup_decoded;
@@ -388,6 +392,10 @@ int main()
           "manual backup should be created and validated");
     Check(!manual_backup.empty() && manual_backup != first_backup,
           "manual backup should be a separate file");
+#ifdef _WIN32
+    Check(manual_backup.find('/') == std::string::npos,
+          "Windows manual backup paths should use backslashes only");
+#endif
     backups.push_back(manual_backup);
 
     std::string manual_backup_decoded;
@@ -410,7 +418,22 @@ int main()
     Check(zlib_manual_backup.size() >= 12 &&
           zlib_manual_backup.compare(zlib_manual_backup.size() - 12, 12, ".sqlite.zlib") == 0,
           "zlib-format backup should use the .sqlite.zlib extension");
+#ifdef _WIN32
+    Check(zlib_manual_backup.find('/') == std::string::npos,
+          "Windows zlib backup paths should use backslashes only");
+#endif
     backups.push_back(zlib_manual_backup);
+
+    // Change settings again while the store remains open; the next manual
+    // backup must use the new format and level without reopening the store.
+    store.SetBackupCompression("gzip", 1);
+    std::string immediate_gzip_backup;
+    Check(store.CreateManualBackup(&immediate_gzip_backup, &error),
+          "a live compression-setting change should affect the next backup");
+    Check(immediate_gzip_backup.size() >= 10 &&
+          immediate_gzip_backup.compare(immediate_gzip_backup.size() - 10, 10, ".sqlite.gz") == 0,
+          "a live change back to gzip should take effect immediately");
+    backups.push_back(immediate_gzip_backup);
 
     std::string zlib_manual_decoded;
     Check(MakeReadableBackup(zlib_manual_backup, &zlib_manual_decoded),
