@@ -78,7 +78,6 @@ int main()
         biblioled::BackupCompressionFormat::Zlib
     };
     const int levels[] = {0, 1, 6, 9};
-    std::string gzip_level_six;
 
     for (size_t f = 0; f < sizeof(formats) / sizeof(formats[0]); ++f) {
         for (size_t l = 0; l < sizeof(levels) / sizeof(levels[0]); ++l) {
@@ -107,10 +106,6 @@ int main()
 
             biblioled::RemoveBackupFile(compressed);
             biblioled::RemoveBackupFile(decoded);
-            if (formats[f] == biblioled::BackupCompressionFormat::Gzip &&
-                levels[l] == 6) {
-                gzip_level_six = compressed;
-            }
         }
     }
 
