@@ -50,7 +50,8 @@ struct LoanStatistics {
 
 // Statistics use all records for totals and annual evolution. Calendar,
 // weekday and hour activity are scoped to selected_year. Mean/median intervals
-// use distinct dates with at least one loan, matching the legacy mean metric.
+// use distinct dates with at least one loan across the full history, matching
+// the legacy mean metric; they are not scoped to selected_year.
 bool CalculateLoanStatistics(const std::vector<LoanRecord>& records,
                              int selected_year,
                              LoanStatistics* statistics);

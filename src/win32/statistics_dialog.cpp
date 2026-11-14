@@ -187,9 +187,9 @@ void UpdateStatistics(HWND dialog,StatisticsContext* context,int year)
     }
 
     if(s.interval_count==0) {
-        text=L"Intervalo entre dias com empréstimos: dados insuficientes.";
+        text=L"Todo o histórico — intervalo entre dias com empréstimos: dados insuficientes.";
     } else {
-        text=L"Entre dias com empréstimos — média: "+Decimal(s.mean_days_between);
+        text=L"Todo o histórico — média entre dias com empréstimos: "+Decimal(s.mean_days_between);
         text+=L" dias; mediana: "+Decimal(s.median_days_between)+L" dias (";
         text+=Number(static_cast<int>(s.interval_count))+L" intervalos).";
     }

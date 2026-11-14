@@ -177,9 +177,9 @@ jobs:
           dados ficam bloqueadas até a sincronização recuperar. Depois de corrigir
           o problema, prima F5 para tentar novamente sem reiniciar a aplicação.
 
-          Ainda faltam recuperação guiada, futuras migrações de esquema, estatísticas,
-          exportação e outras funcionalidades da aplicação final. O registo interno
-          de auditoria não tem visualizador.
+          Ainda faltam recuperação guiada, futuras migrações de esquema, exportação
+          e outras funcionalidades da aplicação final. O registo interno de auditoria
+          não tem visualizador.
 
           Ensaio sugerido (apenas numa pasta temporária):
           1. Extraia este artefacto para uma pasta nova e vazia.
@@ -212,6 +212,10 @@ jobs:
               os novos valores deverão então ser aplicados. Teste apenas nesta
               pasta descartável.
           13. Abra Ajuda > Sobre e confirme o ícone, a versão e a data de compilação.
+          14. Abra Ver > Estatísticas. Escolha anos diferentes e confirme os totais
+              anuais e a comparação com o ano anterior. Verifique a actividade
+              diária, a distribuição por dia da semana/hora e a média/mediana
+              global dos intervalos entre dias com empréstimos.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8

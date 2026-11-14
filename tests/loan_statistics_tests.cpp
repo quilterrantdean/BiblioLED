@@ -119,6 +119,9 @@ void TestUsagePatternsAndIntervals()
           previous_year.daily_activity.size() == 1 &&
           previous_year.weekday_counts[6] == 1,
           "year selection should filter the activity calendar and patterns");
+    Check(previous_year.interval_count == 3 &&
+          std::fabs(previous_year.mean_days_between - (70.0 / 3.0)) < 0.0001,
+          "mean/median intervals should remain scoped to the full history, not the selected year");
 }
 
 void TestNoActivityAndSingleDay()

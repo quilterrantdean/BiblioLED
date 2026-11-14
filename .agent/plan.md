@@ -2,7 +2,7 @@
 
 ## Current status
 
-**Stage:** the Win32/SQLite proof of concept now has daily automatic backups, separate manual and safety backups, rolling retention for automatic snapshots, streaming gzip/zlib compression through statically linked zlib 1.4, configurable compression format/level, verified compressed and legacy restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing, recoverable rotating external audit logs, an embedded executable icon, persistent draggable table columns, a separate searchable/filterable history window with edit/delete support, and a general settings dialog for operational limits and local diagnostic logging, plus an About dialog with build information. The history and general-settings features pass Linux core tests, modern Win32 compile/tests, and the XP-targeted w64devkit x86 build/tests. The About dialog is implemented and awaiting its CI run. Latest validated executable commit: `be9e371c2c70282fbb083d9f7b75c72d9deab222`; XP test artifact ID: `14132815193`. The About dialog passed Linux core tests, modern Win32 compile/tests and the XP-targeted w64devkit x86 build/tests. Portable loan-rule extraction is committed as `e387dcb1a94e3debc85529abcb4f60953d1616d9`; its new tests are awaiting CI. Actual Windows XP SP3 runtime validation remains outstanding.
+**Stage:** the Win32/SQLite proof of concept now includes automatic/manual/safety backups with compressed restore and retention, explicit schema migration and missing-database protection, transactional SQLite auditing with recoverable rotating external logs, the embedded icon and persistent table columns, a searchable history window, general and backup settings dialogs, an About dialog, and a read-only two-area Statistics window. Loan-date/expiry/quota rules and statistics calculations are in portable core modules with dedicated tests. Commit `02e3aa801d127fef3e0078271c8dcbecca7338f8` passed Linux core tests, modern Win32 compile/tests, and the XP-targeted w64devkit x86 build, tests, PE32/XP-subsystem inspection and package generation. XP test artifact ID: `14132896673`. Actual Windows XP SP3 runtime validation remains outstanding.
 
 The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
@@ -69,7 +69,7 @@ The live-settings and native-path corrections pass Linux Core tests, modern Win3
 - [x] Extract date parsing, calendar-day expiry, operational visibility, quota windows and remaining-quota calculation into portable core code; test these rules without the GUI.
 - [ ] Implement the main active-loans overview.
 - [x] Implement the separate searchable/filterable history window; show all records including expired/future entries, filter by title/type/date/ID, and support edit/delete.
-- [ ] Implement revised statistics.
+- [x] Implement revised statistics: annual evolution/comparison, daily activity, weekday/hour patterns, and mean/median intervals between distinct active dates; no progress or streak tracking.
 - [x] Implement the general settings UI for limits, loan duration, diagnostics and log rotation; changes apply on next launch as specified by D-016.
 - [x] Implement the About dialog with the embedded icon, version, build timestamp and XP target.
 - [x] Add a dedicated backup-settings dialog for compression format and level, persisted in `config/settings.ini`.
@@ -79,7 +79,7 @@ The live-settings and native-path corrections pass Linux Core tests, modern Win3
 
 ### Phase 5 — Verification and delivery
 
-- [ ] Add exhaustive automated tests using isolated test data. Initial compression and retention tests are implemented; the complete test suite still requires CI confirmation.
+- [ ] Continue expanding automated coverage for recovery, migration, settings persistence and UI workflows. Existing loan-rule, statistics, backup/compression, retention, audit and store tests run on synthetic/isolated data; the latest Linux, modern Win32 and XP-targeted CI runs pass.
 - [ ] Add static analysis and dependency checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
