@@ -24,7 +24,11 @@ std::string JoinPath(const std::string& directory, const std::string& name)
     if (directory.empty()) return name;
     const char last = directory[directory.size() - 1];
     if (last == '/' || last == '\\') return directory + name;
+#ifdef _WIN32
+    return directory + "\\" + name;
+#else
     return directory + "/" + name;
+#endif
 }
 
 bool HasColumn(sqlite3* db, const char* column_name)
