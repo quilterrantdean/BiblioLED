@@ -203,6 +203,10 @@ jobs:
               biblioteca.sqlite.test e volte a iniciar. A aplicação deverá parar e
               explicar que a base de dados falta; não deverá criar uma base vazia.
               Depois volte a colocar o ficheiro no nome original.
+          11. Abra Ver > Histórico (Ctrl+H). Confirme que aparecem registos
+              expirados e futuros. Pesquise por título, data e ID, filtre por
+              Livro/Audiolivro, edite um registo fictício e elimine outro.
+              Confirme que o histórico e a janela principal são actualizados.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8
