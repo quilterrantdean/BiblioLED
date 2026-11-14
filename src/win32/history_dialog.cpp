@@ -321,14 +321,6 @@ INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lPara
         LayoutControls(dialog);
         return TRUE;
     }
-    if(message==WM_CONTEXTMENU && context &&
-       reinterpret_cast<HWND>(wParam)==GetDlgItem(dialog,IDC_HISTORY_LIST)) {
-        POINT point;
-        point.x=static_cast<short>(LOWORD(lParam));
-        point.y=static_cast<short>(HIWORD(lParam));
-        ShowHistoryContextMenu(dialog,context,point);
-        return TRUE;
-    }
     if(message==WM_COMMAND && context) {
         const int id=LOWORD(wParam), notification=HIWORD(wParam);
         if(id==IDC_HISTORY_SEARCH && notification==EN_CHANGE) {
