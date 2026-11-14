@@ -138,21 +138,33 @@ jobs:
           Esta compilação serve apenas para ensaio.
           Não é uma versão de utilização diária nem está preparada para dados reais.
 
-          Protecções e persistência já incluídas:
+          Protecções e persistência incluídas:
           - Ícone embebido no executável; não é necessário um ficheiro .ico separado.
-          - Colunas reorganizáveis por arrastamento, com ordem e larguras guardadas em config\settings.ini.
+          - Colunas reorganizáveis por arrastamento; ordem e larguras em config\settings.ini.
           - Novas bases de dados criadas no esquema SQLite versão 1.
           - Bases antigas (versão 0) só são alteradas depois de confirmação explícita.
-            Antes da migração é criada e validada uma cópia integral; a migração é
-            transaccional e preserva os empréstimos existentes.
-          - Cada criação, edição ou eliminação grava o evento interno de auditoria
-            na mesma transacção SQLite que altera o empréstimo.
-          - Uma cópia SQLite validada antes da primeira alteração de cada sessão.
-          - Cópias manuais separadas.
-          - Reposição confirmada, depois de validar a origem e criar uma cópia de
+            Antes da migração é criada e validada uma cópia de segurança.
+          - Criação, edição e eliminação de empréstimos com auditoria SQLite transaccional.
+          - Auditoria de arranque, encerramento, cópias manuais e reposições.
+          - Uma cópia automática comprimida antes da primeira alteração de empréstimos
+            de cada dia local. A mesma cópia válida é reutilizada nesse dia.
+          - Eventos de auditoria e alterações às definições não desencadeiam cópias automáticas.
+          - Retenção automática: 7 cópias diárias, 4 semanais e 12 mensais.
+            Só as cópias automáticas são limpas; cópias manuais e cópias de segurança
+            anteriores a reposições/migrações ficam preservadas.
+          - Compressão através da biblioteca zlib 1.4, ligada estaticamente:
+            gzip (.sqlite.gz) ou zlib (.sqlite.zlib), com nível configurável de 0 a 9.
+          - As cópias antigas sem compressão (.sqlite) continuam a poder ser repostas.
+          - A reposição valida a cópia seleccionada e cria primeiro uma cópia de
             segurança da base de dados actual.
           - Um marcador impede a criação silenciosa de uma base vazia se a base de
             dados esperada desaparecer depois da inicialização.
+
+          Definições de cópias:
+          - Ficheiro > Definições de cópias permite escolher gzip/zlib e nível 0–9.
+          - Os valores ficam em config\settings.ini, secção [backups].
+          - As alterações só têm efeito no arranque seguinte.
+          - O nível 6 é o valor predefinido.
 
           O log externo fica em logs\audit.log e roda para ficheiros datados quando
           ultrapassa o limite configurado (5 MB por defeito). Uma linha final incompleta
@@ -162,25 +174,32 @@ jobs:
           Se o log estiver activado mas não puder ser escrito, as alterações à base de
           dados ficam bloqueadas até a sincronização recuperar. Depois de corrigir
           o problema, prima F5 para tentar novamente sem reiniciar a aplicação.
-          
-          Ainda faltam recuperação guiada, futuras migrações de esquema, a interface de
-          definições completa e outras funcionalidades da aplicação final. O registo
-          interno de auditoria não tem visualizador.
+
+          Ainda faltam recuperação guiada, futuras migrações de esquema, a interface
+          geral de definições, história, estatísticas, exportação e outras funcionalidades
+          da aplicação final. O registo interno de auditoria não tem visualizador.
 
           Ensaio sugerido (apenas numa pasta temporária):
           1. Extraia este artefacto para uma pasta nova e vazia.
           2. Execute BiblioLED.exe e crie um registo fictício.
-          3. Feche e volte a abrir; confirme que o registo permanece.
-          4. Use Ficheiro > Criar cópia de segurança.
-          5. Arraste os cabeçalhos das colunas para outra ordem e ajuste as larguras.
-             Feche e volte a abrir a aplicação; confirme que a disposição é mantida.
-          6. Crie/edite/elimine registos fictícios e teste Ficheiro > Repor a partir
-             de cópia. Confirme que é criada uma cópia da versão anterior.
-          7. Abra logs\audit.log e confirme que as operações aparecem no log.
-          8. Opcional: feche a aplicação, renomeie data\biblioteca.sqlite para
-             biblioteca.sqlite.test e volte a iniciar. A aplicação deverá parar e
-             explicar que a base de dados falta; não deverá criar uma base vazia.
-             Depois volte a colocar o ficheiro no nome original.
+          3. Confirme que surge uma cópia automática .sqlite.gz antes da primeira
+             alteração de empréstimos desse dia. Não deve surgir apenas por abrir ou
+             fechar a aplicação.
+          4. Crie/edite/elimine registos fictícios adicionais no mesmo dia; confirme
+             que a cópia automática diária é reutilizada.
+          5. Use Ficheiro > Criar cópia de segurança e confirme que o nome começa
+             por BiblioLED_manual_ e tem a extensão de compressão configurada.
+          6. Em Ficheiro > Definições de cópias, experimente zlib e outro nível.
+             Feche e volte a abrir a aplicação antes de criar a cópia seguinte.
+          7. Reponha uma cópia comprimida. Confirme que é criada uma cópia de
+             segurança BiblioLED_safety_restore_ da base de dados anterior.
+          8. Arraste os cabeçalhos das colunas, feche e volte a abrir; confirme que
+             a ordem e as larguras são mantidas.
+          9. Abra logs\audit.log e confirme que as operações aparecem no log.
+          10. Opcional: feche a aplicação, renomeie data\biblioteca.sqlite para
+              biblioteca.sqlite.test e volte a iniciar. A aplicação deverá parar e
+              explicar que a base de dados falta; não deverá criar uma base vazia.
+              Depois volte a colocar o ficheiro no nome original.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8
