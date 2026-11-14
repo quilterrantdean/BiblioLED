@@ -192,7 +192,8 @@ jobs:
           5. Use Ficheiro > Criar cópia de segurança e confirme que o nome começa
              por BiblioLED_manual_ e tem a extensão de compressão configurada.
           6. Em Ficheiro > Definições de cópias, experimente zlib e outro nível.
-             Feche e volte a abrir a aplicação antes de criar a cópia seguinte.
+             Sem reiniciar, use Ficheiro > Criar cópia de segurança novamente
+             e confirme que a nova cópia usa a extensão .sqlite.zlib.
           7. Reponha uma cópia comprimida. Confirme que é criada uma cópia de
              segurança BiblioLED_safety_restore_ da base de dados anterior.
           8. Arraste os cabeçalhos das colunas, feche e volte a abrir; confirme que
