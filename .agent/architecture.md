@@ -94,6 +94,14 @@ All paths are resolved from the executable directory. The existing application i
 - Keep both the selected source backup and the pre-restore safety copy unchanged.
 - A backup is not considered valid merely because a file exists: validate its SQLite integrity.
 
+## Backup policy review — pending decision
+
+The current implementation still creates an uncompressed SQLite snapshot before the first database mutation in each application session and retains every backup indefinitely. Because the startup lifecycle event is currently written to SQLite and uses the same backup gate, a normal launch triggers a backup even when no loan is changed. This is known to be unnecessarily frequent and is under review; it is not the intended final policy.
+
+The review will separate data-protection snapshots from audit-only writes, consider limiting automatic snapshots to the first loan-data change on a calendar day, and apply retention only to automatic snapshots. User-requested manual backups and pre-restore/migration safety copies should remain protected from automatic pruning. Compression will be evaluated using an existing streaming library; compressed backups must be fully decompressed and pass SQLite integrity and schema checks before they are accepted. Existing uncompressed `.sqlite` backups must remain restorable.
+
+No new cadence, retention schedule, or compression format is approved yet. See decisions D-019 and D-020, which are marked under review.
+
 ## Audit logging model
 
 Internal audit events are now stored in audit_events within the same SQLite transaction as the associated loan create/edit/delete. Events retain the action, timestamp, loan ID, before/after values, and details. If the event insert fails, the loan operation rolls back as well. The schema migration itself records a schema_migration event. A read API is available to retrieve these events.
