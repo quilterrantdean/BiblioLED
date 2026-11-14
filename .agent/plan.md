@@ -57,6 +57,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
 - [ ] Extend audit coverage to settings changes, exports, warnings, errors, and failures.
 
+Note: the durable startup event is a SQLite mutation, so each normal launch triggers the existing automatic pre-first-mutation session backup. This applies even when external file logging is disabled; the SQLite event remains authoritative.
+
 ### Phase 4 — Application functionality and interface
 
 - [ ] Implement the business rules independently of the GUI.
