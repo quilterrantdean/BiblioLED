@@ -1103,6 +1103,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             return 0;
         case IDM_REFRESH:
         case IDC_BUTTON_REFRESH:
+            SynchronizeExternalAuditLog(true);
             RefreshList();
             return 0;
         case IDM_EXIT:
@@ -1138,6 +1139,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
 
     case WM_KEYDOWN:
         if (wParam == VK_F5) {
+            SynchronizeExternalAuditLog(true);
             RefreshList();
             return 0;
         }

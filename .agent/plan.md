@@ -53,7 +53,8 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Implement guided missing/corrupt-database recovery and reporting.
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
 - [x] Synchronise internal audit events to the external append-only UTF-8 log using stable event fingerprints; recover an incomplete final line and rotate archives at the configured size.
-- [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery.
+- [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; F5 retries synchronisation without requiring an application restart.
+- [ ] Extend audit coverage beyond loan CRUD and schema migration to lifecycle, backup/restore, settings, exports, warnings, errors, and failures.
 
 ### Phase 4 — Application functionality and interface
 

@@ -160,7 +160,8 @@ jobs:
           Quando enabled=0 em config\settings.ini, a auditoria SQLite continua activa e
           a sincronização do ficheiro fica pendente até voltar a ser activada.
           Se o log estiver activado mas não puder ser escrito, as alterações à base de
-          dados ficam bloqueadas até a sincronização recuperar.
+          dados ficam bloqueadas até a sincronização recuperar. Depois de corrigir
+          o problema, prima F5 para tentar novamente sem reiniciar a aplicação.
           
           Ainda faltam recuperação guiada, futuras migrações de esquema, a interface de
           definições completa e outras funcionalidades da aplicação final. O registo
