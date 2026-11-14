@@ -97,7 +97,7 @@ All paths are resolved from the executable directory. The existing application i
 - Restore accepts the new compressed formats and legacy uncompressed `.sqlite` files. Decompress to a temporary file when necessary, validate SQLite integrity and schema compatibility, create and validate a safety backup of the current database, and only then perform the restore. Verify the restored database and attempt rollback from the safety backup on failure.
 - A backup is not considered valid merely because a file exists; validate the complete stream and SQLite integrity/schema.
 
-The backup settings dialog currently exposes compression format and level. The general settings window remains outstanding. See confirmed decisions D-019, D-020, D-057 and D-058.
+The general settings dialog exposes the daily and monthly limits, rolling-window length, loan duration, diagnostic logging toggle, and external-log rotation threshold. These values are saved to `config/settings.ini` and intentionally remain pending until the next application launch (D-016). The dedicated backup dialog remains separate because compression changes apply immediately (D-057).
 
 ## Audit logging model
 

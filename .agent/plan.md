@@ -2,7 +2,7 @@
 
 ## Current status
 
-**Stage:** the Win32/SQLite proof of concept now has daily automatic backups, separate manual and safety backups, rolling retention for automatic snapshots, streaming gzip/zlib compression through statically linked zlib 1.4, configurable compression format/level, verified compressed and legacy restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing, recoverable rotating external audit logs, an embedded executable icon, persistent draggable table columns, and a separate searchable/filterable history window with edit/delete support. The history feature passes Linux core tests, modern Win32 compile/tests, and the XP-targeted w64devkit x86 build/tests. Latest validated feature commit: `94e67774322a82b3a829677b6cbb11ab703d19ce`; XP test artifact ID: `14132071642`. Actual Windows XP SP3 runtime validation remains outstanding.
+**Stage:** the Win32/SQLite proof of concept now has daily automatic backups, separate manual and safety backups, rolling retention for automatic snapshots, streaming gzip/zlib compression through statically linked zlib 1.4, configurable compression format/level, verified compressed and legacy restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing, recoverable rotating external audit logs, an embedded executable icon, persistent draggable table columns, a separate searchable/filterable history window with edit/delete support, and a general settings dialog for operational limits and local diagnostic logging. The history feature passes Linux core tests, modern Win32 compile/tests, and the XP-targeted w64devkit x86 build/tests. Latest validated feature commit: `94e67774322a82b3a829677b6cbb11ab703d19ce`; XP test artifact ID: `14132071642`. The general settings dialog is implemented on `development` and is awaiting its own CI run. Actual Windows XP SP3 runtime validation remains outstanding.
 
 The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
@@ -70,7 +70,8 @@ The live-settings and native-path corrections pass Linux Core tests, modern Win3
 - [ ] Implement the main active-loans overview.
 - [x] Implement the separate searchable/filterable history window; show all records including expired/future entries, filter by title/type/date/ID, and support edit/delete.
 - [ ] Implement revised statistics.
-- [ ] Implement the general settings UI and the About dialog.
+- [x] Implement the general settings UI for limits, loan duration, diagnostics and log rotation; changes apply on next launch as specified by D-016.
+- [ ] Implement the About dialog.
 - [x] Add a dedicated backup-settings dialog for compression format and level, persisted in `config/settings.ini`.
 - [x] Embed the existing application icon as a Win32 resource in `BiblioLED.exe`; do not ship or require a separate `.ico` file.
 - [x] Make the main table columns reorderable by dragging their headers.

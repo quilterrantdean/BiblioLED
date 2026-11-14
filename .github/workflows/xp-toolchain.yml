@@ -207,6 +207,10 @@ jobs:
               expirados e futuros. Pesquise por título, data e ID, filtre por
               Livro/Audiolivro, edite um registo fictício e elimine outro.
               Confirme que o histórico e a janela principal são actualizados.
+          12. Em Ficheiro > Definições gerais, altere os limites ou a duração.
+              Confirme que a sessão actual não muda. Feche e reabra a aplicação;
+              os novos valores deverão então ser aplicados. Teste apenas nesta
+              pasta descartável.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8

@@ -76,8 +76,21 @@ std::wstring gApplicationDirectory;
 std::wstring gSettingsPath;
 bool gSettingsFileValid = false;
 bool gColumnSettingsWarningShown = false;
+bool gGeneralSettingsPending = false;
+AppSettings gPendingGeneralSettings;
 biblioled::LoanStore gStore;
 AppSettings gSettings;
+
+void CopyGeneralSettings(const AppSettings& source, AppSettings* destination)
+{
+    if (!destination) return;
+    destination->daily_limit = source.daily_limit;
+    destination->monthly_limit = source.monthly_limit;
+    destination->monthly_window_days = source.monthly_window_days;
+    destination->loan_duration_days = source.loan_duration_days;
+    destination->diagnostics_enabled = source.diagnostics_enabled;
+    destination->audit_log_max_size_bytes = source.audit_log_max_size_bytes;
+}
 
 void UpdateWriteAccess(HWND window);
 
@@ -691,8 +704,13 @@ bool SaveColumnLayout()
         gSettings.column_widths[i] = ListView_GetColumnWidth(gLoanList, i);
     }
 
+    AppSettings persisted = gSettings;
+    if (gGeneralSettingsPending) {
+        CopyGeneralSettings(gPendingGeneralSettings, &persisted);
+    }
+
     std::string error;
-    if (!WriteSettings(gSettingsPath, gSettings, &error)) {
+    if (!WriteSettings(gSettingsPath, persisted, &error)) {
         if (!gColumnSettingsWarningShown) {
             MessageBoxW(gMainWindow, Utf8ToWide(error).c_str(), L"BiblioLED",
                         MB_OK | MB_ICONWARNING);
@@ -997,6 +1015,7 @@ HMENU CreateApplicationMenu()
     AppendMenuW(file_menu, write_menu_flags, IDM_NEW, L"Novo registo\tCtrl+N");
     AppendMenuW(file_menu, MF_STRING, IDM_BACKUP, L"Criar cópia de segurança...");
     AppendMenuW(file_menu, MF_STRING, IDM_RESTORE, L"Repor a partir de cópia...");
+    AppendMenuW(file_menu, MF_STRING, IDM_GENERAL_SETTINGS, L"Definições gerais...");
     AppendMenuW(file_menu, MF_STRING, IDM_BACKUP_SETTINGS, L"Definições de cópias...");
     AppendMenuW(file_menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(file_menu, MF_STRING, IDM_EXIT, L"Sair");
@@ -1162,6 +1181,158 @@ INT_PTR CALLBACK BackupSettingsDialogProc(HWND dialog, UINT message,
     return FALSE;
 }
 
+INT_PTR CALLBACK GeneralSettingsDialogProc(HWND dialog, UINT message,
+                                                   WPARAM wParam, LPARAM lParam)
+{
+    AppSettings* settings =
+        reinterpret_cast<AppSettings*>(GetWindowLongPtrW(dialog, DWLP_USER));
+
+    if (message == WM_INITDIALOG) {
+        settings = reinterpret_cast<AppSettings*>(lParam);
+        SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(settings));
+        if (settings) {
+            wchar_t value[32] = {0};
+            _snwprintf(value, 31, L"%d", settings->daily_limit);
+            SetDlgItemTextW(dialog, IDC_GENERAL_DAILY_LIMIT, value);
+            _snwprintf(value, 31, L"%d", settings->monthly_limit);
+            SetDlgItemTextW(dialog, IDC_GENERAL_MONTHLY_LIMIT, value);
+            _snwprintf(value, 31, L"%d", settings->monthly_window_days);
+            SetDlgItemTextW(dialog, IDC_GENERAL_MONTHLY_WINDOW, value);
+            _snwprintf(value, 31, L"%d", settings->loan_duration_days);
+            SetDlgItemTextW(dialog, IDC_GENERAL_LOAN_DURATION, value);
+            const unsigned long size_kb =
+                (settings->audit_log_max_size_bytes + 1023UL) / 1024UL;
+            _snwprintf(value, 31, L"%lu", size_kb);
+            SetDlgItemTextW(dialog, IDC_GENERAL_LOG_SIZE_KB, value);
+            SendDlgItemMessageW(dialog, IDC_GENERAL_DIAGNOSTICS, BM_SETCHECK,
+                settings->diagnostics_enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+        }
+        SetFocus(GetDlgItem(dialog, IDC_GENERAL_DAILY_LIMIT));
+        return FALSE;
+    }
+
+    if (message == WM_COMMAND && LOWORD(wParam) == IDOK) {
+        if (!settings) return TRUE;
+
+        int daily = 0;
+        int monthly = 0;
+        int window_days = 0;
+        int duration = 0;
+        int log_size_kb = 0;
+        const bool valid =
+            ParsePositiveInteger(WideToUtf8(GetControlText(dialog, IDC_GENERAL_DAILY_LIMIT)),
+                                 1, 1000, &daily) &&
+            ParsePositiveInteger(WideToUtf8(GetControlText(dialog, IDC_GENERAL_MONTHLY_LIMIT)),
+                                 1, 10000, &monthly) &&
+            ParsePositiveInteger(WideToUtf8(GetControlText(dialog, IDC_GENERAL_MONTHLY_WINDOW)),
+                                 1, 3660, &window_days) &&
+            ParsePositiveInteger(WideToUtf8(GetControlText(dialog, IDC_GENERAL_LOAN_DURATION)),
+                                 1, 3660, &duration) &&
+            ParsePositiveInteger(WideToUtf8(GetControlText(dialog, IDC_GENERAL_LOG_SIZE_KB)),
+                                 64, 1048576, &log_size_kb);
+
+        if (!valid) {
+            MessageBoxW(dialog,
+                L"Verifique os valores introduzidos.\n\n"
+                L"Limite diário: 1–1000; limite mensal: 1–10000; "
+                L"janela e duração: 1–3660 dias; log: 64–1048576 KB.",
+                L"Definições inválidas", MB_OK | MB_ICONWARNING);
+            SetFocus(GetDlgItem(dialog, IDC_GENERAL_DAILY_LIMIT));
+            return TRUE;
+        }
+
+        settings->daily_limit = daily;
+        settings->monthly_limit = monthly;
+        settings->monthly_window_days = window_days;
+        settings->loan_duration_days = duration;
+        settings->audit_log_max_size_bytes =
+            static_cast<unsigned long>(log_size_kb) * 1024UL;
+        settings->diagnostics_enabled =
+            SendDlgItemMessageW(dialog, IDC_GENERAL_DIAGNOSTICS,
+                                BM_GETCHECK, 0, 0) == BST_CHECKED;
+        EndDialog(dialog, IDOK);
+        return TRUE;
+    }
+
+    if (message == WM_COMMAND && LOWORD(wParam) == IDCANCEL) {
+        EndDialog(dialog, IDCANCEL);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void ShowGeneralSettings()
+{
+    if (!gSettingsFileValid) {
+        MessageBoxW(gMainWindow,
+            L"O ficheiro config/settings.ini é inválido e foi preservado. "
+            L"As definições não podem ser gravadas até o ficheiro ser corrigido.",
+            L"Definições", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    AppSettings before = gSettings;
+    if (gGeneralSettingsPending) {
+        CopyGeneralSettings(gPendingGeneralSettings, &before);
+    }
+    AppSettings edited = before;
+
+    const INT_PTR result = DialogBoxParamW(
+        gInstance, MAKEINTRESOURCEW(IDD_GENERAL_SETTINGS_DIALOG),
+        gMainWindow, GeneralSettingsDialogProc,
+        reinterpret_cast<LPARAM>(&edited));
+    if (result != IDOK) return;
+
+    const bool changed =
+        edited.daily_limit != before.daily_limit ||
+        edited.monthly_limit != before.monthly_limit ||
+        edited.monthly_window_days != before.monthly_window_days ||
+        edited.loan_duration_days != before.loan_duration_days ||
+        edited.diagnostics_enabled != before.diagnostics_enabled ||
+        edited.audit_log_max_size_bytes != before.audit_log_max_size_bytes;
+    if (!changed) return;
+
+    AppSettings persisted = gSettings;
+    CopyGeneralSettings(edited, &persisted);
+
+    std::string error;
+    if (!WriteSettings(gSettingsPath, persisted, &error)) {
+        ShowStoreError(L"Não foi possível guardar as definições gerais.", error);
+        return;
+    }
+
+    gPendingGeneralSettings = edited;
+    gGeneralSettingsPending = true;
+
+    if (!gStore.MigrationRequired()) {
+        std::ostringstream details;
+        details << "daily_limit=" << before.daily_limit << "->" << edited.daily_limit
+                << "; monthly_limit=" << before.monthly_limit << "->" << edited.monthly_limit
+                << "; monthly_window_days=" << before.monthly_window_days
+                << "->" << edited.monthly_window_days
+                << "; loan_duration_days=" << before.loan_duration_days
+                << "->" << edited.loan_duration_days
+                << "; diagnostics_enabled=" << (before.diagnostics_enabled ? 1 : 0)
+                << "->" << (edited.diagnostics_enabled ? 1 : 0)
+                << "; audit_log_max_size_bytes=" << before.audit_log_max_size_bytes
+                << "->" << edited.audit_log_max_size_bytes;
+
+        error.clear();
+        if (!gStore.RecordAuditEvent("settings_changed", details.str(), &error)) {
+            ShowStoreError(
+                L"As definições foram guardadas, mas não foi possível registar a alteração na auditoria.",
+                error);
+            return;
+        }
+        SynchronizeExternalAuditLog(true);
+    }
+
+    MessageBoxW(gMainWindow,
+        L"As definições gerais foram guardadas em config/settings.ini. "
+        L"Os novos limites e opções de registo serão aplicados na próxima execução.",
+        L"Definições guardadas", MB_OK | MB_ICONINFORMATION);
+}
+
 void ShowBackupSettings()
 {
     if (!gSettingsFileValid) {
@@ -1193,13 +1364,19 @@ void ShowBackupSettings()
 
     const std::string old_format = gSettings.backup_compression_format;
     const int old_level = gSettings.backup_compression_level;
+    AppSettings persisted = edited;
+    if (gGeneralSettingsPending) {
+        CopyGeneralSettings(gPendingGeneralSettings, &persisted);
+    }
+
     std::string error;
-    if (!WriteSettings(gSettingsPath, edited, &error)) {
+    if (!WriteSettings(gSettingsPath, persisted, &error)) {
         ShowStoreError(L"Não foi possível guardar as definições de cópias de segurança.", error);
         return;
     }
 
-    gSettings = edited;
+    gSettings.backup_compression_format = edited.backup_compression_format;
+    gSettings.backup_compression_level = edited.backup_compression_level;
     gStore.SetBackupCompression(
         gSettings.backup_compression_format,
         gSettings.backup_compression_level);
@@ -1273,6 +1450,9 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             return 0;
         case IDM_RESTORE:
             RestoreDatabaseFromBackup();
+            return 0;
+        case IDM_GENERAL_SETTINGS:
+            ShowGeneralSettings();
             return 0;
         case IDM_BACKUP_SETTINGS:
             ShowBackupSettings();
