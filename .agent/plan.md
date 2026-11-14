@@ -70,6 +70,7 @@ The live-settings and native-path corrections pass Linux Core tests, modern Win3
 - [ ] Implement the main active-loans overview.
 - [x] Implement the separate searchable/filterable history window; show all records including expired/future entries, filter by title/type/date/ID, and support edit/delete.
 - [x] Implement revised statistics: annual evolution/comparison, daily activity, weekday/hour patterns, and mean/median intervals between distinct active dates; no progress or streak tracking.
+- [x] Implement CSV export of the complete loan history, with UTF-8 BOM, semicolon delimiter, legacy-compatible columns, atomic replacement and an audit event.
 - [x] Implement the general settings UI for limits, loan duration, diagnostics and log rotation; changes apply on next launch as specified by D-016.
 - [x] Implement the About dialog with the embedded icon, version, build timestamp and XP target.
 - [x] Add a dedicated backup-settings dialog for compression format and level, persisted in `config/settings.ini`.

@@ -100,7 +100,7 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 - Guided recovery when the expected database is missing or corrupt. The marker currently stops silent recreation and explains the problem; it does not yet offer an in-app recovery wizard.
 - Add later schema migration versions as product requirements evolve; the first version 0 to 1 migration is implemented.
 - Broader failure-injection, interrupted-operation, and restore-rollback tests.
-- Remaining in the C++ replacement: guided recovery, later schema migrations, CSV export, broader audit coverage and final application workflows. The general/backup settings, history, statistics and About dialogs, plus portable loan-date/quota and statistics modules, are now implemented.
+- Remaining in the C++ replacement: guided recovery, later schema migrations, broader audit coverage and final application workflows. The general/backup settings, history, statistics and About dialogs, plus portable loan-date/quota and statistics modules, are now implemented.
 - Broader failure-injection, interrupted-operation, and restore-rollback tests.
 - Actual execution and measurement on Windows XP SP3. The CI runner is modern Windows; its XP-targeted toolchain and PE checks do not prove execution on the XP kernel.
 - A normal portable distribution only after the safety and migration work is complete.
