@@ -244,7 +244,28 @@ int main()
               "manual backup should contain the matching audit history");
         manual_reader.Close();
     }
-    if (manual_backup_decoded != manual_backup) RemoveDatabaseFiles(manual_backup_decoded);
+    // Generate a second manual snapshot with the alternative standard wrapper.
+    store.SetBackupCompression("zlib", 9);
+    std::string zlib_manual_backup;
+    Check(store.CreateManualBackup(&zlib_manual_backup, &error),
+          "zlib-format manual backup should be created and validated");
+    Check(zlib_manual_backup.size() >= 10 &&
+          zlib_manual_backup.compare(zlib_manual_backup.size() - 10, 10, ".sqlite.zlib") == 0,
+          "zlib-format backup should use the .sqlite.zlib extension");
+    backups.push_back(zlib_manual_backup);
+
+    std::string zlib_manual_decoded;
+    Check(MakeReadableBackup(zlib_manual_backup, &zlib_manual_decoded),
+          "zlib-format manual backup should decompress for inspection");
+    biblioled::LoanStore zlib_manual_reader;
+    Check(zlib_manual_reader.Open(zlib_manual_decoded, ".", &error),
+          "decompressed zlib-format manual backup should open");
+    if (zlib_manual_reader.IsOpen()) {
+        Check(zlib_manual_reader.GetAll(&records, &error) && records.size() == 2,
+              "zlib-format manual backup should contain both loans");
+        zlib_manual_reader.Close();
+    }
+    if (zlib_manual_decoded != zlib_manual_backup) RemoveDatabaseFiles(zlib_manual_decoded);
 
     int count = 0;
     Check(store.CountSince("2099-01-01 00:00", &count, &error),
@@ -319,6 +340,19 @@ int main()
           "restore should recover the title captured in the selected snapshot");
     Check(reopened.GetById(audio.id, &book, &error),
           "restore should recover records removed after the selected snapshot");
+
+    std::string zlib_pre_restore;
+    Check(reopened.RestoreFromBackup(zlib_manual_backup, &zlib_pre_restore, &error),
+          "restore should accept a zlib-wrapped backup");
+    Check(!zlib_pre_restore.empty(), "zlib restore should create a safety backup");
+    backups.push_back(zlib_pre_restore);
+
+    std::string legacy_pre_restore;
+    Check(reopened.RestoreFromBackup(manual_backup_decoded, &legacy_pre_restore, &error),
+          "restore should continue accepting an uncompressed legacy .sqlite backup");
+    Check(!legacy_pre_restore.empty(), "legacy .sqlite restore should create a safety backup");
+    backups.push_back(legacy_pre_restore);
+    if (manual_backup_decoded != manual_backup) RemoveDatabaseFiles(manual_backup_decoded);
 
     // A failed audit insert must roll back the corresponding loan insert.
     sqlite3* raw = NULL;
