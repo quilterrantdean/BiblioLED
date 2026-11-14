@@ -747,6 +747,103 @@ int main()
         blocked.Close();
     }
 
+    // Offline recovery can rebuild a missing database and preserve an unusable
+    // database plus any SQLite sidecars without touching the selected backup.
+    const std::string recovery_source_database = database + ".recovery-source.sqlite";
+    const std::string recovery_target_database = database + ".recovery-target.sqlite";
+    const std::string corrupt_target_database = database + ".recovery-corrupt.sqlite";
+    const std::string recovery_backup_directory = database + ".recovery-backups";
+    Check(MakeDirectory(recovery_backup_directory),
+          "isolated recovery backup directory should be created");
+
+    biblioled::LoanStore recovery_source;
+    Check(recovery_source.Open(recovery_source_database, recovery_backup_directory, &error),
+          "recovery source database should open");
+    std::string recovery_backup;
+    if (recovery_source.IsOpen()) {
+        biblioled::LoanRecord recovery_record;
+        recovery_record.title = "Registo para recuperação";
+        recovery_record.loan_date = "2099-03-01 10:00";
+        recovery_record.type = "livro";
+        Check(recovery_source.Insert(&recovery_record, &error),
+              "recovery source record should be inserted");
+        Check(recovery_source.CreateManualBackup(&recovery_backup, &error),
+              "a validated manual backup should be created for recovery tests");
+        recovery_source.Close();
+    }
+
+    biblioled::LoanStore missing_recovery;
+    std::string preserved_database;
+    Check(missing_recovery.RecoverFromBackup(
+              recovery_target_database, recovery_backup, &preserved_database, &error),
+          "a valid backup should recover a missing database");
+    Check(FileExists(recovery_target_database),
+          "missing-database recovery should install the restored database");
+    Check(preserved_database.empty(),
+          "missing-database recovery should not report a preserved database that did not exist");
+    biblioled::LoanStore recovered_missing;
+    Check(recovered_missing.Open(recovery_target_database, recovery_backup_directory, &error),
+          "recovered missing database should open normally");
+    if (recovered_missing.IsOpen()) {
+        Check(recovered_missing.GetAll(&records, &error) && records.size() == 1 &&
+              records[0].title == "Registo para recuperação",
+              "recovered missing database should contain the backup's records");
+        recovered_missing.Close();
+    }
+
+    {
+        std::ofstream corrupt_output(corrupt_target_database.c_str(),
+                                     std::ios::out | std::ios::binary);
+        corrupt_output << "not a SQLite database";
+    }
+    {
+        std::ofstream journal_output((corrupt_target_database + "-journal").c_str(),
+                                     std::ios::out | std::ios::binary);
+        journal_output << "unrecognised stale journal";
+    }
+
+    biblioled::LoanStore invalid_recovery;
+    Check(!invalid_recovery.RecoverFromBackup(
+              corrupt_target_database, invalid_backup, NULL, &error),
+          "offline recovery should reject an invalid backup");
+    Check(FileExists(corrupt_target_database) &&
+          FileExists(corrupt_target_database + "-journal"),
+          "an invalid recovery source must leave the damaged database and sidecar untouched");
+
+    biblioled::LoanStore corrupt_recovery;
+    preserved_database.clear();
+    Check(corrupt_recovery.RecoverFromBackup(
+              corrupt_target_database, recovery_backup, &preserved_database, &error),
+          "a valid backup should recover a corrupt database");
+    Check(!preserved_database.empty() && FileExists(preserved_database),
+          "the original corrupt database should be preserved under a recovery filename");
+    Check(FileExists(preserved_database + "-journal"),
+          "the original SQLite journal sidecar should be preserved with the corrupt database");
+    biblioled::LoanStore recovered_corrupt;
+    Check(recovered_corrupt.Open(corrupt_target_database, recovery_backup_directory, &error),
+          "recovered corrupt database should open normally");
+    if (recovered_corrupt.IsOpen()) {
+        Check(recovered_corrupt.GetAll(&records, &error) && records.size() == 1 &&
+              records[0].title == "Registo para recuperação",
+              "recovered corrupt database should contain the selected backup's records");
+        recovered_corrupt.Close();
+    }
+
+    // A failed validation must not consume or modify the user's selected backup.
+    Check(FileExists(recovery_backup),
+          "successful recovery should leave the selected backup available");
+
+    RemoveDatabaseFiles(recovery_source_database);
+    RemoveDatabaseFiles(recovery_target_database);
+    RemoveDatabaseFiles(corrupt_target_database);
+    RemoveDatabaseFiles(preserved_database);
+    RemoveFilesWithPrefix(recovery_backup_directory, "BiblioLED_");
+#ifdef _WIN32
+    RemoveDirectoryA(recovery_backup_directory.c_str());
+#else
+    rmdir(recovery_backup_directory.c_str());
+#endif
+
     RemoveDatabaseFiles(database);
     RemoveDatabaseFiles(blocked_database);
     RemoveDatabaseFiles(legacy_database);

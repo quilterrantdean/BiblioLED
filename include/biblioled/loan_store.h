@@ -54,6 +54,13 @@ public:
                            std::string* current_backup_path,
                            std::string* error);
 
+    // Restore a validated backup while the expected database is closed or unavailable.
+    // Any existing database and SQLite sidecars are retained under a recovery filename.
+    bool RecoverFromBackup(const std::string& database_path,
+                           const std::string& backup_path,
+                           std::string* preserved_database_path,
+                           std::string* error);
+
     bool HasSessionBackup() const;
     const std::string& LastSessionBackupPath() const;
 

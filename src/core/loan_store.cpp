@@ -501,6 +501,30 @@ std::string SqliteError(sqlite3* db, const std::string& operation)
     return message;
 }
 
+std::string MakeRecoveryPreservedPath(const std::string& database_path, int suffix)
+{
+    const std::time_t now = std::time(NULL);
+    const std::tm* local = std::localtime(&now);
+    char timestamp[32] = {0};
+    if (!local ||
+        std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", local) == 0) {
+        return std::string();
+    }
+
+    std::ostringstream path;
+    path << database_path << ".recovery_preserved_" << timestamp;
+    if (suffix > 0) path << "_" << suffix;
+    return path.str();
+}
+
+void RemoveTemporaryDatabaseFiles(const std::string& path)
+{
+    RemoveBackupFile(path);
+    RemoveBackupFile(path + "-journal");
+    RemoveBackupFile(path + "-wal");
+    RemoveBackupFile(path + "-shm");
+}
+
 } // namespace
 
 LoanStore::LoanStore()
@@ -1041,6 +1065,206 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
 
     schema_version_ = restored_version;
     migration_required_ = (restored_version == 0);
+    return true;
+}
+
+bool LoanStore::RecoverFromBackup(const std::string& database_path,
+                                  const std::string& backup_path,
+                                  std::string* preserved_database_path,
+                                  std::string* error)
+{
+    if (preserved_database_path) preserved_database_path->clear();
+    if (error) error->clear();
+
+    if (db_) {
+        SetError(error, "Close the current database before attempting recovery.");
+        return false;
+    }
+    if (database_path.empty() || backup_path.empty()) {
+        SetError(error, "A database path and a backup path are required for recovery.");
+        return false;
+    }
+    if (database_path == backup_path) {
+        SetError(error, "The selected backup is the expected database file.");
+        return false;
+    }
+
+    std::string decoded_backup_path;
+    std::string decoded_temporary_path;
+    std::string validation_error;
+    if (!DecodeBackupFile(backup_path, &decoded_backup_path,
+                          &decoded_temporary_path, &validation_error)) {
+        SetError(error, "The selected backup could not be decompressed: " + validation_error);
+        return false;
+    }
+    ScopedBackupFile decoded_cleanup;
+    decoded_cleanup.path = decoded_temporary_path;
+
+    if (!ValidateDatabaseFile(decoded_backup_path, &validation_error)) {
+        SetError(error, "The selected backup is invalid: " + validation_error);
+        return false;
+    }
+
+    sqlite3* source_db = NULL;
+    int rc = sqlite3_open_v2(
+        decoded_backup_path.c_str(), &source_db, SQLITE_OPEN_READONLY, NULL);
+    if (rc != SQLITE_OK) {
+        SetError(error, SqliteError(source_db, "Could not open the selected recovery backup"));
+        if (source_db) sqlite3_close(source_db);
+        return false;
+    }
+
+    const std::string staging_path =
+        MakeTemporaryBackupPath(database_path, "recovery_staging");
+    if (staging_path.empty()) {
+        sqlite3_close(source_db);
+        SetError(error, "Could not reserve a temporary database file for recovery.");
+        return false;
+    }
+
+    sqlite3* staging_db = NULL;
+    rc = sqlite3_open_v2(
+        staging_path.c_str(), &staging_db,
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXCLUSIVE, NULL);
+    if (rc != SQLITE_OK) {
+        SetError(error, SqliteError(staging_db, "Could not create the recovery staging database"));
+        if (staging_db) sqlite3_close(staging_db);
+        sqlite3_close(source_db);
+        RemoveTemporaryDatabaseFiles(staging_path);
+        return false;
+    }
+
+    std::string copy_error;
+    const bool copied = CopyDatabase(source_db, staging_db, &copy_error);
+    const int staging_close_rc = sqlite3_close(staging_db);
+    const int source_close_rc = sqlite3_close(source_db);
+    if (!copied || staging_close_rc != SQLITE_OK || source_close_rc != SQLITE_OK) {
+        std::string message = "Could not prepare the recovery database";
+        if (!copy_error.empty()) message += ": " + copy_error;
+        if (staging_close_rc != SQLITE_OK) message += "; staging database could not be closed";
+        if (source_close_rc != SQLITE_OK) message += "; recovery backup could not be closed";
+        SetError(error, message);
+        RemoveTemporaryDatabaseFiles(staging_path);
+        return false;
+    }
+
+    if (!ValidateDatabaseFile(staging_path, &validation_error)) {
+        SetError(error, "The recovery staging database failed validation: " + validation_error);
+        RemoveTemporaryDatabaseFiles(staging_path);
+        return false;
+    }
+
+    // Keep the main database and all SQLite sidecars together. A stale WAL or
+    // rollback journal must never be allowed to attach itself to the recovered file.
+    const std::string sidecar_suffixes[] = {"", "-journal", "-wal", "-shm"};
+    std::string original_paths[4];
+    std::string preserved_paths[4];
+    bool original_exists[4] = {false, false, false, false};
+    bool any_original = false;
+    for (size_t i = 0; i < 4; ++i) {
+        original_paths[i] = database_path + sidecar_suffixes[i];
+        original_exists[i] = FileExists(original_paths[i]);
+        any_original = any_original || original_exists[i];
+    }
+
+    std::string preserved_base;
+    bool names_available = false;
+    for (int suffix = 0; suffix < 1000; ++suffix) {
+        preserved_base = MakeRecoveryPreservedPath(database_path, suffix);
+        if (preserved_base.empty()) break;
+        names_available = true;
+        for (size_t i = 0; i < 4; ++i) {
+            preserved_paths[i] = preserved_base + sidecar_suffixes[i];
+            if (original_exists[i] && FileExists(preserved_paths[i])) {
+                names_available = false;
+                break;
+            }
+        }
+        if (names_available) break;
+    }
+    if (!names_available) {
+        SetError(error, "Could not choose unused names to preserve the existing database files.");
+        RemoveTemporaryDatabaseFiles(staging_path);
+        return false;
+    }
+
+    std::vector<std::string> moved_sources;
+    std::vector<std::string> moved_destinations;
+    for (size_t i = 0; i < 4; ++i) {
+        if (!original_exists[i]) continue;
+        if (!MoveBackupFile(original_paths[i], preserved_paths[i])) {
+            bool rollback_ok = true;
+            for (size_t moved = moved_sources.size(); moved > 0; --moved) {
+                if (!MoveBackupFile(moved_destinations[moved - 1],
+                                    moved_sources[moved - 1])) {
+                    rollback_ok = false;
+                }
+            }
+            std::string message =
+                "Could not preserve the existing database or its SQLite sidecars. "
+                "The recovery database was not installed.";
+            if (!rollback_ok) {
+                message += " Some original files remain in the recovery-preserved location: ";
+                message += preserved_base;
+            }
+            SetError(error, message);
+            RemoveTemporaryDatabaseFiles(staging_path);
+            return false;
+        }
+        moved_sources.push_back(original_paths[i]);
+        moved_destinations.push_back(preserved_paths[i]);
+    }
+
+    if (!MoveBackupFile(staging_path, database_path)) {
+        bool rollback_ok = true;
+        for (size_t moved = moved_sources.size(); moved > 0; --moved) {
+            if (!MoveBackupFile(moved_destinations[moved - 1],
+                                moved_sources[moved - 1])) {
+                rollback_ok = false;
+            }
+        }
+        std::string message =
+            "The validated recovery database could not be installed at the expected path.";
+        if (!rollback_ok) {
+            message += " Some original files remain preserved at: ";
+            message += preserved_base;
+        }
+        SetError(error, message);
+        RemoveTemporaryDatabaseFiles(staging_path);
+        return false;
+    }
+
+    if (!ValidateDatabaseFile(database_path, &validation_error)) {
+        const std::string failed_path = preserved_base + ".recovery_failed";
+        const bool failed_file_preserved =
+            !FileExists(failed_path) && MoveBackupFile(database_path, failed_path);
+        bool rollback_ok = failed_file_preserved;
+        for (size_t moved = moved_sources.size(); moved > 0; --moved) {
+            if (!MoveBackupFile(moved_destinations[moved - 1],
+                                moved_sources[moved - 1])) {
+                rollback_ok = false;
+            }
+        }
+        std::string message =
+            "The installed recovery database failed its final validation: " +
+            validation_error;
+        if (rollback_ok) {
+            message += " The previous database files were restored.";
+        } else {
+            message += " Automatic rollback was incomplete. Preserve the recovery files at: ";
+            message += preserved_base;
+            if (!failed_file_preserved) {
+                message += ". The unverified restored file may still be at the expected database path.";
+            }
+        }
+        SetError(error, message);
+        return false;
+    }
+
+    if (preserved_database_path && original_exists[0]) {
+        *preserved_database_path = preserved_paths[0];
+    }
+    (void)any_original;
     return true;
 }
 
