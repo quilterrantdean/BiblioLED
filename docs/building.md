@@ -24,7 +24,7 @@ cmake --build build --config Release
 
 The `-A Win32` option applies to Visual Studio generators. For MinGW, configure with an explicitly selected 32-bit toolchain file or compiler path instead.
 
-The output includes `BiblioLED.exe`, `port.ico`, and `config/settings.ini`. Runtime directories are created beside the executable.
+The output includes `BiblioLED.exe` and `config/settings.ini`. The application icon is compiled into `BiblioLED.exe` from the repository's `port.ico` resource; no separate icon file is needed beside the executable.
 
 ### Run core tests on a development host
 
@@ -56,7 +56,7 @@ cmake --build --preset xp-x86-w64devkit --parallel
 ctest --preset xp-x86-w64devkit
 ```
 
-The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `d6ab5a8852ce90fb368f91278565b16fd2983660` passed compilation, both SQLite-store and audit-log tests, PE32/i386/GUI 5.01 and import checks, and artifact upload.
+The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, settings file, a short PE inspection report, and test instructions. The artifact does not contain a separate `.ico` file because the icon is embedded in the executable. The successful run for commit `d6ab5a8852ce90fb368f91278565b16fd2983660` passed compilation, both SQLite-store and audit-log tests, PE32/i386/GUI 5.01 and import checks, and artifact upload.
 
 These checks establish an XP-oriented build target, not proof that the application runs on XP. The current test ZIP includes automatic per-session backups before the first mutation, manual backup creation, confirmed restore with a pre-restore safety copy, and a marker that prevents silent recreation when an initialized database has gone missing. It creates new databases at schema version 1. Existing loans-only databases are detected as version 0 and require explicit confirmation before a backed-up transaction adds the internal audit table. Loan changes and their audit events are committed atomically. Internal audit events are synchronised to `logs/audit.log`; incomplete final writes are recovered, duplicate events are avoided, and the active log is rotated at the configured size (default 5 MB). Disabling file logging pauses synchronisation but keeps internal SQLite auditing and allows mutations; re-enabling it synchronises the backlog. If enabled logging fails, mutations are blocked while reads remain available. The icon is embedded in the executable and table columns can be reordered and persisted in `config/settings.ini`. Guided recovery, later migrations, the complete settings UI, and the complete application remain outstanding. Do not use it with the real application data.
 
@@ -98,7 +98,7 @@ Every loan create/edit/delete and its internal audit event are committed in the 
 
 The repository keeps `port.ico` as the source asset, but the Win32 resource compiler embeds it in `BiblioLED.exe`. The portable package therefore contains no separate `.ico` file and the executable does not load one at run time.
 
-The main list view enables native header drag-and-drop. The display order and width of each logical column are saved in `config/settings.ini` under `[columns]`:
+The main list view enables native header drag-and-drop. The display order and width of each logical column are saved to `config/settings.ini` under `[columns]`:
 
 ```ini
 [columns]
