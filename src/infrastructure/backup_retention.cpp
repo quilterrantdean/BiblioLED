@@ -166,10 +166,9 @@ bool ParseBackupDate(const std::string& name, int* year, int* month, int* day)
 
         const size_t numeric_suffix = suffix_start + 16;
         if (numeric_suffix < stem_end) {
-            if (name[numeric_suffix] != '_' ||
-                !IsAsciiDigits(name, numeric_suffix + 1,
-                               stem_end - numeric_suffix - 1) ||
-                stem_end - numeric_suffix - 1 > 3) return false;
+            const size_t digits = stem_end - numeric_suffix - 1;
+            if (name[numeric_suffix] != '_' || digits == 0 || digits > 3 ||
+                !IsAsciiDigits(name, numeric_suffix + 1, digits)) return false;
         }
     }
 
