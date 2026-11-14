@@ -993,6 +993,36 @@ bool LoanStore::GetAuditEvents(std::vector<AuditEvent>* events, std::string* err
     return true;
 }
 
+bool LoanStore::RecordAuditEvent(const std::string& action,
+                                const std::string& details,
+                                std::string* error)
+{
+    if (!db_ || action.empty()) {
+        SetError(error, "An open database and a non-empty audit action are required.");
+        return false;
+    }
+    if (migration_required_) {
+        SetError(error, "The legacy database must be migrated before audit events can be recorded.");
+        return false;
+    }
+    if (ExternalAuditLogBlocked()) {
+        SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
+        return false;
+    }
+    if (!EnsureSessionBackup(error)) return false;
+    if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
+
+    if (!InsertAuditEvent(db_, action.c_str(), 0, NULL, NULL, details, error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        return false;
+    }
+    if (!ExecuteSql(db_, "COMMIT;", error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        return false;
+    }
+    return true;
+}
+
 bool LoanStore::GetAll(std::vector<LoanRecord>* records, std::string* error)
 {
     if (!db_ || !records) {
