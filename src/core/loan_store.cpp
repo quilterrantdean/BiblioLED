@@ -764,7 +764,9 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
 
 bool LoanStore::EnsureAutomaticBackup(std::string* error)
 {
-    if (session_backup_done_) return true;
+    // Do not short-circuit on a session flag: the application may remain open
+    // across midnight, and the next loan mutation must create the next day's
+    // snapshot. The dated candidate check below decides whether one exists.
     if (backup_directory_.empty()) {
         SetError(error, "The backup directory is not configured. The database was not changed.");
         return false;
