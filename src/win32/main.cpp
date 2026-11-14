@@ -4,6 +4,7 @@
 
 #include "biblioled/loan_store.h"
 #include "biblioled/loan_rules.h"
+#include "biblioled/csv_export.h"
 #include "biblioled/audit_log.h"
 #include "resource.h"
 #include "history_dialog.h"
@@ -812,6 +813,97 @@ void AddLoan()
     RefreshList();
 }
 
+bool WriteExportFileAtomically(const std::wstring& destination,
+                                const std::string& contents,
+                                std::string* error)
+{
+    const std::wstring::size_type separator=destination.find_last_of(L"\\/");
+    const std::wstring directory=separator==std::wstring::npos?L".":destination.substr(0,separator);
+    wchar_t temporary[MAX_PATH]={0};
+    if(!GetTempFileNameW(directory.c_str(),L"BLD",0,temporary)){
+        std::ostringstream message; message<<"Unable to create temporary file (Win32 error "<<GetLastError()<<").";
+        if(error)*error=message.str(); return false;
+    }
+    HANDLE file=CreateFileW(temporary,GENERIC_WRITE,0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE){
+        const DWORD code=GetLastError(); DeleteFileW(temporary);
+        std::ostringstream message; message<<"Unable to open temporary file (Win32 error "<<code<<").";
+        if(error)*error=message.str(); return false;
+    }
+    bool ok=true; DWORD failure=ERROR_SUCCESS; size_t offset=0;
+    while(offset<contents.size()){
+        const size_t remaining=contents.size()-offset;
+        const DWORD requested=remaining>0x7fffffffU?0x7fffffffU:static_cast<DWORD>(remaining);
+        DWORD written=0;
+        if(!WriteFile(file,contents.data()+offset,requested,&written,NULL)){failure=GetLastError();ok=false;break;}
+        if(written==0){failure=ERROR_WRITE_FAULT;ok=false;break;}
+        offset+=written;
+    }
+    if(ok&&!FlushFileBuffers(file)){failure=GetLastError();ok=false;}
+    CloseHandle(file);
+    if(!ok){
+        DeleteFileW(temporary); std::ostringstream message;
+        message<<"Unable to write export file (Win32 error "<<failure<<").";
+        if(error)*error=message.str(); return false;
+    }
+    if(!MoveFileExW(temporary,destination.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
+        const DWORD code=GetLastError(); DeleteFileW(temporary);
+        std::ostringstream message; message<<"Unable to replace destination (Win32 error "<<code<<").";
+        if(error)*error=message.str(); return false;
+    }
+    return true;
+}
+
+void ExportLoansToCsv()
+{
+    std::vector<biblioled::LoanRecord> records;
+    std::string error;
+    if(!gStore.GetAll(&records,&error)){
+        ShowStoreError(L"Não foi possível preparar a exportação.",error); return;
+    }
+    const std::wstring export_directory=JoinPath(gApplicationDirectory,L"exports");
+    if(!EnsureDirectory(export_directory)){
+        ShowStoreError(L"Não foi possível preparar a pasta de exportação.","Unable to create exports directory."); return;
+    }
+    std::string timestamp=biblioled::FormatLocalDateTime(std::time(NULL),"%Y%m%d_%H%M");
+    if(timestamp.empty()) timestamp="export";
+    std::wstring suggested=L"bd_export_";
+    suggested+=Utf8ToWide(timestamp); suggested+=L".csv";
+    wchar_t filename[MAX_PATH]={0};
+    const size_t count=suggested.size()<MAX_PATH-1?suggested.size():MAX_PATH-1;
+    suggested.copy(filename,count); filename[count]=L'\0';
+    static const wchar_t filter[]=L"CSV UTF-8 (*.csv)\0*.csv\0Todos os ficheiros (*.*)\0*.*\0\0";
+    OPENFILENAMEW dialog={};
+    dialog.lStructSize=sizeof(dialog); dialog.hwndOwner=gMainWindow;
+    dialog.lpstrFilter=filter; dialog.nFilterIndex=1; dialog.lpstrFile=filename;
+    dialog.nMaxFile=MAX_PATH; dialog.lpstrInitialDir=export_directory.c_str();
+    dialog.lpstrTitle=L"Exportar histórico de empréstimos"; dialog.lpstrDefExt=L"csv";
+    dialog.Flags=OFN_EXPLORER|OFN_PATHMUSTEXIST|OFN_OVERWRITEPROMPT|OFN_HIDEREADONLY|OFN_NOCHANGEDIR;
+    if(!GetSaveFileNameW(&dialog)){
+        const DWORD code=CommDlgExtendedError();
+        if(code){std::ostringstream message;message<<"Common dialog error "<<code<<".";
+            ShowStoreError(L"Não foi possível abrir a janela de exportação.",message.str());}
+        return;
+    }
+    const std::string csv=biblioled::BuildLoanRecordsCsv(records);
+    if(!WriteExportFileAtomically(filename,csv,&error)){
+        ShowStoreError(L"Não foi possível gravar o ficheiro CSV.",error); return;
+    }
+    std::ostringstream details;
+    details<<"path="<<WideToUtf8(filename)<<";records="<<records.size()<<";format=UTF-8;delimiter=semicolon";
+    error.clear();
+    if(gStore.MigrationRequired()||!gStore.RecordAuditEvent("records_exported",details.str(),&error)){
+        std::wstring warning=L"O ficheiro foi exportado, mas a operação não pôde ser registada na auditoria.\n\n";
+        warning+=filename;
+        MessageBoxW(gMainWindow,warning.c_str(),L"Exportação concluída com aviso",MB_OK|MB_ICONWARNING);
+        return;
+    }
+    SynchronizeExternalAuditLog(true);
+    std::wostringstream message;
+    message<<L"Exportação concluída: "<<records.size()<<L" registo(s).\n\n"<<filename;
+    MessageBoxW(gMainWindow,message.str().c_str(),L"Exportação concluída",MB_OK|MB_ICONINFORMATION);
+}
+
 void CreateManualDatabaseBackup()
 {
     std::string backup_path;
@@ -962,6 +1054,7 @@ HMENU CreateApplicationMenu()
     AppendMenuW(file_menu, MF_STRING, IDM_BACKUP, L"Criar cópia de segurança...");
     AppendMenuW(file_menu, MF_STRING, IDM_RESTORE, L"Repor a partir de cópia...");
     AppendMenuW(file_menu, MF_STRING, IDM_GENERAL_SETTINGS, L"Definições gerais...");
+    AppendMenuW(file_menu, MF_STRING, IDM_EXPORT_CSV, L"Exportar histórico para CSV...");
     AppendMenuW(file_menu, MF_STRING, IDM_BACKUP_SETTINGS, L"Definições de cópias...");
     AppendMenuW(file_menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(file_menu, MF_STRING, IDM_EXIT, L"Sair");
@@ -1432,6 +1525,9 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             return 0;
         case IDM_GENERAL_SETTINGS:
             ShowGeneralSettings();
+            return 0;
+        case IDM_EXPORT_CSV:
+            ExportLoansToCsv();
             return 0;
         case IDM_BACKUP_SETTINGS:
             ShowBackupSettings();

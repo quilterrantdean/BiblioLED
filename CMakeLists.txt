@@ -54,6 +54,7 @@ else()
 endif()
 
 add_library(biblioled_core
+    src/core/csv_export.cpp
     src/core/loan_rules.cpp
     src/core/loan_statistics.cpp
     src/core/loan_store.cpp
@@ -129,6 +130,10 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(loan_csv_export_tests tests/loan_csv_export_tests.cpp)
+    target_link_libraries(loan_csv_export_tests PRIVATE biblioled_core)
+    add_test(NAME loan_csv_export_tests COMMAND loan_csv_export_tests)
+
     add_executable(loan_rules_tests tests/loan_rules_tests.cpp)
     target_link_libraries(loan_rules_tests PRIVATE biblioled_core)
     add_test(NAME loan_rules_tests COMMAND loan_rules_tests)
