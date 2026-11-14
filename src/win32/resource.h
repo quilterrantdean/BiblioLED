@@ -3,11 +3,14 @@
 
 #define IDD_LOAN_DIALOG 101
 #define IDI_BIBLIOLED   102
+#define IDD_BACKUP_SETTINGS_DIALOG 103
 
 #define IDC_LOAN_TITLE 1001
 #define IDC_LOAN_TYPE  1002
 #define IDC_LOAN_DATE  1003
 #define IDC_LOAN_TIME  1004
+#define IDC_BACKUP_FORMAT 1010
+#define IDC_BACKUP_LEVEL  1011
 
 #define IDM_NEW        2001
 #define IDM_EDIT       2002
@@ -17,6 +20,7 @@
 #define IDM_ABOUT      2006
 #define IDM_BACKUP     2007
 #define IDM_RESTORE    2008
+#define IDM_BACKUP_SETTINGS 2009
 
 #define IDC_BUTTON_NEW     3001
 #define IDC_BUTTON_EDIT    3002
