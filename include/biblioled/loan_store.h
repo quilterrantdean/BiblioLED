@@ -44,6 +44,7 @@ public:
               std::string* error);
     void Close();
     bool IsOpen() const;
+    void SetBackupCompression(const std::string& format, int level);
     int SchemaVersion() const;
     bool MigrationRequired() const;
     bool MigrateLegacySchema(std::string* backup_path, std::string* error);
@@ -73,9 +74,10 @@ public:
 private:
     bool CreateInitialSchema(std::string* error);
     bool ValidateExistingSchema(std::string* error);
-    bool EnsureSessionBackup(std::string* error);
+    bool EnsureAutomaticBackup(std::string* error);
     bool CreateAndValidateBackup(const std::string& path, std::string* error);
-    std::string MakeBackupPath() const;
+    bool PruneAutomaticBackups() const;
+    std::string MakeBackupPath(const std::string& category) const;
     void SetError(std::string* error, const std::string& message) const;
 
     sqlite3* db_;
@@ -87,6 +89,8 @@ private:
     bool migration_required_;
     bool external_audit_log_enabled_;
     bool external_audit_log_healthy_;
+    std::string backup_compression_format_;
+    int backup_compression_level_;
 };
 
 } // namespace biblioled
