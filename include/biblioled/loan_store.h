@@ -76,7 +76,6 @@ private:
     bool ValidateExistingSchema(std::string* error);
     bool EnsureAutomaticBackup(std::string* error);
     bool CreateAndValidateBackup(const std::string& path, std::string* error);
-    bool PruneAutomaticBackups() const;
     std::string MakeBackupPath(const std::string& category) const;
     void SetError(std::string* error, const std::string& message) const;
 
