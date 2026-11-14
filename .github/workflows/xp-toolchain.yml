@@ -211,6 +211,7 @@ jobs:
               Confirme que a sessão actual não muda. Feche e reabra a aplicação;
               os novos valores deverão então ser aplicados. Teste apenas nesta
               pasta descartável.
+          13. Abra Ajuda > Sobre e confirme o ícone, a versão e a data de compilação.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8
