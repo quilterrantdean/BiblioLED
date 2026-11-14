@@ -2,7 +2,7 @@
 
 ## Current status
 
-**Stage:** the Win32/SQLite foundation now has session/manual backups, verified restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing for loan changes, migration, lifecycle, and backup/restore operations, recoverable rotating external audit logs, an embedded executable icon, and persistent draggable table columns. The new operational-audit changes require fresh CI validation. Actual Windows XP SP3 runtime validation remains outstanding.
+**Stage:** the Win32/SQLite proof of concept now has daily automatic backups, separate manual and safety backups, rolling retention for automatic snapshots, streaming gzip/zlib compression through statically linked zlib 1.4, configurable compression format/level, verified compressed and legacy restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing, recoverable rotating external audit logs, an embedded executable icon, and persistent draggable table columns. The backup/compression tranche is undergoing fresh CI validation. Actual Windows XP SP3 runtime validation remains outstanding.
 
 The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
@@ -47,8 +47,8 @@ The main window remains an operational overview of active loans and useful curre
 - [ ] Implement settings loading, validation, and persistence.
 - [x] Implement SQLite schema versioning (PRAGMA user_version): new databases use version 1; the existing loans-only schema is recognised as version 0.
 - [x] Implement the explicit, backed-up, transactional version 0 to 1 migration. It adds the internal audit table and indexes without rewriting loan rows.
-- [x] Implement SQLite online backups before the first data mutation in each session, with integrity validation and fail-closed behaviour.
-- [x] Implement manual SQLite backups and a confirmed restore workflow with a verified pre-restore safety copy.
+- [x] Implement one automatic SQLite Online Backup snapshot before the first loan-data mutation per local calendar day; audit-only events and settings changes do not trigger it. Reuse a valid same-day snapshot and fail closed if a new snapshot cannot be created.
+- [x] Implement compressed manual backups and a confirmed restore workflow with a separately classified, verified pre-restore safety copy; keep legacy uncompressed `.sqlite` backups restorable.
 - [x] Detect a missing database after initialisation and refuse silent recreation.
 - [ ] Implement guided missing/corrupt-database recovery and reporting.
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
@@ -56,10 +56,12 @@ The main window remains an operational overview of active loans and useful curre
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; F5 retries synchronisation without requiring an application restart.
 - [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
 - [ ] Extend audit coverage to settings changes, exports, warnings, errors, and failures.
-- [ ] Rework automatic backup policy: prevent audit-only events (startup/shutdown and operational audit rows) from triggering data-safety backups; evaluate a daily pre-change snapshot and bounded retention for automatic backups only.
-- [ ] Evaluate an existing minimal streaming compression library and archive format for SQLite backups; validate compressed round-trips, corruption handling, restore compatibility, and XP x86 builds. Continue to accept existing uncompressed `.sqlite` backups.
+- [x] Separate audit-only writes (including startup/shutdown and settings changes) from loan-data backup triggers.
+- [x] Implement the approved automatic-backup retention policy: 7 daily, 4 weekly, and 12 monthly snapshots. Only recognised automatic backups are pruned; manual and restore/migration safety backups are preserved. Unknown filenames are preserved.
+- [x] Integrate statically linked zlib 1.4 for streaming gzip and zlib wrappers. Verify compressed round-trips and SQLite integrity; keep `.sqlite` backups compatible.
+- [x] Add backup settings for format (`gzip` or `zlib`) and compression level (0–9, default 6) to `config/settings.ini` and a dedicated Win32 dialog. Changes apply on the next launch.
 
-Note: the durable startup event is a SQLite mutation, so each normal launch triggers the existing automatic pre-first-mutation session backup. This applies even when external file logging is disabled; the SQLite event remains authoritative.
+The new compression, retention, restore-compatibility, and Win32/XP-targeted build tests are awaiting the latest CI results.
 
 ### Phase 4 — Application functionality and interface
 
@@ -67,14 +69,15 @@ Note: the durable startup event is a SQLite mutation, so each normal launch trig
 - [ ] Implement the main active-loans overview.
 - [ ] Implement the separate searchable/filterable history window.
 - [ ] Implement revised statistics.
-- [ ] Implement settings and the About dialog.
+- [ ] Implement the general settings UI and the About dialog.
+- [x] Add a dedicated backup-settings dialog for compression format and level, persisted in `config/settings.ini`.
 - [x] Embed the existing application icon as a Win32 resource in `BiblioLED.exe`; do not ship or require a separate `.ico` file.
 - [x] Make the main table columns reorderable by dragging their headers.
 - [x] Persist column display order and individual widths in `config/settings.ini`; invalid settings files are preserved and are never overwritten by layout saving.
 
 ### Phase 5 — Verification and delivery
 
-- [ ] Add exhaustive automated tests using isolated test data.
+- [ ] Add exhaustive automated tests using isolated test data. Initial compression and retention tests are implemented; the complete test suite still requires CI confirmation.
 - [ ] Add static analysis and dependency checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
