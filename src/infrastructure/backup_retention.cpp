@@ -101,7 +101,7 @@ bool ListAutomaticBackups(const std::string& directory,
     struct dirent* entry = NULL;
     while ((entry = readdir(dir)) != NULL) {
         const std::string name(entry->d_name);
-        if (name.compare(0, 16, "BiblioLED_auto_") == 0) names->push_back(name);
+        if (name.compare(0, 15, "BiblioLED_auto_") == 0) names->push_back(name);
     }
     closedir(dir);
 #endif
@@ -114,8 +114,9 @@ long long DaysFromCivil(int year, unsigned month, unsigned day)
     year -= month <= 2;
     const int era = (year >= 0 ? year : year - 399) / 400;
     const unsigned year_of_era = static_cast<unsigned>(year - era * 400);
+    const unsigned adjusted_month = month > 2 ? month - 3 : month + 9;
     const unsigned day_of_year =
-        (153 * (month + (month > 2 ? static_cast<unsigned>(-3) : 9)) + 2) / 5 + day - 1;
+        (153 * adjusted_month + 2) / 5 + day - 1;
     const unsigned day_of_era =
         year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
     return static_cast<long long>(era) * 146097 +
@@ -168,6 +169,10 @@ bool PruneAutomaticBackups(const std::string& directory,
     std::map<int, std::string> monthly;
     const std::time_t now = std::time(NULL);
     const std::tm* local = std::localtime(&now);
+    if (!local) {
+        SetError(error, "Could not determine the local month for backup retention.");
+        return false;
+    }
     const int current_month = (local->tm_year + 1900) * 12 + local->tm_mon;
 
     for (size_t i = 0; i < names.size(); ++i) {
