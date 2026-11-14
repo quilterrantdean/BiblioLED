@@ -3,6 +3,7 @@
 #include <zlib.h>
 
 #include <cstdio>
+#include <cerrno>
 #include <string>
 
 #ifdef _WIN32
@@ -24,11 +25,11 @@ std::wstring Utf8ToWidePath(const std::string& path)
 {
     if (path.empty()) return std::wstring();
     const int length = MultiByteToWideChar(
-        CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(),
+        CP_UTF8, 0, path.c_str(),
         static_cast<int>(path.size()), NULL, 0);
     if (length <= 0) return std::wstring();
     std::wstring result(static_cast<size_t>(length), L'\0');
-    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+    if (!MultiByteToWideChar(CP_UTF8, 0,
                              path.c_str(), static_cast<int>(path.size()),
                              &result[0], length)) {
         return std::wstring();
