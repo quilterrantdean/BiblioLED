@@ -27,7 +27,12 @@ std::string JoinPath(const std::string& directory, const std::string& name)
 {
     if (directory.empty()) return name;
     const char last = directory[directory.size() - 1];
-    return (last == '/' || last == '\\') ? directory + name : directory + "/" + name;
+    if (last == '/' || last == '\\') return directory + name;
+#ifdef _WIN32
+    return directory + "\\" + name;
+#else
+    return directory + "/" + name;
+#endif
 }
 
 #ifdef _WIN32
