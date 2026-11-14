@@ -62,7 +62,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Add backup settings for format (`gzip` or `zlib`) and compression level (0–9, default 6) to `config/settings.ini` and a dedicated Win32 dialog. Changes are applied immediately to the open `LoanStore`, without restarting; a valid same-day automatic snapshot remains reused.
 - [x] Use native filesystem path separators for generated backup paths (`\\` on Windows, `/` on POSIX), avoiding mixed separators in messages and file operations.
 
-The live-settings and native-path corrections are undergoing fresh CI validation.
+The live-settings and native-path corrections pass Linux Core tests, modern Win32 compile/tests, and the XP-targeted w64devkit x86 build/tests. Latest validated commit: `1a9170d51ce7ea80fac5cedfbcf8c403b54f4e69`; XP test artifact ID: `14124735304`. Physical Windows XP SP3 runtime testing remains outstanding.
 
 ### Phase 4 — Application functionality and interface
 
