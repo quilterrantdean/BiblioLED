@@ -1758,7 +1758,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     bool recovery_performed = false;
 
     if (!database_exists && database_marker_exists) {
-        std::wstring reason = L"O ficheiro esperado não foi encontrado:\\n\\n";
+        std::wstring reason = L"O ficheiro esperado não foi encontrado:\n\n";
         reason += database_path;
         if (!PromptAndRecoverDatabase(
                 database_path, backup_directory, reason,
@@ -1772,7 +1772,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     if (!recovery_performed &&
         !gStore.Open(database_utf8, backup_directory_utf8, &database_error)) {
         std::wstring reason =
-            L"Não foi possível abrir a base de dados esperada:\\n\\n";
+            L"Não foi possível abrir a base de dados esperada:\n\n";
         reason += Utf8ToWide(database_error);
         if (!PromptAndRecoverDatabase(
                 database_path, backup_directory, reason,
@@ -1788,7 +1788,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         if (!gStore.Open(database_utf8, backup_directory_utf8, &database_error)) {
             std::wstring message =
                 L"A cópia foi instalada, mas a base de dados recuperada "
-                L"não abriu correctamente:\\n\\n";
+                L"não abriu correctamente:\n\n";
             message += Utf8ToWide(database_error);
             MessageBoxW(NULL, message.c_str(), L"BiblioLED",
                         MB_OK | MB_ICONERROR);
@@ -1818,7 +1818,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         recovered_message += L"Cópia utilizada:\n";
         recovered_message += Utf8ToWide(recovery_backup_path);
         if (!recovery_preserved_path.empty()) {
-            recovered_message += L"\n\nA base de dados anterior foi preservada em:\n";
+            recovered_message += L"\n\nOs ficheiros anteriores (base de dados e eventuais auxiliares) foram preservados com este prefixo:\n";
             recovered_message += Utf8ToWide(recovery_preserved_path);
         }
         MessageBoxW(NULL, recovered_message.c_str(), L"Recuperação concluída",

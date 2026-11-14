@@ -1249,7 +1249,7 @@ bool LoanStore::RecoverFromBackup(const std::string& database_path,
             "The installed recovery database failed its final validation: " +
             validation_error;
         if (rollback_ok) {
-            message += " The previous database files were restored.";
+            message += " The original database files were restored where present.";
         } else {
             message += " Automatic rollback was incomplete. Preserve the recovery files at: ";
             message += preserved_base;
@@ -1261,10 +1261,9 @@ bool LoanStore::RecoverFromBackup(const std::string& database_path,
         return false;
     }
 
-    if (preserved_database_path && original_exists[0]) {
-        *preserved_database_path = preserved_paths[0];
+    if (preserved_database_path && any_original) {
+        *preserved_database_path = preserved_base;
     }
-    (void)any_original;
     return true;
 }
 
