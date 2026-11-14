@@ -113,6 +113,46 @@ bool EnsureDirectory(const std::wstring& path)
     return GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
+bool FileExistsW(const std::wstring& path)
+{
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+bool CreateDatabaseMarker(const std::wstring& path, std::wstring* error)
+{
+    HANDLE marker = CreateFileW(
+        path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL,
+        CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (marker == INVALID_HANDLE_VALUE) {
+        if (GetLastError() == ERROR_FILE_EXISTS && FileExistsW(path)) return true;
+        if (error) {
+            *error = L"Não foi possível criar o marcador de segurança da base de dados. "
+                     L"A aplicação não permitirá alterações nesta sessão.";
+        }
+        return false;
+    }
+
+    static const char contents[] = "BiblioLED database initialized\r\n";
+    DWORD written = 0;
+    const BOOL wrote = WriteFile(
+        marker, contents, static_cast<DWORD>(sizeof(contents) - 1), &written, NULL);
+    const BOOL flushed = wrote && written == sizeof(contents) - 1
+        ? FlushFileBuffers(marker) : FALSE;
+    CloseHandle(marker);
+
+    if (!wrote || written != sizeof(contents) - 1 || !flushed) {
+        DeleteFileW(path.c_str());
+        if (error) {
+            *error = L"Não foi possível gravar o marcador de segurança da base de dados. "
+                     L"A aplicação não permitirá alterações nesta sessão.";
+        }
+        return false;
+    }
+    return true;
+}
+
 std::string Trim(const std::string& value)
 {
     const std::string::size_type first = value.find_first_not_of(" \t\r\n");
@@ -902,6 +942,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
 
     const std::wstring database_path =
         JoinPath(gApplicationDirectory, L"data\\biblioteca.sqlite");
+    const std::wstring database_marker =
+        JoinPath(gApplicationDirectory, L"config\\database.initialized");
+    const bool database_exists = FileExistsW(database_path);
+    const bool database_marker_exists = FileExistsW(database_marker);
+
+    if (!database_exists && database_marker_exists) {
+        std::wstring message =
+            L"A base de dados esperada não foi encontrada:\n\n";
+        message += database_path;
+        message +=
+            L"\n\nPor segurança, não foi criada uma base de dados vazia. "
+            L"Reponha a base de dados ou uma cópia de segurança e tente novamente.";
+        MessageBoxW(NULL, message.c_str(), L"BiblioLED",
+                    MB_OK | MB_ICONERROR);
+        if (gInstanceMutex) CloseHandle(gInstanceMutex);
+        return 1;
+    }
+
     const std::string database_utf8 = WideToUtf8(database_path);
     std::string database_error;
     const std::wstring backup_directory =
@@ -914,6 +972,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
             L"BiblioLED", MB_OK | MB_ICONERROR);
         if (gInstanceMutex) CloseHandle(gInstanceMutex);
         return 1;
+    }
+
+    if (!database_marker_exists) {
+        std::wstring marker_error;
+        if (!CreateDatabaseMarker(database_marker, &marker_error)) {
+            MessageBoxW(NULL, marker_error.c_str(), L"BiblioLED",
+                        MB_OK | MB_ICONERROR);
+            gStore.Close();
+            if (gInstanceMutex) CloseHandle(gInstanceMutex);
+            return 1;
+        }
     }
 
     INITCOMMONCONTROLSEX controls = {};

@@ -75,3 +75,8 @@ The `Core tests` workflow has two jobs:
 - `Win32 compile check (modern Windows SDK)`: compiles the 32-bit Win32 application and runs the SQLite store tests on a Windows runner.
 
 Both jobs passed for the initial proof-of-concept branch head. The Windows runner is a modern Windows environment, not Windows XP.
+
+
+## Missing-database protection
+
+After the database has opened successfully for the first time, the application writes `config/database.initialized`. On later launches, if this marker exists but `data/biblioteca.sqlite` is missing, startup stops with an explanatory message. It does not create an empty replacement. The marker is retained when replacing application binaries and should be kept with the configuration directory.

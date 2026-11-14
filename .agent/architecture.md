@@ -83,6 +83,7 @@ All paths are resolved from the executable directory. The existing application i
 - Database schema has an explicit version.
 - Migrations are versioned, transactional, backed up, validated, and require explicit confirmation.
 - Do not silently create a fresh database when an expected database cannot be opened.
+- A small initialisation marker in `config/database.initialized` distinguishes first launch from a database that has gone missing; if the marker exists but the database does not, stop and explain rather than creating an empty database.
 - Test databases are always isolated from the user's real database.
 - Backups are standalone SQLite files, uncompressed, timestamped, and retained until the user deletes them.
 - Before the first data mutation in each session, create one backup using SQLite's online-backup API; subsequent mutations in that session reuse it.
@@ -126,6 +127,6 @@ tests/loan_store_tests.cpp
 
 The initial UI supports listing, creating, editing, and deleting loan records. It reads the existing `loans(id, title, loan_date, type)` table shape and creates that exact table only for a new database. It uses the portable folder beside the executable.
 
-The current implementation is deliberately a proof of concept, not the complete application. The store now makes and validates one automatic backup before the first data mutation in each session, blocks changes if this fails, supports manual backups, and restores a validated backup only after creating a second safety copy of the current database. Missing-database recovery, schema migration, audit logging, history, statistics, and the settings dialog are not implemented yet.
+The current implementation is deliberately a proof of concept, not the complete application. The store now makes and validates one automatic backup before the first data mutation in each session, blocks changes if this fails, supports manual backups, and restores a validated backup only after creating a second safety copy of the current database. Guided recovery after a missing database, schema migration, audit logging, history, statistics, and the settings dialog are not implemented yet.
 
 SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows builds. It is pinned because SQLite 3.54.0 introduced a Windows SRW-lock dependency that is not available on Windows XP. The pin must be revisited only after target-OS testing.
