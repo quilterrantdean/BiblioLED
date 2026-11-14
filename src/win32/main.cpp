@@ -839,6 +839,13 @@ void CreateManualDatabaseBackup()
         return;
     }
 
+    error.clear();
+    if (gStore.RecordAuditEvent("manual_backup", "path=" + backup_path, &error)) {
+        SynchronizeExternalAuditLog(true);
+    } else {
+        ShowStoreError(L"A cópia foi criada, mas não foi possível registar a operação na auditoria.", error);
+    }
+
     std::wstring message = L"Cópia de segurança criada e validada:\n\n";
     message += Utf8ToWide(backup_path);
     MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED",
@@ -887,12 +894,21 @@ void RestoreDatabaseFromBackup()
         return;
     }
 
+    OfferLegacyMigration(gMainWindow);
+    error.clear();
+    if (!gStore.MigrationRequired() &&
+        !gStore.RecordAuditEvent(
+            "restore",
+            "source=" + WideToUtf8(selected) + "; safety_backup=" + safety_backup,
+            &error)) {
+        ShowStoreError(L"A base de dados foi reposta, mas não foi possível registar a operação na auditoria.", error);
+    }
+
     std::wstring message = L"Base de dados reposta. A versão anterior foi salvaguardada em:\n\n";
     message += Utf8ToWide(safety_backup);
     MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED",
                 MB_OK | MB_ICONINFORMATION);
 
-    OfferLegacyMigration(gMainWindow);
     SynchronizeExternalAuditLog(true);
     UpdateWriteAccess(gMainWindow);
     RefreshList();
@@ -1165,6 +1181,15 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
 
     case WM_DESTROY:
         SaveColumnLayout();
+        if (gStore.IsOpen() && !gStore.MigrationRequired()) {
+            std::string shutdown_error;
+            if (gStore.RecordAuditEvent(
+                    "shutdown",
+                    std::string("application_version=") + BIBLIOLED_VERSION,
+                    &shutdown_error)) {
+                SynchronizeExternalAuditLog(false);
+            }
+        }
         gStore.Close();
         if (gInstanceMutex) {
             ReleaseMutex(gInstanceMutex);
@@ -1275,6 +1300,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     OfferLegacyMigration(NULL);
+    if (!gStore.MigrationRequired()) {
+        std::string startup_error;
+        if (!gStore.RecordAuditEvent(
+                "startup",
+                std::string("application_version=") + BIBLIOLED_VERSION,
+                &startup_error)) {
+            ShowStoreError(L"Não foi possível registar o início da sessão na auditoria.", startup_error);
+        }
+    }
     SynchronizeExternalAuditLog(true);
 
     INITCOMMONCONTROLSEX controls = {};
