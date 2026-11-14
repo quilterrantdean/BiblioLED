@@ -59,6 +59,9 @@ public:
     bool GetAll(std::vector<LoanRecord>* records, std::string* error);
     bool GetById(int id, LoanRecord* record, std::string* error);
     bool GetAuditEvents(std::vector<AuditEvent>* events, std::string* error);
+    bool RecordAuditEvent(const std::string& action,
+                          const std::string& details,
+                          std::string* error);
     void SetExternalAuditLogStatus(bool enabled, bool healthy);
     bool ExternalAuditLogBlocked() const;
     bool Insert(LoanRecord* record, std::string* error);
