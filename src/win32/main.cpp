@@ -1103,6 +1103,116 @@ void ShowAbout()
     MessageBoxW(gMainWindow, text.c_str(), L"Sobre", MB_OK | MB_ICONINFORMATION);
 }
 
+INT_PTR CALLBACK BackupSettingsDialogProc(HWND dialog, UINT message,
+                                                WPARAM wParam, LPARAM lParam)
+{
+    AppSettings* settings =
+        reinterpret_cast<AppSettings*>(GetWindowLongPtrW(dialog, DWLP_USER));
+
+    if (message == WM_INITDIALOG) {
+        settings = reinterpret_cast<AppSettings*>(lParam);
+        SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(settings));
+
+        SendDlgItemMessageW(dialog, IDC_BACKUP_FORMAT, CB_ADDSTRING, 0,
+                            reinterpret_cast<LPARAM>(L"GZIP (.gz)"));
+        SendDlgItemMessageW(dialog, IDC_BACKUP_FORMAT, CB_ADDSTRING, 0,
+                            reinterpret_cast<LPARAM>(L"zlib (.zlib)"));
+        SendDlgItemMessageW(dialog, IDC_BACKUP_FORMAT, CB_SETCURSEL,
+                            settings && settings->backup_compression_format == "zlib" ? 1 : 0, 0);
+
+        for (int level = 0; level <= 9; ++level) {
+            wchar_t item[8] = {0};
+            _snwprintf(item, 7, L"%d", level);
+            SendDlgItemMessageW(dialog, IDC_BACKUP_LEVEL, CB_ADDSTRING, 0,
+                                reinterpret_cast<LPARAM>(item));
+        }
+        SendDlgItemMessageW(dialog, IDC_BACKUP_LEVEL, CB_SETCURSEL,
+                            settings ? settings->backup_compression_level : 6, 0);
+        return TRUE;
+    }
+
+    if (message == WM_COMMAND && LOWORD(wParam) == IDOK) {
+        if (!settings) return TRUE;
+        const LRESULT format = SendDlgItemMessageW(
+            dialog, IDC_BACKUP_FORMAT, CB_GETCURSEL, 0, 0);
+        const LRESULT level = SendDlgItemMessageW(
+            dialog, IDC_BACKUP_LEVEL, CB_GETCURSEL, 0, 0);
+        if ((format != 0 && format != 1) || level < 0 || level > 9) {
+            MessageBoxW(dialog, L"Seleccione um formato e um nível de compressão válidos.",
+                        L"BiblioLED", MB_OK | MB_ICONWARNING);
+            return TRUE;
+        }
+        settings->backup_compression_format = format == 1 ? "zlib" : "gzip";
+        settings->backup_compression_level = static_cast<int>(level);
+        EndDialog(dialog, IDOK);
+        return TRUE;
+    }
+
+    if (message == WM_COMMAND && LOWORD(wParam) == IDCANCEL) {
+        EndDialog(dialog, IDCANCEL);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void ShowBackupSettings()
+{
+    if (!gSettingsFileValid) {
+        MessageBoxW(gMainWindow,
+            L"O ficheiro config/settings.ini é inválido e foi preservado. "
+            L"As definições não podem ser gravadas até o ficheiro ser corrigido.",
+            L"Definições", MB_OK | MB_ICONWARNING);
+        return;
+    }
+    if (gStore.ExternalAuditLogBlocked()) {
+        MessageBoxW(gMainWindow,
+            L"O registo de auditoria externo está indisponível. "
+            L"Recupere primeiro a escrita do log antes de alterar definições.",
+            L"Definições", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    AppSettings edited = gSettings;
+    const INT_PTR result = DialogBoxParamW(
+        gInstance, MAKEINTRESOURCEW(IDD_BACKUP_SETTINGS_DIALOG),
+        gMainWindow, BackupSettingsDialogProc,
+        reinterpret_cast<LPARAM>(&edited));
+    if (result != IDOK) return;
+
+    if (edited.backup_compression_format == gSettings.backup_compression_format &&
+        edited.backup_compression_level == gSettings.backup_compression_level) {
+        return;
+    }
+
+    const std::string old_format = gSettings.backup_compression_format;
+    const int old_level = gSettings.backup_compression_level;
+    std::string error;
+    if (!WriteSettings(gSettingsPath, edited, &error)) {
+        ShowStoreError(L"Não foi possível guardar as definições de cópias de segurança.", error);
+        return;
+    }
+
+    gSettings = edited;
+    if (!gStore.MigrationRequired()) {
+        std::ostringstream details;
+        details << "backup_compression_format=" << old_format << "->"
+                << gSettings.backup_compression_format
+                << "; backup_compression_level=" << old_level << "->"
+                << gSettings.backup_compression_level;
+        error.clear();
+        if (!gStore.RecordAuditEvent("settings_changed", details.str(), &error)) {
+            ShowStoreError(L"As definições foram guardadas, mas não foi possível registar a alteração na auditoria.", error);
+            return;
+        }
+        SynchronizeExternalAuditLog(true);
+    }
+
+    MessageBoxW(gMainWindow,
+        L"As definições foram guardadas. Serão aplicadas às novas cópias de segurança "
+        L"a partir da próxima execução do BiblioLED.",
+        L"Definições guardadas", MB_OK | MB_ICONINFORMATION);
+}
+
 LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
