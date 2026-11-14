@@ -216,6 +216,9 @@ jobs:
               anuais e a comparação com o ano anterior. Verifique a actividade
               diária, a distribuição por dia da semana/hora e a média/mediana
               global dos intervalos entre dias com empréstimos.
+          15. Use Ficheiro > Exportar histórico para CSV. Confirme BOM UTF-8,
+              separador ;, colunas Title/LoanDate/Type, registos futuros/expirados
+              e a preservação de ;, aspas e quebras de linha.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8
