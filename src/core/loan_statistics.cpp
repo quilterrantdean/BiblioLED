@@ -3,6 +3,7 @@
 #include "biblioled/loan_rules.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cctype>
 #include <map>
 #include <set>

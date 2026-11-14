@@ -7,6 +7,7 @@
 #include "biblioled/audit_log.h"
 #include "resource.h"
 #include "history_dialog.h"
+#include "statistics_dialog.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -969,6 +970,7 @@ HMENU CreateApplicationMenu()
     AppendMenuW(record_menu, write_menu_flags, IDM_DELETE, L"Eliminar\tDelete");
 
     AppendMenuW(view_menu, MF_STRING, IDM_HISTORY, L"Histórico\tCtrl+H");
+    AppendMenuW(view_menu, MF_STRING, IDM_STATISTICS, L"Estatísticas...");
     AppendMenuW(view_menu, MF_STRING, IDM_REFRESH, L"Actualizar\tF5");
     AppendMenuW(help_menu, MF_STRING, IDM_ABOUT, L"Sobre");
 
@@ -1411,6 +1413,9 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         case IDM_HISTORY:
             biblioled::win32::ShowHistoryDialog(gInstance,gMainWindow,&gStore);
             return 0;
+        case IDM_STATISTICS:
+            biblioled::win32::ShowStatisticsDialog(gInstance,gMainWindow,&gStore);
+            return 0;
         case IDM_REFRESH:
         case IDC_BUTTON_REFRESH:
             SynchronizeExternalAuditLog(true);
@@ -1630,7 +1635,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
 
     INITCOMMONCONTROLSEX controls = {};
     controls.dwSize = sizeof(controls);
-    controls.dwICC = ICC_LISTVIEW_CLASSES;
+    controls.dwICC = ICC_LISTVIEW_CLASSES | ICC_TAB_CLASSES;
     InitCommonControlsEx(&controls);
 
     gApplicationIcon = LoadIconW(gInstance, MAKEINTRESOURCEW(IDI_BIBLIOLED));
