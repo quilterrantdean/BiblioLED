@@ -44,7 +44,7 @@ The main window remains an operational overview of active loans and useful curre
 
 - [x] Establish the initial project structure and CMake build configuration.
 - [ ] Implement the portable path model.
-- [ ] Implement settings loading, validation, and persistence.
+- [x] Implement INI settings loading, validation, and persistence for the current prototype.
 - [x] Implement SQLite schema versioning (PRAGMA user_version): new databases use version 1; the existing loans-only schema is recognised as version 0.
 - [x] Implement the explicit, backed-up, transactional version 0 to 1 migration. It adds the internal audit table and indexes without rewriting loan rows.
 - [x] Implement one automatic SQLite Online Backup snapshot before the first loan-data mutation per local calendar day; audit-only events and settings changes do not trigger it. Reuse a valid same-day snapshot and fail closed if a new snapshot cannot be created.
@@ -55,7 +55,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Synchronise internal audit events to the external append-only UTF-8 log using stable event fingerprints; recover an incomplete final line and rotate archives at the configured size.
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; F5 retries synchronisation without requiring an application restart.
 - [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
-- [ ] Extend audit coverage to settings changes, exports, warnings, errors, and failures.
+- [ ] Extend audit coverage beyond the implemented backup-settings change event to other settings, exports, warnings, errors, and failures.
 - [x] Separate audit-only writes (including startup/shutdown and settings changes) from loan-data backup triggers.
 - [x] Implement the approved automatic-backup retention policy: 7 daily, 4 weekly, and 12 monthly snapshots. Only recognised automatic backups are pruned; manual and restore/migration safety backups are preserved. Unknown filenames are preserved.
 - [x] Integrate statically linked zlib 1.4 for streaming gzip and zlib wrappers. Verify compressed round-trips and SQLite integrity; keep `.sqlite` backups compatible.
