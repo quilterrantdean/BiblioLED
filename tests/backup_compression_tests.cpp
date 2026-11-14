@@ -122,7 +122,7 @@ int main()
               corrupt_path, decoded_valid,
               biblioled::BackupCompressionFormat::Gzip, &error),
           "truncated gzip data must be rejected");
-    Check(!biblioled::ReadFile(decoded_valid, &original),
+    Check(!ReadFile(decoded_valid, &original),
           "failed decompression must remove its partial output");
 
     Check(CopyWithTrailingByte(valid_gzip, trailing_path),
