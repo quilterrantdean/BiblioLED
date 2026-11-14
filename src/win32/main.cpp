@@ -22,16 +22,31 @@ namespace {
 
 const wchar_t* kWindowClass = L"BiblioLEDMainWindow";
 const UINT kActivateMessage = WM_APP + 10;
+const UINT kPersistColumnsMessage = WM_APP + 11;
+const int kColumnCount = 5;
 
 struct AppSettings {
     int daily_limit;
     int monthly_limit;
     int monthly_window_days;
     int loan_duration_days;
+    bool diagnostics_enabled;
+    unsigned long audit_log_max_size_bytes;
+    int column_order[kColumnCount];
+    int column_widths[kColumnCount];
 
     AppSettings()
         : daily_limit(5), monthly_limit(20),
-          monthly_window_days(30), loan_duration_days(21) {}
+          monthly_window_days(30), loan_duration_days(21),
+          diagnostics_enabled(true), audit_log_max_size_bytes(5UL * 1024UL * 1024UL)
+    {
+        for (int i = 0; i < kColumnCount; ++i) column_order[i] = i;
+        column_widths[0] = 320;
+        column_widths[1] = 100;
+        column_widths[2] = 130;
+        column_widths[3] = 130;
+        column_widths[4] = 55;
+    }
 };
 
 struct RecordDialogContext {
@@ -53,6 +68,9 @@ HWND gStatusLabel = NULL;
 HANDLE gInstanceMutex = NULL;
 HICON gApplicationIcon = NULL;
 std::wstring gApplicationDirectory;
+std::wstring gSettingsPath;
+bool gSettingsFileValid = false;
+bool gColumnSettingsWarningShown = false;
 biblioled::LoanStore gStore;
 AppSettings gSettings;
 
@@ -175,6 +193,47 @@ bool ParsePositiveInteger(const std::string& text, int minimum, int maximum, int
     return true;
 }
 
+bool ParseIntegerList(const std::string& text, int minimum, int maximum,
+                      int* values, int count, bool require_unique)
+{
+    if (!values || count <= 0) return false;
+    std::string::size_type start = 0;
+    for (int i = 0; i < count; ++i) {
+        const std::string::size_type comma = text.find(',', start);
+        if ((i < count - 1 && comma == std::string::npos) ||
+            (i == count - 1 && comma != std::string::npos)) return false;
+        const std::string token = Trim(text.substr(
+            start, comma == std::string::npos ? std::string::npos : comma - start));
+        if (!ParsePositiveInteger(token, minimum, maximum, &values[i])) return false;
+        if (require_unique) {
+            for (int j = 0; j < i; ++j) {
+                if (values[j] == values[i]) return false;
+            }
+        }
+        if (comma == std::string::npos) break;
+        start = comma + 1;
+    }
+    return true;
+}
+
+std::string IntegerListToString(const int* values, int count)
+{
+    std::ostringstream output;
+    for (int i = 0; i < count; ++i) {
+        if (i) output << ',';
+        output << values[i];
+    }
+    return output.str();
+}
+
+bool ParseBoolean(const std::string& text, bool* value)
+{
+    if (!value) return false;
+    if (text == "0") { *value = false; return true; }
+    if (text == "1") { *value = true; return true; }
+    return false;
+}
+
 bool WriteDefaultSettings(const std::wstring& path)
 {
     const std::string utf8_path = WideToUtf8(path);
@@ -185,7 +244,15 @@ bool WriteDefaultSettings(const std::wstring& path)
               "daily_limit=5\r\n"
               "monthly_limit=20\r\n"
               "monthly_window_days=30\r\n"
-              "loan_duration_days=21\r\n";
+              "loan_duration_days=21\r\n"
+              "\r\n"
+              "[diagnostics]\r\n"
+              "enabled=1\r\n"
+              "max_log_size_bytes=5242880\r\n"
+              "\r\n"
+              "[columns]\r\n"
+              "order=0,1,2,3,4\r\n"
+              "widths=320,100,130,130,55\r\n";
     return output.good();
 }
 
@@ -206,7 +273,7 @@ bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* 
 
     AppSettings loaded;
     std::string line;
-    int seen = 0;
+    int seen_limits = 0;
     bool valid = true;
 
     while (std::getline(input, line)) {
@@ -214,10 +281,7 @@ bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* 
         if (line.empty() || line[0] == ';' || line[0] == '#' || line[0] == '[') continue;
 
         const std::string::size_type equals = line.find('=');
-        if (equals == std::string::npos) {
-            valid = false;
-            break;
-        }
+        if (equals == std::string::npos) { valid = false; break; }
 
         const std::string key = Trim(line.substr(0, equals));
         const std::string value = Trim(line.substr(equals + 1));
@@ -225,26 +289,38 @@ bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* 
 
         if (key == "daily_limit") {
             valid = ParsePositiveInteger(value, 1, 1000, &parsed);
-            loaded.daily_limit = parsed;
-            ++seen;
+            if (valid) loaded.daily_limit = parsed;
+            ++seen_limits;
         } else if (key == "monthly_limit") {
             valid = ParsePositiveInteger(value, 1, 10000, &parsed);
-            loaded.monthly_limit = parsed;
-            ++seen;
+            if (valid) loaded.monthly_limit = parsed;
+            ++seen_limits;
         } else if (key == "monthly_window_days") {
             valid = ParsePositiveInteger(value, 1, 3660, &parsed);
-            loaded.monthly_window_days = parsed;
-            ++seen;
+            if (valid) loaded.monthly_window_days = parsed;
+            ++seen_limits;
         } else if (key == "loan_duration_days") {
             valid = ParsePositiveInteger(value, 1, 3660, &parsed);
-            loaded.loan_duration_days = parsed;
-            ++seen;
+            if (valid) loaded.loan_duration_days = parsed;
+            ++seen_limits;
+        } else if (key == "enabled") {
+            valid = ParseBoolean(value, &loaded.diagnostics_enabled);
+        } else if (key == "max_log_size_bytes") {
+            int log_size = 0;
+            valid = ParsePositiveInteger(value, 65536, 1073741824, &log_size);
+            if (valid) loaded.audit_log_max_size_bytes = static_cast<unsigned long>(log_size);
+        } else if (key == "order") {
+            valid = ParseIntegerList(value, 0, kColumnCount - 1,
+                                     loaded.column_order, kColumnCount, true);
+        } else if (key == "widths") {
+            valid = ParseIntegerList(value, 30, 2000,
+                                     loaded.column_widths, kColumnCount, false);
         }
 
         if (!valid) break;
     }
 
-    if (!valid || seen != 4) {
+    if (!valid || seen_limits != 4) {
         if (error) {
             *error = "As configurações são inválidas. O ficheiro original foi preservado; "
                      "serão usados valores predefinidos nesta sessão.";
@@ -254,6 +330,47 @@ bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* 
     }
 
     *settings = loaded;
+    return true;
+}
+
+bool WriteSettings(const std::wstring& path,
+                   const AppSettings& settings,
+                   std::string* error)
+{
+    const std::wstring temporary_path = path + L".tmp";
+    const std::string temporary_utf8 = WideToUtf8(temporary_path);
+    {
+        std::ofstream output(temporary_utf8.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!output) {
+            if (error) *error = "Não foi possível criar o ficheiro temporário de configurações.";
+            return false;
+        }
+        output << "; BiblioLED portable settings\r\n"
+                  "[limits]\r\n"
+               << "daily_limit=" << settings.daily_limit << "\r\n"
+               << "monthly_limit=" << settings.monthly_limit << "\r\n"
+               << "monthly_window_days=" << settings.monthly_window_days << "\r\n"
+               << "loan_duration_days=" << settings.loan_duration_days << "\r\n"
+                  "\r\n"
+                  "[diagnostics]\r\n"
+               << "enabled=" << (settings.diagnostics_enabled ? 1 : 0) << "\r\n"
+               << "max_log_size_bytes=" << settings.audit_log_max_size_bytes << "\r\n"
+                  "\r\n"
+                  "[columns]\r\n"
+               << "order=" << IntegerListToString(settings.column_order, kColumnCount) << "\r\n"
+               << "widths=" << IntegerListToString(settings.column_widths, kColumnCount) << "\r\n";
+        output.flush();
+        if (!output.good()) {
+            if (error) *error = "Não foi possível gravar todas as configurações.";
+            return false;
+        }
+    }
+
+    if (!MoveFileExW(temporary_path.c_str(), path.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        if (error) *error = "Não foi possível substituir config/settings.ini.";
+        return false;
+    }
     return true;
 }
 
@@ -502,12 +619,44 @@ bool OfferLegacyMigration(HWND owner)
 }
 
 
+bool SaveColumnLayout()
+{
+    if (!gLoanList || !gSettingsFileValid) return false;
+
+    int order[kColumnCount] = {0};
+    if (!ListView_GetColumnOrderArray(gLoanList, kColumnCount, order)) return false;
+
+    for (int i = 0; i < kColumnCount; ++i) {
+        gSettings.column_order[i] = order[i];
+        gSettings.column_widths[i] = ListView_GetColumnWidth(gLoanList, i);
+    }
+
+    std::string error;
+    if (!WriteSettings(gSettingsPath, gSettings, &error)) {
+        if (!gColumnSettingsWarningShown) {
+            MessageBoxW(gMainWindow, Utf8ToWide(error).c_str(), L"BiblioLED",
+                        MB_OK | MB_ICONWARNING);
+            gColumnSettingsWarningShown = true;
+        }
+        return false;
+    }
+    return true;
+}
+
+void ApplyColumnLayout()
+{
+    if (gLoanList) {
+        ListView_SetColumnOrderArray(gLoanList, kColumnCount, gSettings.column_order);
+    }
+}
+
 void InsertColumn(int index, const wchar_t* title, int width)
 {
     LVCOLUMNW column = {};
     column.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
     column.pszText = const_cast<LPWSTR>(title);
-    column.cx = width;
+    column.cx = gSettings.column_widths[index] > 0
+        ? gSettings.column_widths[index] : width;
     column.iSubItem = index;
     ListView_InsertColumn(gLoanList, index, &column);
 }
@@ -801,13 +950,15 @@ void CreateChildControls(HWND window)
         reinterpret_cast<HMENU>(IDC_LOAN_LIST), gInstance, NULL);
 
     ListView_SetExtendedListViewStyle(gLoanList,
-        LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+        LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER |
+        LVS_EX_HEADERDRAGDROP);
 
     InsertColumn(0, L"Título", 320);
     InsertColumn(1, L"Tipo", 100);
     InsertColumn(2, L"Empréstimo", 130);
     InsertColumn(3, L"Expira em", 130);
     InsertColumn(4, L"Dias", 55);
+    ApplyColumnLayout();
 
     gStatusLabel = CreateWindowW(L"STATIC", L"Pronto.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
@@ -854,12 +1005,6 @@ void LayoutControls(HWND window)
         MoveWindow(gLoanList, 8, kToolbarHeight + kQuotaHeight,
                    width - 16, list_height, TRUE);
 
-        const int available = width - 16;
-        ListView_SetColumnWidth(gLoanList, 0, available - 420);
-        ListView_SetColumnWidth(gLoanList, 1, 95);
-        ListView_SetColumnWidth(gLoanList, 2, 125);
-        ListView_SetColumnWidth(gLoanList, 3, 125);
-        ListView_SetColumnWidth(gLoanList, 4, 65);
     }
     if (gStatusLabel) {
         MoveWindow(gStatusLabel, 8, height - kStatusHeight,
@@ -887,6 +1032,10 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
 
     case WM_SIZE:
         LayoutControls(window);
+        return 0;
+
+    case kPersistColumnsMessage:
+        SaveColumnLayout();
         return 0;
 
     case WM_COMMAND:
@@ -923,6 +1072,14 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         break;
 
     case WM_NOTIFY:
+        if (gLoanList &&
+            reinterpret_cast<NMHDR*>(lParam)->hwndFrom == ListView_GetHeader(gLoanList)) {
+            const UINT code = reinterpret_cast<NMHDR*>(lParam)->code;
+            if (code == HDN_ENDDRAGW || code == HDN_ENDTRACKW) {
+                PostMessageW(window, kPersistColumnsMessage, 0, 0);
+                return FALSE;
+            }
+        }
         if (reinterpret_cast<NMHDR*>(lParam)->idFrom == IDC_LOAN_LIST &&
             reinterpret_cast<NMHDR*>(lParam)->code == LVN_ITEMACTIVATE) {
             EditLoan();
@@ -947,11 +1104,8 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         return 0;
 
     case WM_DESTROY:
+        SaveColumnLayout();
         gStore.Close();
-        if (gApplicationIcon) {
-            DestroyIcon(gApplicationIcon);
-            gApplicationIcon = NULL;
-        }
         if (gInstanceMutex) {
             ReleaseMutex(gInstanceMutex);
             CloseHandle(gInstanceMutex);
@@ -1008,9 +1162,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     EnsureDirectory(JoinPath(gApplicationDirectory, L"logs"));
 
     std::string settings_error;
-    const std::wstring settings_path =
-        JoinPath(gApplicationDirectory, L"config\\settings.ini");
-    if (!LoadSettings(settings_path, &gSettings, &settings_error) && !settings_error.empty()) {
+    gSettingsPath = JoinPath(gApplicationDirectory, L"config\\settings.ini");
+    gSettingsFileValid = LoadSettings(gSettingsPath, &gSettings, &settings_error);
+    if (!gSettingsFileValid && !settings_error.empty()) {
         MessageBoxW(NULL, Utf8ToWide(settings_error).c_str(), L"BiblioLED",
                     MB_OK | MB_ICONWARNING);
     }
@@ -1067,9 +1221,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     controls.dwICC = ICC_LISTVIEW_CLASSES;
     InitCommonControlsEx(&controls);
 
-    const std::wstring icon_path = JoinPath(gApplicationDirectory, L"port.ico");
-    gApplicationIcon = static_cast<HICON>(LoadImageW(
-        NULL, icon_path.c_str(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE));
+    gApplicationIcon = LoadIconW(gInstance, MAKEINTRESOURCEW(IDI_BIBLIOLED));
 
     WNDCLASSEXW window_class = {};
     window_class.cbSize = sizeof(window_class);
@@ -1103,7 +1255,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         MessageBoxW(NULL, L"Não foi possível criar a janela principal.",
                     L"BiblioLED", MB_OK | MB_ICONERROR);
         gStore.Close();
-        if (gApplicationIcon) DestroyIcon(gApplicationIcon);
         if (gInstanceMutex) CloseHandle(gInstanceMutex);
         return 1;
     }

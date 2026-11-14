@@ -129,7 +129,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $package "config") | Out-Null
 
           Copy-Item "build\xp-x86-w64devkit\BiblioLED.exe" (Join-Path $package "BiblioLED.exe")
-          Copy-Item "port.ico" (Join-Path $package "port.ico")
           Copy-Item "config\settings.ini" (Join-Path $package "config\settings.ini")
           Copy-Item (Join-Path $env:RUNNER_TEMP "pe-inspection.txt") (Join-Path $package "pe-inspection.txt")
 
@@ -140,6 +139,8 @@ jobs:
           Não é uma versão de utilização diária nem está preparada para dados reais.
 
           Protecções e persistência já incluídas:
+          - Ícone embebido no executável; não é necessário um ficheiro .ico separado.
+          - Colunas reorganizáveis por arrastamento, com ordem e larguras guardadas em config\settings.ini.
           - Novas bases de dados criadas no esquema SQLite versão 1.
           - Bases antigas (versão 0) só são alteradas depois de confirmação explícita.
             Antes da migração é criada e validada uma cópia integral; a migração é

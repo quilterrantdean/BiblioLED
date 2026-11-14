@@ -3,6 +3,8 @@
 #include <windows.h>
 #include "resource.h"
 
+IDI_BIBLIOLED ICON "../../port.ico"
+
 IDD_LOAN_DIALOG DIALOG 0, 0, 258, 126
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Empréstimo"

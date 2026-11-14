@@ -96,9 +96,6 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/config/settings.ini"
             "$<TARGET_FILE_DIR:BiblioLED>/config/settings.ini"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/port.ico"
-            "$<TARGET_FILE_DIR:BiblioLED>/port.ico"
         VERBATIM
     )
 else()
