@@ -108,6 +108,14 @@ widths=320,100,130,130,55
 
 The width values are in pixels. Layout is loaded at startup and saved after a column move, resize, or normal shutdown. An invalid settings file is preserved and is not overwritten merely to save table layout preferences.
 
+## Current backup behaviour and planned review
+
+The current proof of concept stores uncompressed `.sqlite` backups and creates an automatic snapshot before the first SQLite mutation in each application session. The startup audit event is currently a SQLite mutation, so this means a snapshot is created on each normal launch, even when no loan data is changed. All backups are currently retained indefinitely.
+
+This behaviour is being reviewed because it creates too many copies. The proposed direction is to stop audit-only events from triggering data-safety snapshots, consider one automatic snapshot before the first loan-data change per calendar day, and apply a bounded retention policy to automatic snapshots only. Manual backups and pre-restore/migration safety copies should not be removed by automatic retention. No new policy or compression format has been adopted yet.
+
+Any compression implementation must use an existing library, stream data rather than load the entire database into memory, verify the compressed round-trip, and still run SQLite integrity/schema validation before restore. Existing uncompressed `.sqlite` backups will remain supported.
+
 ## External audit log
 
 SQLite `audit_events` remains the authoritative audit history. When diagnostics are enabled, committed events are synchronised to the UTF-8 append-only `logs/audit.log`. Timestamped `audit_*.log` archives are created when the configured size threshold (default 5 MB) would be exceeded. No archive is deleted automatically.
