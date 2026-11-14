@@ -139,15 +139,28 @@ jobs:
           Esta compilação serve apenas para ensaio.
           Não é uma versão de utilização diária nem está preparada para dados reais.
 
-          O programa cria automaticamente data\biblioteca.sqlite quando a base de dados
-          ainda não existe. Esta prova de conceito ainda não implementa cópia de segurança
-          automática, recuperação nem migração segura.
+          Protecções já incluídas:
+          - Uma cópia SQLite validada antes da primeira alteração de cada sessão.
+          - Cópias manuais separadas.
+          - Reposição confirmada, depois de validar a origem e criar uma cópia de
+            segurança da base de dados actual.
+          - Um marcador impede a criação silenciosa de uma base vazia se a base de
+            dados esperada desaparecer depois da inicialização.
 
-          Para testar:
+          Ainda faltam migrações de esquema, registo de auditoria, recuperação guiada
+          e outras funcionalidades da aplicação final.
+
+          Ensaio sugerido (apenas numa pasta temporária):
           1. Extraia este artefacto para uma pasta nova e vazia.
-          2. Execute BiblioLED.exe.
-          3. Crie um registo de teste, feche a aplicação e volte a abri-la.
-          4. Confirme que o registo permanece na lista.
+          2. Execute BiblioLED.exe e crie um registo fictício.
+          3. Feche e volte a abrir; confirme que o registo permanece.
+          4. Use Ficheiro > Criar cópia de segurança.
+          5. Crie/edite/elimine registos fictícios e teste Ficheiro > Repor a partir
+             de cópia. Confirme que é criada uma cópia da versão anterior.
+          6. Opcional: feche a aplicação, renomeie data\biblioteca.sqlite para
+             biblioteca.sqlite.test e volte a iniciar. A aplicação deverá parar e
+             explicar que a base de dados falta; não deverá criar uma base vazia.
+             Depois volte a colocar o ficheiro no nome original.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8

@@ -6,7 +6,7 @@ Personal application for recording and managing the user's own BiblioLED loans. 
 
 The `development` branch contains an early C++ / Win32 / SQLite proof of concept. The legacy Python/Tkinter implementation remains in the repository as a functional reference while the replacement is developed.
 
-The new prototype has passed XP-targeted build checks but has not yet been run on Windows XP itself. It remains a test build and must not be used with the user's real database.
+The new prototype has passed XP-targeted build checks but has not yet been run on Windows XP itself. It includes automatic per-session backups, manual backups, confirmed restore with a pre-restore safety copy, and protection against silently recreating a missing initialized database. Schema migrations, audit logging, guided recovery, and the complete application remain outstanding. It is still a test build and must not be used with the user's real database.
 
 ## Current direction
 

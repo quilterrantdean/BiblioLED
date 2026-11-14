@@ -56,9 +56,9 @@ cmake --build --preset xp-x86-w64devkit --parallel
 ctest --preset xp-x86-w64devkit
 ```
 
-The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `40df8aee91227e2f08bce9175d7f52dc052c879b` passed compilation, the SQLite store test, PE inspection, and artifact upload.
+The executable is written to `build/xp-x86-w64devkit/BiblioLED.exe`. The CI job also checks that it is a 32-bit PE executable with Windows GUI subsystem version 5.01, rejects selected post-XP imports/API-set DLLs, and publishes a disposable artifact containing the executable, icon, settings file, a short PE inspection report, and test instructions. The successful run for commit `64b9063e22833296320946dc42ca400717accda3` passed compilation, the SQLite store tests, PE inspection, and artifact upload.
 
-These checks establish an XP-oriented build target, not proof that the application runs on XP. The ZIP is only a test prototype: it currently creates a new database automatically when the expected file is absent and does not yet implement the agreed automatic backup/recovery protection. Do not point it at or replace the real application data.
+These checks establish an XP-oriented build target, not proof that the application runs on XP. The current test ZIP includes automatic per-session backups before the first mutation, manual backup creation, confirmed restore with a pre-restore safety copy, and a marker that prevents silent recreation when an initialized database has gone missing. It still lacks schema migrations, audit logging, guided recovery, and the complete application. Do not use it with the real application data.
 
 ## XP compatibility note
 

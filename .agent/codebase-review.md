@@ -70,46 +70,42 @@ This is an initial static review, not a complete runtime test or exhaustive audi
 Do not treat this review as permission to start changing application code. It is a baseline for planning the rewrite/restructure on `development`.
 
 
-## Initial C++ proof-of-concept slice (added on development)
+## C++ / Win32 / SQLite replacement status
 
-The following files now exist alongside the legacy Python reference:
+The legacy Python/Tkinter code remains unchanged as the behavioural reference. The new implementation is being developed alongside it.
 
-- `CMakeLists.txt` — C++11/CMake build, SQLite selection, Win32 executable, and CTest target.
-- `include/biblioled/loan_store.h`, `src/core/loan_store.cpp` — SQLite storage API with prepared statements, list/lookup/insert/update/delete/count, initial-schema creation, existing-schema validation, and quick integrity checking.
-- `src/win32/main.cpp` — initial native Win32 window, ListView, create/edit dialog, delete confirmation, quota summary, portable paths, and single-instance mutex.
-- `src/win32/dialogs.rc`, `src/win32/resource.h` — native record-entry dialog.
-- `config/settings.ini` — initial external operational limits.
-- `tests/loan_store_tests.cpp` — isolated CRUD, Unicode, future-date count, reopen, and integrity tests.
-- `.github/workflows/core-tests.yml` — Linux core tests and Win32 build/test CI.
+### Implemented
 
-Important limitations of this first slice:
+- C++11 core, CMake build, native Win32 application and existing `port.ico`.
+- SQLite 3.53.4 statically linked in Windows builds. This version is pinned for the XP target; SQLite 3.54.0 introduced a Windows SRW-lock dependency unavailable on XP.
+- Current table compatibility: `loans(id, title, loan_date, type)`; prepared-statement CRUD and quota counts.
+- Main Win32 window with loan list, create/edit/delete, delete confirmation, external INI limits, single-instance coordination, and application-relative storage paths.
+- Future-dated loans appear in the main list and are counted immediately; expired loans remain in the database but are omitted from that view.
+- Automatic timestamped SQLite online backup immediately before the first insert, update, or delete in each opened session. It is checked with `PRAGMA integrity_check`; failure blocks the mutation while reads remain possible. Further mutations in that session reuse the same backup.
+- Manual standalone SQLite backup, separately timestamped and integrity-checked.
+- Confirmed restore from a selected SQLite file. The source must pass integrity and schema checks. A second validated backup of the current database is created before replacement; after replacement the database is checked again. The code attempts to roll back from the pre-restore copy if post-restore verification fails.
+- Backup filenames are created with exclusive-create semantics so an existing backup is not overwritten after a collision.
+- A `config/database.initialized` marker distinguishes first use from a missing database. If the marker exists but `data/biblioteca.sqlite` is absent, startup stops instead of silently creating an empty database.
+- Isolated SQLite tests cover CRUD, UTF-8, future-dated quota counts, backup snapshots, one backup per session, manual backup, restore, pre-restore safety copies, invalid restore-source rejection, and fail-closed behaviour.
+- GitHub Actions: Linux core tests, modern Win32 compile/tests, and a separate w64devkit x86 XP-targeted build with PE architecture/subsystem/import checks and a disposable ZIP artifact.
 
-- The Win32 executable and SQLite store tests now compile and pass in GitHub Actions using a modern Windows toolchain. It has not yet been run on Windows XP.
-- The initial XP-targeted compiler baseline is w64devkit x86. CI pins release 2.10.0, builds with GCC 16.2.0, passes the SQLite store test, and verifies PE32/i386 plus Windows GUI subsystem 5.01. The inspected executable imports only COMCTL32, KERNEL32, msvcrt, and USER32; a blacklist check rejects selected post-XP APIs and API-set DLLs. This is still not a substitute for launching the executable on Windows XP SP3.
-- Linux CI uses the system SQLite package; the Windows build fetches and statically links SQLite 3.53.4.
-- Backups, restore, schema migrations, audit logs, full-history window, statistics, settings UI, export, and the final About dialog remain future work.
-- The prototype database path is `data/biblioteca.sqlite`; no user database has been copied, opened, migrated, or modified.
-- The prototype's current automatic first-run database creation is only for the proof of concept. The complete product must implement the agreed missing/corrupt-database safeguards before it is used with real data.
+### Remaining work
 
+- Guided recovery when the expected database is missing or corrupt. The marker currently stops silent recreation and explains the problem; it does not yet offer an in-app recovery wizard.
+- Explicit schema versioning and confirmed, transactional migrations from the legacy SQLite schema.
+- Transactional internal audit events and synchronisation with the external text log, including the agreed behaviour when file logging is disabled.
+- Full application settings UI, history window, statistics, export, About dialog, and the final modular business-rules layer.
+- Broader failure-injection, interrupted-operation, and restore-rollback tests.
+- Actual execution and measurement on Windows XP SP3. The CI runner is modern Windows; its XP-targeted toolchain and PE checks do not prove execution on the XP kernel.
+- A normal portable distribution only after the safety and migration work is complete.
+
+### Test and data safety
+
+All automated tests use generated databases and temporary backup files. The user's real database has not been copied, opened, migrated, or modified. Do not use the current prototype with real data.
 
 ## XP-targeted build baseline
 
-The initial XP build path uses the official w64devkit **x86** release. The upstream project states that the x86 kit targets Windows XP or later and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256, builds through the `xp-x86-w64devkit` CMake preset, runs the isolated store tests, checks the PE machine type and subsystem version, and publishes a disposable proof-of-concept ZIP. The CI runner is still a modern Windows host; final compatibility requires a real Windows XP SP3 execution test.
+The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-## CI validation status
+The latest passing XP-targeted workflow at commit `64b9063e22833296320946dc42ca400717accda3` compiled the application, ran the SQLite store tests, checked the executable, and published a disposable test artefact. This is a target-build check, not proof of runtime compatibility on Windows XP SP3.
 
-The current `development` head has passed both jobs in GitHub Actions:
-
-- **Linux core tests:** CMake configure, build, and CTest pass.
-- **Win32 compile check:** 32-bit Windows configure, SQLite amalgamation compile, native Win32 application link, and Win32 SQLite store tests pass using a modern Windows SDK/toolchain.
-
-This validates the current source on a modern Windows build runner. It does **not** validate the executable on Windows XP. The w64devkit x86 XP-targeted build has passed its separate workflow and publishes a disposable test artifact; an actual XP SP3 run remains outstanding.
-
-
-## Session backup implementation
-
-The SQLite store now creates a timestamped standalone backup with the SQLite online-backup API immediately before the first insert, update, or delete in each opened session. The backup is checked with `PRAGMA integrity_check` before the mutation is allowed. A failed backup blocks the mutation and leaves the store available for reads. Further mutations in the same session reuse the same pre-session backup; a newly opened session creates a new backup on its first mutation. Backups are not automatically deleted.
-
-The test suite exercises pre-insert and pre-update snapshots, one-backup-per-session behaviour, a second session, manual backups, restore from a known snapshot, pre-restore safety copies, rejection of non-SQLite restore sources, and fail-closed behaviour when the backup directory cannot be used. These tests use generated databases and backup files only.
-
-Remaining data-protection work: distinguish a genuine first launch from a missing expected database, version the schema, implement audit logging, and test crash/recovery cases. The current executable must not yet be used with the user's real database.
