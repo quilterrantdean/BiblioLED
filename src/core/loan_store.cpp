@@ -1359,7 +1359,7 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
         SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
-    if (!EnsureSessionBackup(error)) return false;
+    if (!EnsureAutomaticBackup(error)) return false;
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
     LoanRecord before;
@@ -1418,7 +1418,7 @@ bool LoanStore::Remove(int id, std::string* error)
         SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
-    if (!EnsureSessionBackup(error)) return false;
+    if (!EnsureAutomaticBackup(error)) return false;
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
     LoanRecord before;
