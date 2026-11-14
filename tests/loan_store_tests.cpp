@@ -146,6 +146,20 @@ int main()
     Check(events.empty(), "new database should start with no audit events");
     Check(!store.HasSessionBackup(), "opening a database should not create a backup");
 
+    // Audit-only writes (such as startup/shutdown) must not create automatic backups.
+    const std::string audit_only_database = database + ".audit-only.sqlite";
+    biblioled::LoanStore audit_only_store;
+    Check(audit_only_store.Open(audit_only_database, ".", &error),
+          "an isolated audit-only database should open");
+    if (audit_only_store.IsOpen()) {
+        Check(audit_only_store.RecordAuditEvent("startup", "test session", &error),
+              "an audit-only lifecycle event should be recorded");
+        Check(!audit_only_store.HasSessionBackup(),
+              "an audit-only event must not trigger an automatic loan-data backup");
+        audit_only_store.Close();
+    }
+    RemoveDatabaseFiles(audit_only_database);
+
     // CRUD writes and audit rows must commit or roll back together.
     biblioled::LoanRecord book;
     book.title = "Açúcar e café";
@@ -238,7 +252,7 @@ int main()
     Check(count == 2, "future-dated records should be included in quota counts");
     store.Close();
 
-    // A second session gets a new snapshot before its first mutation.
+    // A second session on the same day reuses the existing daily snapshot.
     biblioled::LoanStore reopened;
     Check(reopened.Open(database, ".", &error), "database should reopen");
     Check(reopened.SchemaVersion() == 1, "reopened database should retain schema version 1");
@@ -293,6 +307,7 @@ int main()
               "pre-restore safety copy should retain the matching audit history");
         pre_restore_reader.Close();
     }
+    if (pre_restore_decoded != pre_restore_backup) RemoveDatabaseFiles(pre_restore_decoded);
 
     Check(reopened.GetAll(&records, &error) && records.size() == 2,
           "restore should replace the database with the selected snapshot");
@@ -436,8 +451,8 @@ int main()
           "confirmed legacy migration should succeed");
     Check(legacy.SchemaVersion() == 1, "migration should set schema version 1");
     Check(!legacy.MigrationRequired(), "successful migration should clear read-only state");
-    Check(legacy.HasSessionBackup() && legacy.LastSessionBackupPath() == migration_backup,
-          "migration should retain its validated pre-migration backup");
+    Check(!legacy.HasSessionBackup(),
+          "a safety backup for schema migration must not count as a daily loan-data backup");
     backups.push_back(migration_backup);
 
     Check(legacy.GetAll(&records, &error) && records.size() == 1,
