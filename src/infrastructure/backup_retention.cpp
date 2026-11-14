@@ -197,7 +197,7 @@ bool PruneAutomaticBackups(const std::string& directory,
         } else {
             const int backup_month = year * 12 + (month - 1);
             const int month_age = current_month - backup_month;
-            if (month_age >= 0 && month_age < 12) {
+            if (month_age >= 1 && month_age <= 12) {
                 std::map<int, std::string>::iterator found = monthly.find(month_age);
                 if (found == monthly.end() || found->second < names[i]) monthly[month_age] = names[i];
             }
