@@ -187,36 +187,51 @@ void DeleteSelected(HWND dialog,HistoryContext* context)
     UpdateActions(dialog,context);
 }
 
+void MoveControlDlu(HWND dialog,int id,int x,int y,int width,int height)
+{
+    RECT bounds={x,y,x+width,y+height};
+    if(!MapDialogRect(dialog,&bounds)) return;
+    MoveWindow(GetDlgItem(dialog,id),bounds.left,bounds.top,
+               bounds.right-bounds.left,bounds.bottom-bounds.top,TRUE);
+}
+
 void LayoutControls(HWND dialog)
 {
     RECT client={};
     GetClientRect(dialog,&client);
-    const int width=client.right-client.left;
-    const int height=client.bottom-client.top;
+    RECT base_units={0,0,4,8};
+    if(!MapDialogRect(dialog,&base_units) ||
+       base_units.right<=0 || base_units.bottom<=0) return;
+
+    const int width_px=client.right-client.left;
+    const int height_px=client.bottom-client.top;
+    const int width_dlu=(width_px*4+base_units.right/2)/base_units.right;
+    const int height_dlu=(height_px*8+base_units.bottom/2)/base_units.bottom;
     const int margin=8;
-    const int top=28;
-    const int footer=30;
     const int type_width=112;
     const int search_x=50;
-    const int search_width=width-search_x-margin-type_width-8;
+    const int search_width=width_dlu-search_x-margin-type_width-8;
 
-    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_SEARCH),search_x,5,
-               search_width>80?search_width:80,20,TRUE);
-    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_TYPE),width-margin-type_width,5,
-               type_width,100,TRUE);
-    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_LIST),margin,top,
-               width-2*margin>0?width-2*margin:0,
-               height-top-footer>0?height-top-footer:0,TRUE);
+    MoveControlDlu(dialog,IDC_HISTORY_SEARCH,search_x,7,
+                   search_width>80?search_width:80,14);
+    MoveControlDlu(dialog,IDC_HISTORY_TYPE,
+                   width_dlu-margin-type_width,6,type_width,60);
+    MoveControlDlu(dialog,IDC_HISTORY_LIST,margin,26,
+                   width_dlu-2*margin,
+                   height_dlu-26-30>0?height_dlu-26-30:1);
 
-    const int button_y=height-25;
-    const int close_x=width-margin-48;
-    const int delete_x=close_x-6-56;
-    const int edit_x=delete_x-6-48;
-    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_STATUS),margin,button_y+3,
-               edit_x-margin-10>0?edit_x-margin-10:0,16,TRUE);
-    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_EDIT),edit_x,button_y,48,20,TRUE);
-    MoveWindow(GetDlgItem(dialog,IDC_HISTORY_DELETE),delete_x,button_y,56,20,TRUE);
-    MoveWindow(GetDlgItem(dialog,IDOK),close_x,button_y,48,20,TRUE);
+    const int button_y=height_dlu-27;
+    const int close_width=36;
+    const int delete_width=48;
+    const int edit_width=42;
+    const int close_x=width_dlu-margin-close_width;
+    const int delete_x=close_x-6-delete_width;
+    const int edit_x=delete_x-6-edit_width;
+    MoveControlDlu(dialog,IDC_HISTORY_STATUS,margin,button_y+3,
+                   edit_x-margin-10>0?edit_x-margin-10:1,12);
+    MoveControlDlu(dialog,IDC_HISTORY_EDIT,edit_x,button_y,edit_width,18);
+    MoveControlDlu(dialog,IDC_HISTORY_DELETE,delete_x,button_y,delete_width,18);
+    MoveControlDlu(dialog,IDOK,close_x,button_y,close_width,18);
 }
 
 void ShowHistoryContextMenu(HWND dialog,HistoryContext* context,POINT screen_point)
