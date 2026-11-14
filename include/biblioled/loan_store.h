@@ -17,6 +17,20 @@ struct LoanRecord {
     LoanRecord() : id(0) {}
 };
 
+struct AuditEvent {
+    long long id;
+    std::string occurred_at;
+    std::string action;
+    int loan_id;
+    bool has_before;
+    LoanRecord before;
+    bool has_after;
+    LoanRecord after;
+    std::string details;
+
+    AuditEvent() : id(0), loan_id(0), has_before(false), has_after(false) {}
+};
+
 class LoanStore {
 public:
     LoanStore();
@@ -30,6 +44,10 @@ public:
               std::string* error);
     void Close();
     bool IsOpen() const;
+    int SchemaVersion() const;
+    bool MigrationRequired() const;
+    bool MigrateLegacySchema(std::string* backup_path, std::string* error);
+
     bool CreateManualBackup(std::string* backup_path, std::string* error);
     bool RestoreFromBackup(const std::string& backup_path,
                            std::string* current_backup_path,
@@ -40,6 +58,7 @@ public:
 
     bool GetAll(std::vector<LoanRecord>* records, std::string* error);
     bool GetById(int id, LoanRecord* record, std::string* error);
+    bool GetAuditEvents(std::vector<AuditEvent>* events, std::string* error);
     bool Insert(LoanRecord* record, std::string* error);
     bool Update(const LoanRecord& record, std::string* error);
     bool Remove(int id, std::string* error);
@@ -59,6 +78,8 @@ private:
     std::string backup_directory_;
     std::string last_session_backup_path_;
     bool session_backup_done_;
+    int schema_version_;
+    bool migration_required_;
 };
 
 } // namespace biblioled

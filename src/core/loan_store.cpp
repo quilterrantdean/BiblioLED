@@ -51,6 +51,230 @@ bool HasExpectedSchema(sqlite3* db)
            HasColumn(db, "type");
 }
 
+bool HasAuditTable(sqlite3* db, bool* exists, std::string* error)
+{
+    if (exists) *exists = false;
+    sqlite3_stmt* statement = NULL;
+    const char* sql =
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'audit_events';";
+    const int rc = sqlite3_prepare_v2(db, sql, -1, &statement, NULL);
+    if (rc != SQLITE_OK) {
+        if (error) *error = sqlite3_errmsg(db);
+        return false;
+    }
+
+    const int step = sqlite3_step(statement);
+    if (step == SQLITE_ROW) {
+        if (exists) *exists = true;
+    } else if (step != SQLITE_DONE) {
+        if (error) *error = sqlite3_errmsg(db);
+        sqlite3_finalize(statement);
+        return false;
+    }
+
+    sqlite3_finalize(statement);
+    return true;
+}
+
+bool HasAuditSchema(sqlite3* db)
+{
+    static const char* columns[] = {
+        "id", "occurred_at", "action", "loan_id",
+        "before_title", "before_loan_date", "before_type",
+        "after_title", "after_loan_date", "after_type", "details"
+    };
+
+    sqlite3_stmt* statement = NULL;
+    if (sqlite3_prepare_v2(db, "PRAGMA table_info(audit_events);",
+                           -1, &statement, NULL) != SQLITE_OK) {
+        return false;
+    }
+
+    bool found[11] = {false};
+    while (sqlite3_step(statement) == SQLITE_ROW) {
+        const unsigned char* name = sqlite3_column_text(statement, 1);
+        if (!name) continue;
+        for (size_t i = 0; i < sizeof(columns) / sizeof(columns[0]); ++i) {
+            if (sqlite3_stricmp(reinterpret_cast<const char*>(name), columns[i]) == 0) {
+                found[i] = true;
+            }
+        }
+    }
+    sqlite3_finalize(statement);
+
+    for (size_t i = 0; i < sizeof(columns) / sizeof(columns[0]); ++i) {
+        if (!found[i]) return false;
+    }
+    return true;
+}
+
+bool ReadUserVersion(sqlite3* db, int* version, std::string* error)
+{
+    if (!version) {
+        if (error) *error = "Invalid schema-version output argument.";
+        return false;
+    }
+
+    sqlite3_stmt* statement = NULL;
+    const int rc = sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &statement, NULL);
+    if (rc != SQLITE_OK) {
+        if (error) *error = sqlite3_errmsg(db);
+        return false;
+    }
+
+    const int step = sqlite3_step(statement);
+    if (step != SQLITE_ROW) {
+        if (error) *error = sqlite3_errmsg(db);
+        sqlite3_finalize(statement);
+        return false;
+    }
+
+    *version = sqlite3_column_int(statement, 0);
+    sqlite3_finalize(statement);
+    return true;
+}
+
+bool ExecuteSql(sqlite3* db, const char* sql, std::string* error)
+{
+    char* message = NULL;
+    const int rc = sqlite3_exec(db, sql, NULL, NULL, &message);
+    if (rc == SQLITE_OK) return true;
+
+    const std::string detail = message ? message : sqlite3_errmsg(db);
+    sqlite3_free(message);
+    if (error) *error = detail;
+    return false;
+}
+
+std::string CurrentTimestamp()
+{
+    const std::time_t now = std::time(NULL);
+    const std::tm* local = std::localtime(&now);
+    if (!local) return std::string();
+
+    char buffer[32] = {0};
+    if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", local) == 0) {
+        return std::string();
+    }
+    return buffer;
+}
+
+void BindOptionalText(sqlite3_stmt* statement, int index, const std::string* value)
+{
+    if (value) {
+        sqlite3_bind_text(statement, index, value->c_str(), -1, SQLITE_TRANSIENT);
+    } else {
+        sqlite3_bind_null(statement, index);
+    }
+}
+
+bool InsertAuditEvent(sqlite3* db,
+                      const char* action,
+                      int loan_id,
+                      const LoanRecord* before,
+                      const LoanRecord* after,
+                      const std::string& details,
+                      std::string* error)
+{
+    const char* sql =
+        "INSERT INTO audit_events ("
+        "occurred_at, action, loan_id, "
+        "before_title, before_loan_date, before_type, "
+        "after_title, after_loan_date, after_type, details"
+        ") VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10);";
+
+    sqlite3_stmt* statement = NULL;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &statement, NULL);
+    if (rc != SQLITE_OK) {
+        if (error) *error = sqlite3_errmsg(db);
+        return false;
+    }
+
+    const std::string timestamp = CurrentTimestamp();
+    sqlite3_bind_text(statement, 1, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 2, action, -1, SQLITE_TRANSIENT);
+    if (loan_id > 0) sqlite3_bind_int(statement, 3, loan_id);
+    else sqlite3_bind_null(statement, 3);
+
+    BindOptionalText(statement, 4, before ? &before->title : NULL);
+    BindOptionalText(statement, 5, before ? &before->loan_date : NULL);
+    BindOptionalText(statement, 6, before ? &before->type : NULL);
+    BindOptionalText(statement, 7, after ? &after->title : NULL);
+    BindOptionalText(statement, 8, after ? &after->loan_date : NULL);
+    BindOptionalText(statement, 9, after ? &after->type : NULL);
+    sqlite3_bind_text(statement, 10, details.c_str(), -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(statement);
+    sqlite3_finalize(statement);
+    if (rc != SQLITE_DONE) {
+        if (error) *error = sqlite3_errmsg(db);
+        return false;
+    }
+    return true;
+}
+
+bool ReadLoanById(sqlite3* db,
+                  int id,
+                  LoanRecord* record,
+                  bool* found,
+                  std::string* error)
+{
+    if (found) *found = false;
+    sqlite3_stmt* statement = NULL;
+    const char* sql =
+        "SELECT id, title, loan_date, type FROM loans WHERE id = ?1;";
+    int rc = sqlite3_prepare_v2(db, sql, -1, &statement, NULL);
+    if (rc != SQLITE_OK) {
+        if (error) *error = sqlite3_errmsg(db);
+        return false;
+    }
+
+    sqlite3_bind_int(statement, 1, id);
+    rc = sqlite3_step(statement);
+    if (rc == SQLITE_ROW) {
+        if (record) {
+            record->id = sqlite3_column_int(statement, 0);
+            const unsigned char* title = sqlite3_column_text(statement, 1);
+            const unsigned char* loan_date = sqlite3_column_text(statement, 2);
+            const unsigned char* type = sqlite3_column_text(statement, 3);
+            record->title = title ? reinterpret_cast<const char*>(title) : "";
+            record->loan_date = loan_date ? reinterpret_cast<const char*>(loan_date) : "";
+            record->type = type ? reinterpret_cast<const char*>(type) : "";
+        }
+        if (found) *found = true;
+    } else if (rc != SQLITE_DONE) {
+        if (error) *error = sqlite3_errmsg(db);
+        sqlite3_finalize(statement);
+        return false;
+    }
+
+    sqlite3_finalize(statement);
+    return true;
+}
+
+bool CreateAuditSchema(sqlite3* db, std::string* error)
+{
+    static const char* sql =
+        "CREATE TABLE audit_events ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " occurred_at TEXT NOT NULL,"
+        " action TEXT NOT NULL,"
+        " loan_id INTEGER,"
+        " before_title TEXT,"
+        " before_loan_date TEXT,"
+        " before_type TEXT,"
+        " after_title TEXT,"
+        " after_loan_date TEXT,"
+        " after_type TEXT,"
+        " details TEXT NOT NULL DEFAULT ''"
+        ");"
+        "CREATE INDEX idx_audit_events_occurred_at "
+        " ON audit_events(occurred_at, id);"
+        "CREATE INDEX idx_audit_events_loan_id "
+        " ON audit_events(loan_id, id);";
+    return ExecuteSql(db, sql, error);
+}
+
 bool CopyDatabase(sqlite3* source, sqlite3* destination, std::string* error)
 {
     sqlite3_backup* backup = sqlite3_backup_init(destination, "main", source, "main");
@@ -170,6 +394,8 @@ bool LoanStore::Open(const std::string& database_path,
     backup_directory_ = backup_directory;
     session_backup_done_ = false;
     last_session_backup_path_.clear();
+    schema_version_ = -1;
+    migration_required_ = false;
 
     const bool existed = FileExists(database_path);
     const int flags = SQLITE_OPEN_READWRITE | (existed ? 0 : SQLITE_OPEN_CREATE);
@@ -188,18 +414,61 @@ bool LoanStore::Open(const std::string& database_path,
         return false;
     }
 
-    if (existed) {
-        if (!ValidateExistingSchema(error)) {
-            Close();
-            return false;
-        }
-    } else {
+    if (!existed) {
         if (!CreateInitialSchema(error)) {
             Close();
             return false;
         }
+        schema_version_ = 1;
+        migration_required_ = false;
+        return true;
     }
 
+    if (!ValidateExistingSchema(error)) {
+        Close();
+        return false;
+    }
+
+    if (!ReadUserVersion(db_, &schema_version_, error)) {
+        Close();
+        return false;
+    }
+
+    if (schema_version_ < 0 || schema_version_ > 1) {
+        SetError(error,
+            "The database schema version is not supported by this application. "
+            "The database has not been modified.");
+        Close();
+        return false;
+    }
+
+    bool has_audit_table = false;
+    if (!HasAuditTable(db_, &has_audit_table, error)) {
+        Close();
+        return false;
+    }
+
+    if (schema_version_ == 0) {
+        if (has_audit_table) {
+            SetError(error,
+                "The database reports legacy schema version 0 but already contains "
+                "an audit table. Its structure is ambiguous; no migration was attempted.");
+            Close();
+            return false;
+        }
+        migration_required_ = true;
+        return true;
+    }
+
+    if (!has_audit_table || !HasAuditSchema(db_)) {
+        SetError(error,
+            "The database reports schema version 1 but its audit table is missing "
+            "or incomplete. The database has not been modified.");
+        Close();
+        return false;
+    }
+
+    migration_required_ = false;
     return true;
 }
 
@@ -213,11 +482,23 @@ void LoanStore::Close()
     backup_directory_.clear();
     last_session_backup_path_.clear();
     session_backup_done_ = false;
+    schema_version_ = -1;
+    migration_required_ = false;
 }
 
 bool LoanStore::IsOpen() const
 {
     return db_ != NULL;
+}
+
+int LoanStore::SchemaVersion() const
+{
+    return schema_version_;
+}
+
+bool LoanStore::MigrationRequired() const
+{
+    return migration_required_;
 }
 
 bool LoanStore::HasSessionBackup() const
@@ -367,6 +648,18 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
         return false;
     }
 
+    int source_version = -1;
+    bool source_has_audit = false;
+    if (!ReadUserVersion(source_db, &source_version, error) ||
+        source_version < 0 || source_version > 1 ||
+        !HasAuditTable(source_db, &source_has_audit, error) ||
+        (source_version == 0 && source_has_audit) ||
+        (source_version == 1 && (!source_has_audit || !HasAuditSchema(source_db)))) {
+        SetError(error, "The selected backup has an unsupported or inconsistent schema. The current database was not changed.");
+        sqlite3_close(source_db);
+        return false;
+    }
+
     const std::string safety_backup = MakeBackupPath();
     if (safety_backup.empty()) {
         SetError(error, "Could not choose a name for the pre-restore backup. The current database was not changed.");
@@ -388,8 +681,23 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
         restore_error = "Could not close the selected backup after copying.";
     }
 
+    int restored_version = -1;
+    bool restored_has_audit = false;
     if (restored) {
-        restored = QuickCheck(&restore_error) && ValidateExistingSchema(&restore_error);
+        restored = QuickCheck(&restore_error) &&
+                   ValidateExistingSchema(&restore_error) &&
+                   ReadUserVersion(db_, &restored_version, &restore_error) &&
+                   HasAuditTable(db_, &restored_has_audit, &restore_error);
+    }
+    if (restored && restored_version == 1 &&
+        (!restored_has_audit || !HasAuditSchema(db_))) {
+        restored = false;
+        restore_error = "Restored schema version 1 is missing its audit table.";
+    }
+    if (restored && (restored_version < 0 || restored_version > 1 ||
+        (restored_version == 0 && restored_has_audit))) {
+        restored = false;
+        restore_error = "Restored database has an unsupported or inconsistent schema version.";
     }
 
     if (!restored) {
@@ -399,11 +707,22 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
         bool rolled_back = false;
         if (fallback_open == SQLITE_OK && fallback_db) {
             std::string rollback_error;
-            rolled_back = CopyDatabase(fallback_db, db_, &rollback_error);
+            int fallback_version = -1;
+            bool fallback_has_audit = false;
+            rolled_back = ReadUserVersion(fallback_db, &fallback_version, &rollback_error) &&
+                          HasAuditTable(fallback_db, &fallback_has_audit, &rollback_error) &&
+                          fallback_version >= 0 && fallback_version <= 1 &&
+                          ((fallback_version == 0 && !fallback_has_audit) ||
+                           (fallback_version == 1 && fallback_has_audit && HasAuditSchema(fallback_db))) &&
+                          CopyDatabase(fallback_db, db_, &rollback_error);
             sqlite3_close(fallback_db);
             if (rolled_back) {
                 rolled_back = QuickCheck(&rollback_error) &&
                               ValidateExistingSchema(&rollback_error);
+            }
+            if (rolled_back) {
+                schema_version_ = fallback_version;
+                migration_required_ = (fallback_version == 0);
             }
             if (!rolled_back && !rollback_error.empty()) {
                 restore_error += " Rollback attempt also failed: " + rollback_error;
@@ -416,12 +735,16 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
         if (rolled_back) {
             SetError(error, "Restore was not completed. The original database was restored from the safety copy. " + restore_error);
         } else {
+            schema_version_ = -1;
+            migration_required_ = true;
             SetError(error, "Restore failed and automatic rollback could not be verified. Preserve the safety backup at: " +
                             safety_backup + ". " + restore_error);
         }
         return false;
     }
 
+    schema_version_ = restored_version;
+    migration_required_ = (restored_version == 0);
     if (!session_backup_done_) {
         session_backup_done_ = true;
         last_session_backup_path_ = safety_backup;
@@ -431,7 +754,9 @@ bool LoanStore::RestoreFromBackup(const std::string& backup_path,
 
 bool LoanStore::CreateInitialSchema(std::string* error)
 {
-    static const char* sql =
+    if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
+
+    const char* loans_sql =
         "CREATE TABLE loans ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT,"
         " title TEXT NOT NULL,"
@@ -439,14 +764,98 @@ bool LoanStore::CreateInitialSchema(std::string* error)
         " type TEXT NOT NULL"
         ");";
 
-    char* message = NULL;
-    const int rc = sqlite3_exec(db_, sql, NULL, NULL, &message);
-    if (rc != SQLITE_OK) {
-        const std::string detail = message ? message : sqlite3_errmsg(db_);
-        sqlite3_free(message);
-        SetError(error, "Unable to create the initial database schema: " + detail);
+    bool ok = ExecuteSql(db_, loans_sql, error);
+    if (ok) ok = CreateAuditSchema(db_, error);
+    if (ok) ok = ExecuteSql(db_, "PRAGMA user_version = 1;", error);
+    if (ok) ok = QuickCheck(error);
+
+    if (!ok) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
         return false;
     }
+
+    if (!ExecuteSql(db_, "COMMIT;", error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        return false;
+    }
+    return true;
+}
+
+bool LoanStore::MigrateLegacySchema(std::string* backup_path, std::string* error)
+{
+    if (!db_) {
+        SetError(error, "Database is not open.");
+        return false;
+    }
+    if (!migration_required_ || schema_version_ != 0) {
+        SetError(error, "The database does not require the legacy schema migration.");
+        return false;
+    }
+    if (backup_directory_.empty()) {
+        SetError(error, "The backup directory is not configured. The database was not changed.");
+        return false;
+    }
+
+    const std::string safety_backup = MakeBackupPath();
+    if (safety_backup.empty()) {
+        SetError(error, "Could not choose a name for the migration backup. The database was not changed.");
+        return false;
+    }
+    if (!CreateAndValidateBackup(safety_backup, error)) {
+        if (error && !error->empty()) *error += ". The database was not changed.";
+        return false;
+    }
+    if (backup_path) *backup_path = safety_backup;
+    if (!session_backup_done_) {
+        session_backup_done_ = true;
+        last_session_backup_path_ = safety_backup;
+    }
+
+    if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) {
+        if (error && !error->empty()) *error = "Could not start the schema migration: " + *error;
+        return false;
+    }
+
+    int current_version = -1;
+    bool has_audit_table = false;
+    bool ok = ReadUserVersion(db_, &current_version, error);
+    if (ok && current_version != 0) {
+        SetError(error, "The database schema changed after it was inspected. Migration cancelled.");
+        ok = false;
+    }
+    if (ok) ok = HasAuditTable(db_, &has_audit_table, error);
+    if (ok && has_audit_table) {
+        SetError(error, "An audit table already exists in schema version 0. Migration cancelled.");
+        ok = false;
+    }
+    if (ok) ok = CreateAuditSchema(db_, error);
+    if (ok) {
+        ok = InsertAuditEvent(db_, "schema_migration", 0, NULL, NULL,
+                              "schema_version: 0 -> 1", error);
+    }
+    if (ok) ok = ExecuteSql(db_, "PRAGMA user_version = 1;", error);
+    if (ok && (!HasExpectedSchema(db_) || !HasAuditSchema(db_))) {
+        SetError(error, "The migrated schema did not pass structural validation.");
+        ok = false;
+    }
+    if (ok) ok = QuickCheck(error);
+
+    if (!ok) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        if (error && !error->empty()) {
+            *error = "The schema migration was rolled back. The original database remains unchanged: " + *error;
+        }
+        return false;
+    }
+
+    if (!ExecuteSql(db_, "COMMIT;", error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        if (error && !error->empty()) *error = "Could not commit the schema migration: " + *error;
+        return false;
+    }
+
+    schema_version_ = 1;
+    migration_required_ = false;
     return true;
 }
 
@@ -485,6 +894,77 @@ bool LoanStore::QuickCheck(std::string* error)
     sqlite3_finalize(statement);
     if (!valid) {
         SetError(error, SqliteError(db_, "Database integrity check failed"));
+        return false;
+    }
+    return true;
+}
+
+bool LoanStore::GetAuditEvents(std::vector<AuditEvent>* events, std::string* error)
+{
+    if (!db_ || !events) {
+        SetError(error, "Invalid database or output argument.");
+        return false;
+    }
+    if (migration_required_) {
+        SetError(error, "The legacy database must be migrated before audit events can be read.");
+        return false;
+    }
+
+    events->clear();
+    sqlite3_stmt* statement = NULL;
+    const char* sql =
+        "SELECT id, occurred_at, action, loan_id, "
+        "before_title, before_loan_date, before_type, "
+        "after_title, after_loan_date, after_type, details "
+        "FROM audit_events ORDER BY id;";
+
+    int rc = sqlite3_prepare_v2(db_, sql, -1, &statement, NULL);
+    if (rc != SQLITE_OK) {
+        SetError(error, SqliteError(db_, "Unable to prepare audit-event query"));
+        return false;
+    }
+
+    while ((rc = sqlite3_step(statement)) == SQLITE_ROW) {
+        AuditEvent event;
+        event.id = sqlite3_column_int64(statement, 0);
+        const unsigned char* occurred_at = sqlite3_column_text(statement, 1);
+        const unsigned char* action = sqlite3_column_text(statement, 2);
+        event.occurred_at = occurred_at ? reinterpret_cast<const char*>(occurred_at) : "";
+        event.action = action ? reinterpret_cast<const char*>(action) : "";
+        if (sqlite3_column_type(statement, 3) != SQLITE_NULL) {
+            event.loan_id = sqlite3_column_int(statement, 3);
+        }
+
+        if (sqlite3_column_type(statement, 4) != SQLITE_NULL) {
+            event.has_before = true;
+            event.before.id = event.loan_id;
+            const unsigned char* title = sqlite3_column_text(statement, 4);
+            const unsigned char* loan_date = sqlite3_column_text(statement, 5);
+            const unsigned char* type = sqlite3_column_text(statement, 6);
+            event.before.title = title ? reinterpret_cast<const char*>(title) : "";
+            event.before.loan_date = loan_date ? reinterpret_cast<const char*>(loan_date) : "";
+            event.before.type = type ? reinterpret_cast<const char*>(type) : "";
+        }
+
+        if (sqlite3_column_type(statement, 7) != SQLITE_NULL) {
+            event.has_after = true;
+            event.after.id = event.loan_id;
+            const unsigned char* title = sqlite3_column_text(statement, 7);
+            const unsigned char* loan_date = sqlite3_column_text(statement, 8);
+            const unsigned char* type = sqlite3_column_text(statement, 9);
+            event.after.title = title ? reinterpret_cast<const char*>(title) : "";
+            event.after.loan_date = loan_date ? reinterpret_cast<const char*>(loan_date) : "";
+            event.after.type = type ? reinterpret_cast<const char*>(type) : "";
+        }
+
+        const unsigned char* details = sqlite3_column_text(statement, 10);
+        event.details = details ? reinterpret_cast<const char*>(details) : "";
+        events->push_back(event);
+    }
+
+    sqlite3_finalize(statement);
+    if (rc != SQLITE_DONE) {
+        SetError(error, SqliteError(db_, "Unable to read audit events"));
         return false;
     }
     return true;
@@ -573,35 +1053,48 @@ bool LoanStore::GetById(int id, LoanRecord* record, std::string* error)
 
 bool LoanStore::Insert(LoanRecord* record, std::string* error)
 {
-    if (!db_ || !record || record->title.empty() || record->loan_date.empty() || record->type.empty()) {
+    if (!db_ || !record || record->title.empty() ||
+        record->loan_date.empty() || record->type.empty()) {
         SetError(error, "A valid database, title, date and type are required.");
         return false;
     }
-
+    if (migration_required_) {
+        SetError(error, "The legacy database must be migrated before it can be changed.");
+        return false;
+    }
     if (!EnsureSessionBackup(error)) return false;
+    if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
     sqlite3_stmt* statement = NULL;
     const char* sql =
         "INSERT INTO loans (title, loan_date, type) VALUES (?1, ?2, ?3);";
-
     int rc = sqlite3_prepare_v2(db_, sql, -1, &statement, NULL);
-    if (rc != SQLITE_OK) {
-        SetError(error, SqliteError(db_, "Unable to prepare loan insertion"));
+    bool ok = rc == SQLITE_OK;
+    if (!ok) SetError(error, SqliteError(db_, "Unable to prepare loan insertion"));
+
+    if (ok) {
+        sqlite3_bind_text(statement, 1, record->title.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(statement, 2, record->loan_date.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(statement, 3, record->type.c_str(), -1, SQLITE_TRANSIENT);
+        rc = sqlite3_step(statement);
+        ok = rc == SQLITE_DONE;
+        if (!ok) SetError(error, SqliteError(db_, "Unable to insert loan"));
+    }
+    if (statement) sqlite3_finalize(statement);
+
+    const int new_id = ok
+        ? static_cast<int>(sqlite3_last_insert_rowid(db_)) : 0;
+    if (ok) ok = InsertAuditEvent(db_, "create", new_id, NULL, record, "", error);
+
+    if (!ok) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
         return false;
     }
-
-    sqlite3_bind_text(statement, 1, record->title.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 2, record->loan_date.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 3, record->type.c_str(), -1, SQLITE_TRANSIENT);
-
-    rc = sqlite3_step(statement);
-    sqlite3_finalize(statement);
-    if (rc != SQLITE_DONE) {
-        SetError(error, SqliteError(db_, "Unable to insert loan"));
+    if (!ExecuteSql(db_, "COMMIT;", error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
         return false;
     }
-
-    record->id = static_cast<int>(sqlite3_last_insert_rowid(db_));
+    record->id = new_id;
     return true;
 }
 
@@ -612,34 +1105,50 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
         SetError(error, "A valid record is required for update.");
         return false;
     }
-
+    if (migration_required_) {
+        SetError(error, "The legacy database must be migrated before it can be changed.");
+        return false;
+    }
     if (!EnsureSessionBackup(error)) return false;
+    if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
+
+    LoanRecord before;
+    bool found = false;
+    if (!ReadLoanById(db_, record.id, &before, &found, error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        return false;
+    }
+    if (!found) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        SetError(error, "Loan record was not found.");
+        return false;
+    }
 
     sqlite3_stmt* statement = NULL;
     const char* sql =
         "UPDATE loans SET title = ?1, loan_date = ?2, type = ?3 WHERE id = ?4;";
-
     int rc = sqlite3_prepare_v2(db_, sql, -1, &statement, NULL);
-    if (rc != SQLITE_OK) {
-        SetError(error, SqliteError(db_, "Unable to prepare loan update"));
+    bool ok = rc == SQLITE_OK;
+    if (!ok) SetError(error, SqliteError(db_, "Unable to prepare loan update"));
+
+    if (ok) {
+        sqlite3_bind_text(statement, 1, record.title.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(statement, 2, record.loan_date.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(statement, 3, record.type.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(statement, 4, record.id);
+        rc = sqlite3_step(statement);
+        ok = rc == SQLITE_DONE && sqlite3_changes(db_) > 0;
+        if (!ok) SetError(error, SqliteError(db_, "Unable to update loan"));
+    }
+    if (statement) sqlite3_finalize(statement);
+
+    if (ok) ok = InsertAuditEvent(db_, "update", record.id, &before, &record, "", error);
+    if (!ok) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
         return false;
     }
-
-    sqlite3_bind_text(statement, 1, record.title.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 2, record.loan_date.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 3, record.type.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(statement, 4, record.id);
-
-    rc = sqlite3_step(statement);
-    const int changed = sqlite3_changes(db_);
-    sqlite3_finalize(statement);
-
-    if (rc != SQLITE_DONE) {
-        SetError(error, SqliteError(db_, "Unable to update loan"));
-        return false;
-    }
-    if (changed == 0) {
-        SetError(error, "Loan record was not found.");
+    if (!ExecuteSql(db_, "COMMIT;", error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
         return false;
     }
     return true;
@@ -651,27 +1160,46 @@ bool LoanStore::Remove(int id, std::string* error)
         SetError(error, "A valid record identifier is required.");
         return false;
     }
-
+    if (migration_required_) {
+        SetError(error, "The legacy database must be migrated before it can be changed.");
+        return false;
+    }
     if (!EnsureSessionBackup(error)) return false;
+    if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
+
+    LoanRecord before;
+    bool found = false;
+    if (!ReadLoanById(db_, id, &before, &found, error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        return false;
+    }
+    if (!found) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        SetError(error, "Loan record was not found.");
+        return false;
+    }
 
     sqlite3_stmt* statement = NULL;
-    int rc = sqlite3_prepare_v2(db_, "DELETE FROM loans WHERE id = ?1;", -1, &statement, NULL);
-    if (rc != SQLITE_OK) {
-        SetError(error, SqliteError(db_, "Unable to prepare loan deletion"));
+    int rc = sqlite3_prepare_v2(
+        db_, "DELETE FROM loans WHERE id = ?1;", -1, &statement, NULL);
+    bool ok = rc == SQLITE_OK;
+    if (!ok) SetError(error, SqliteError(db_, "Unable to prepare loan deletion"));
+
+    if (ok) {
+        sqlite3_bind_int(statement, 1, id);
+        rc = sqlite3_step(statement);
+        ok = rc == SQLITE_DONE && sqlite3_changes(db_) > 0;
+        if (!ok) SetError(error, SqliteError(db_, "Unable to delete loan"));
+    }
+    if (statement) sqlite3_finalize(statement);
+
+    if (ok) ok = InsertAuditEvent(db_, "delete", id, &before, NULL, "", error);
+    if (!ok) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
         return false;
     }
-
-    sqlite3_bind_int(statement, 1, id);
-    rc = sqlite3_step(statement);
-    const int changed = sqlite3_changes(db_);
-    sqlite3_finalize(statement);
-
-    if (rc != SQLITE_DONE) {
-        SetError(error, SqliteError(db_, "Unable to delete loan"));
-        return false;
-    }
-    if (changed == 0) {
-        SetError(error, "Loan record was not found.");
+    if (!ExecuteSql(db_, "COMMIT;", error)) {
+        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
         return false;
     }
     return true;

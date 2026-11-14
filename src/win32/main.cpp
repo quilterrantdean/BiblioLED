@@ -56,6 +56,8 @@ std::wstring gApplicationDirectory;
 biblioled::LoanStore gStore;
 AppSettings gSettings;
 
+void UpdateWriteAccess(HWND window);
+
 enum {
     kToolbarHeight = 34,
     kQuotaHeight = 24,
@@ -459,6 +461,47 @@ void ShowStoreError(const wchar_t* operation, const std::string& error)
     MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED", MB_OK | MB_ICONERROR);
 }
 
+bool OfferLegacyMigration(HWND owner)
+{
+    if (!gStore.MigrationRequired()) return true;
+
+    std::wstring question =
+        L"A base de dados usa o esquema legado (versão 0).\n\n"
+        L"A migração para a versão 1 acrescenta uma tabela de auditoria interna. "
+        L"Os registos de empréstimos não serão convertidos nem eliminados.\n\n"
+        L"Antes da migração será criada e validada uma cópia integral da base de dados. "
+        L"A migração é transaccional e exige confirmação.\n\n"
+        L"Pretende migrar agora?";
+
+    if (MessageBoxW(owner, question.c_str(), L"Migração da base de dados",
+                    MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) != IDYES) {
+        MessageBoxW(owner,
+            L"A base de dados será aberta em modo só de leitura. "
+            L"Pode consultar os empréstimos e criar cópias de segurança, "
+            L"mas não pode alterar registos até confirmar a migração.",
+            L"Modo só de leitura", MB_OK | MB_ICONINFORMATION);
+        return false;
+    }
+
+    std::string backup_path;
+    std::string error;
+    if (!gStore.MigrateLegacySchema(&backup_path, &error)) {
+        std::wstring message = L"Não foi possível migrar a base de dados.\n\n";
+        message += Utf8ToWide(error);
+        MessageBoxW(owner, message.c_str(), L"Migração da base de dados",
+                    MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    std::wstring message = L"Base de dados migrada para a versão 1.\n\n";
+    message += L"Cópia de segurança anterior à migração:\n";
+    message += Utf8ToWide(backup_path);
+    MessageBoxW(owner, message.c_str(), L"Migração concluída",
+                MB_OK | MB_ICONINFORMATION);
+    return true;
+}
+
+
 void InsertColumn(int index, const wchar_t* title, int width)
 {
     LVCOLUMNW column = {};
@@ -571,10 +614,12 @@ void RefreshList()
 
     wchar_t status[256] = {0};
     _snwprintf(status, 255,
-        L"%u empréstimo(s) apresentados  |  Actualizado às %ls%s",
+        L"%u empréstimo(s) apresentados  |  Actualizado às %ls%ls%ls",
         static_cast<unsigned int>(visible.size()),
         Utf8ToWide(FormatDateTime(now, "%H:%M:%S")).c_str(),
-        invalid_dates ? L"  |  Existem registos com datas inválidas" : L"");
+        invalid_dates ? L"  |  Existem registos com datas inválidas" : L"",
+        gStore.MigrationRequired()
+            ? L"  |  Só leitura: migração por confirmar" : L"");
     SetWindowTextW(gStatusLabel, status);
 }
 
@@ -648,11 +693,14 @@ void RestoreDatabaseFromBackup()
         return;
     }
 
-    RefreshList();
     std::wstring message = L"Base de dados reposta. A versão anterior foi salvaguardada em:\n\n";
     message += Utf8ToWide(safety_backup);
     MessageBoxW(gMainWindow, message.c_str(), L"BiblioLED",
                 MB_OK | MB_ICONINFORMATION);
+
+    OfferLegacyMigration(gMainWindow);
+    UpdateWriteAccess(gMainWindow);
+    RefreshList();
 }
 
 void EditLoan()
@@ -709,14 +757,15 @@ HMENU CreateApplicationMenu()
     HMENU view_menu = CreatePopupMenu();
     HMENU help_menu = CreatePopupMenu();
 
-    AppendMenuW(file_menu, MF_STRING, IDM_NEW, L"Novo registo\tCtrl+N");
+    const UINT write_menu_flags = gStore.MigrationRequired() ? MF_GRAYED : MF_STRING;
+    AppendMenuW(file_menu, write_menu_flags, IDM_NEW, L"Novo registo\tCtrl+N");
     AppendMenuW(file_menu, MF_STRING, IDM_BACKUP, L"Criar cópia de segurança...");
     AppendMenuW(file_menu, MF_STRING, IDM_RESTORE, L"Repor a partir de cópia...");
     AppendMenuW(file_menu, MF_SEPARATOR, 0, NULL);
     AppendMenuW(file_menu, MF_STRING, IDM_EXIT, L"Sair");
 
-    AppendMenuW(record_menu, MF_STRING, IDM_EDIT, L"Editar\tEnter");
-    AppendMenuW(record_menu, MF_STRING, IDM_DELETE, L"Eliminar\tDelete");
+    AppendMenuW(record_menu, write_menu_flags, IDM_EDIT, L"Editar\tEnter");
+    AppendMenuW(record_menu, write_menu_flags, IDM_DELETE, L"Eliminar\tDelete");
 
     AppendMenuW(view_menu, MF_STRING, IDM_REFRESH, L"Actualizar\tF5");
     AppendMenuW(help_menu, MF_STRING, IDM_ABOUT, L"Sobre");
@@ -730,11 +779,13 @@ HMENU CreateApplicationMenu()
 
 void CreateChildControls(HWND window)
 {
-    CreateWindowW(L"BUTTON", L"Novo", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+    const DWORD write_button_style = WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON |
+        (gStore.MigrationRequired() ? WS_DISABLED : 0);
+    CreateWindowW(L"BUTTON", L"Novo", write_button_style,
         8, 6, 62, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_NEW), gInstance, NULL);
-    CreateWindowW(L"BUTTON", L"Editar", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+    CreateWindowW(L"BUTTON", L"Editar", write_button_style,
         74, 6, 62, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_EDIT), gInstance, NULL);
-    CreateWindowW(L"BUTTON", L"Eliminar", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+    CreateWindowW(L"BUTTON", L"Eliminar", write_button_style,
         140, 6, 66, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_DELETE), gInstance, NULL);
     CreateWindowW(L"BUTTON", L"Actualizar", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         210, 6, 78, 24, window, reinterpret_cast<HMENU>(IDC_BUTTON_REFRESH), gInstance, NULL);
@@ -762,6 +813,29 @@ void CreateChildControls(HWND window)
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         8, 0, 700, 20, window,
         reinterpret_cast<HMENU>(IDC_STATUS_LABEL), gInstance, NULL);
+}
+
+void UpdateWriteAccess(HWND window)
+{
+    if (!window) return;
+    const BOOL enabled = gStore.MigrationRequired() ? FALSE : TRUE;
+
+    EnableWindow(GetDlgItem(window, IDC_BUTTON_NEW), enabled);
+    EnableWindow(GetDlgItem(window, IDC_BUTTON_EDIT), enabled);
+    EnableWindow(GetDlgItem(window, IDC_BUTTON_DELETE), enabled);
+
+    HMENU menu = GetMenu(window);
+    if (menu) {
+        HMENU file_menu = GetSubMenu(menu, 0);
+        HMENU record_menu = GetSubMenu(menu, 1);
+        const UINT flags = MF_BYCOMMAND | (enabled ? MF_ENABLED : MF_GRAYED);
+        if (file_menu) EnableMenuItem(file_menu, IDM_NEW, flags);
+        if (record_menu) {
+            EnableMenuItem(record_menu, IDM_EDIT, flags);
+            EnableMenuItem(record_menu, IDM_DELETE, flags);
+        }
+        DrawMenuBar(window);
+    }
 }
 
 void LayoutControls(HWND window)
@@ -806,6 +880,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
     switch (message) {
     case WM_CREATE:
         CreateChildControls(window);
+        UpdateWriteAccess(window);
         LayoutControls(window);
         RefreshList();
         return 0;
@@ -984,6 +1059,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
             return 1;
         }
     }
+
+    OfferLegacyMigration(NULL);
 
     INITCOMMONCONTROLSEX controls = {};
     controls.dwSize = sizeof(controls);
