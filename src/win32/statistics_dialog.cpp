@@ -25,7 +25,7 @@ std::wstring Utf8ToWide(const std::string& value)
     if(value.empty()) return std::wstring();
     const int length=MultiByteToWideChar(CP_UTF8,0,value.c_str(),-1,NULL,0);
     if(length<=1) return std::wstring();
-    std::wstring result(static_cast<size_t>(length),L'\\0');
+    std::wstring result(static_cast<size_t>(length),L'\0');
     MultiByteToWideChar(CP_UTF8,0,value.c_str(),-1,&result[0],length);
     result.resize(static_cast<size_t>(length-1));
     return result;
