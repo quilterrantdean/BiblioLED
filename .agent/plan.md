@@ -45,9 +45,10 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Establish the initial project structure and CMake build configuration.
 - [ ] Implement the portable path model.
 - [ ] Implement settings loading, validation, and persistence.
-- [ ] Implement SQLite access and schema versioning.
+- [ ] Implement SQLite schema versioning.
 - [ ] Implement safe migration from the current database schema, with explicit confirmation.
-- [ ] Implement backup, validation, restore, and recovery flows.
+- [x] Implement SQLite online backups before the first data mutation in each session, with integrity validation and fail-closed behaviour.
+- [ ] Implement manual backup, restore, and recovery flows.
 - [ ] Implement diagnostic and audit logging.
 
 ### Phase 4 — Application functionality and interface

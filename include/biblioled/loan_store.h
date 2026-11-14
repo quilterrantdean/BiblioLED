@@ -25,9 +25,14 @@ public:
     LoanStore(const LoanStore&) = delete;
     LoanStore& operator=(const LoanStore&) = delete;
 
-    bool Open(const std::string& database_path, std::string* error);
+    bool Open(const std::string& database_path,
+              const std::string& backup_directory,
+              std::string* error);
     void Close();
     bool IsOpen() const;
+
+    bool HasSessionBackup() const;
+    const std::string& LastSessionBackupPath() const;
 
     bool GetAll(std::vector<LoanRecord>* records, std::string* error);
     bool GetById(int id, LoanRecord* record, std::string* error);
@@ -40,9 +45,16 @@ public:
 private:
     bool CreateInitialSchema(std::string* error);
     bool ValidateExistingSchema(std::string* error);
+    bool EnsureSessionBackup(std::string* error);
+    bool CreateAndValidateBackup(const std::string& path, std::string* error);
+    std::string MakeBackupPath() const;
     void SetError(std::string* error, const std::string& message) const;
 
     sqlite3* db_;
+    std::string database_path_;
+    std::string backup_directory_;
+    std::string last_session_backup_path_;
+    bool session_backup_done_;
 };
 
 } // namespace biblioled

@@ -2,6 +2,8 @@
 
 #include <sqlite3.h>
 
+#include <cstdio>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 
@@ -14,12 +16,12 @@ bool FileExists(const std::string& path)
     return file.good();
 }
 
-std::string SqliteError(sqlite3* db, const std::string& operation)
+std::string JoinPath(const std::string& directory, const std::string& name)
 {
-    std::string message = operation;
-    message += ": ";
-    message += db ? sqlite3_errmsg(db) : "SQLite database is not open";
-    return message;
+    if (directory.empty()) return name;
+    const char last = directory[directory.size() - 1];
+    if (last == '/' || last == '\\') return directory + name;
+    return directory + "/" + name;
 }
 
 bool HasColumn(sqlite3* db, const char* column_name)
@@ -41,9 +43,72 @@ bool HasColumn(sqlite3* db, const char* column_name)
     return found;
 }
 
+bool ValidateDatabaseFile(const std::string& path, std::string* error)
+{
+    sqlite3* check_db = NULL;
+    int rc = sqlite3_open_v2(path.c_str(), &check_db, SQLITE_OPEN_READONLY, NULL);
+    if (rc != SQLITE_OK) {
+        if (error) {
+            *error = check_db ? sqlite3_errmsg(check_db) : "Could not open backup for validation.";
+        }
+        if (check_db) sqlite3_close(check_db);
+        return false;
+    }
+
+    sqlite3_stmt* statement = NULL;
+    rc = sqlite3_prepare_v2(check_db, "PRAGMA integrity_check;", -1, &statement, NULL);
+    if (rc != SQLITE_OK) {
+        if (error) *error = sqlite3_errmsg(check_db);
+        sqlite3_close(check_db);
+        return false;
+    }
+
+    bool saw_result = false;
+    bool valid = true;
+    while ((rc = sqlite3_step(statement)) == SQLITE_ROW) {
+        saw_result = true;
+        const unsigned char* result = sqlite3_column_text(statement, 0);
+        if (!result || sqlite3_stricmp(reinterpret_cast<const char*>(result), "ok") != 0) {
+            valid = false;
+            if (error) {
+                *error = result
+                    ? reinterpret_cast<const char*>(result)
+                    : "SQLite integrity_check returned an empty result.";
+            }
+        }
+    }
+
+    if (rc != SQLITE_DONE) {
+        valid = false;
+        if (error) *error = sqlite3_errmsg(check_db);
+    }
+    if (!saw_result) {
+        valid = false;
+        if (error) *error = "SQLite integrity_check returned no result.";
+    }
+
+    sqlite3_finalize(statement);
+    const int close_rc = sqlite3_close(check_db);
+    if (close_rc != SQLITE_OK) {
+        valid = false;
+        if (error) *error = "Could not close the backup after validation.";
+    }
+    return valid;
+}
+
+std::string SqliteError(sqlite3* db, const std::string& operation)
+{
+    std::string message = operation;
+    message += ": ";
+    message += db ? sqlite3_errmsg(db) : "SQLite database is not open";
+    return message;
+}
+
 } // namespace
 
-LoanStore::LoanStore() : db_(NULL)
+LoanStore::LoanStore()
+    : db_(NULL),
+      session_backup_done_(false)
 {
 }
 
@@ -54,14 +119,19 @@ LoanStore::~LoanStore()
 
 void LoanStore::SetError(std::string* error, const std::string& message) const
 {
-    if (error) {
-        *error = message;
-    }
+    if (error) *error = message;
 }
 
-bool LoanStore::Open(const std::string& database_path, std::string* error)
+bool LoanStore::Open(const std::string& database_path,
+                     const std::string& backup_directory,
+                     std::string* error)
 {
     Close();
+
+    database_path_ = database_path;
+    backup_directory_ = backup_directory;
+    session_backup_done_ = false;
+    last_session_backup_path_.clear();
 
     const bool existed = FileExists(database_path);
     const int flags = SQLITE_OPEN_READWRITE | (existed ? 0 : SQLITE_OPEN_CREATE);
@@ -101,11 +171,131 @@ void LoanStore::Close()
         sqlite3_close(db_);
         db_ = NULL;
     }
+    database_path_.clear();
+    backup_directory_.clear();
+    last_session_backup_path_.clear();
+    session_backup_done_ = false;
 }
 
 bool LoanStore::IsOpen() const
 {
     return db_ != NULL;
+}
+
+bool LoanStore::HasSessionBackup() const
+{
+    return session_backup_done_;
+}
+
+const std::string& LoanStore::LastSessionBackupPath() const
+{
+    return last_session_backup_path_;
+}
+
+std::string LoanStore::MakeBackupPath() const
+{
+    const std::time_t now = std::time(NULL);
+    const std::tm* local = std::localtime(&now);
+    if (!local) return std::string();
+
+    char timestamp[32] = {0};
+    if (std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", local) == 0) {
+        return std::string();
+    }
+
+    for (int suffix = 0; suffix < 1000; ++suffix) {
+        std::ostringstream filename;
+        filename << "BiblioLED_" << timestamp;
+        if (suffix > 0) filename << "_" << suffix;
+        filename << ".sqlite";
+
+        const std::string candidate = JoinPath(backup_directory_, filename.str());
+        if (!FileExists(candidate)) return candidate;
+    }
+    return std::string();
+}
+
+bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* error)
+{
+    sqlite3* backup_db = NULL;
+    int rc = sqlite3_open_v2(
+        path.c_str(), &backup_db,
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL);
+    if (rc != SQLITE_OK) {
+        SetError(error, SqliteError(backup_db, "Could not create the session backup"));
+        if (backup_db) sqlite3_close(backup_db);
+        std::remove(path.c_str());
+        return false;
+    }
+
+    sqlite3_busy_timeout(backup_db, 3000);
+    sqlite3_backup* backup = sqlite3_backup_init(backup_db, "main", db_, "main");
+    if (!backup) {
+        SetError(error, SqliteError(backup_db, "Could not initialise the SQLite backup"));
+        sqlite3_close(backup_db);
+        std::remove(path.c_str());
+        return false;
+    }
+
+    rc = SQLITE_OK;
+    int attempts = 0;
+    while (attempts < 200) {
+        rc = sqlite3_backup_step(backup, -1);
+        if (rc == SQLITE_DONE) break;
+        if (rc == SQLITE_OK) continue;
+        if (rc == SQLITE_BUSY || rc == SQLITE_LOCKED) {
+            ++attempts;
+            sqlite3_sleep(25);
+            continue;
+        }
+        break;
+    }
+
+    const int finish_rc = sqlite3_backup_finish(backup);
+    const std::string backup_error = sqlite3_errmsg(backup_db);
+    const int close_rc = sqlite3_close(backup_db);
+
+    if (rc != SQLITE_DONE || finish_rc != SQLITE_OK || close_rc != SQLITE_OK) {
+        std::string message = "SQLite backup failed";
+        if (!backup_error.empty()) message += ": " + backup_error;
+        SetError(error, message);
+        std::remove(path.c_str());
+        return false;
+    }
+
+    std::string validation_error;
+    if (!ValidateDatabaseFile(path, &validation_error)) {
+        SetError(error, "The session backup failed integrity validation: " + validation_error);
+        std::remove(path.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool LoanStore::EnsureSessionBackup(std::string* error)
+{
+    if (session_backup_done_) return true;
+    if (backup_directory_.empty()) {
+        SetError(error, "The backup directory is not configured. The database was not changed.");
+        return false;
+    }
+
+    const std::string path = MakeBackupPath();
+    if (path.empty()) {
+        SetError(error, "Could not choose a unique name for the session backup. The database was not changed.");
+        return false;
+    }
+
+    if (!CreateAndValidateBackup(path, error)) {
+        if (error && !error->empty()) {
+            *error += ". The database was not changed.";
+        }
+        return false;
+    }
+
+    last_session_backup_path_ = path;
+    session_backup_done_ = true;
+    return true;
 }
 
 bool LoanStore::CreateInitialSchema(std::string* error)
@@ -260,6 +450,8 @@ bool LoanStore::Insert(LoanRecord* record, std::string* error)
         return false;
     }
 
+    if (!EnsureSessionBackup(error)) return false;
+
     sqlite3_stmt* statement = NULL;
     const char* sql =
         "INSERT INTO loans (title, loan_date, type) VALUES (?1, ?2, ?3);";
@@ -292,6 +484,8 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
         SetError(error, "A valid record is required for update.");
         return false;
     }
+
+    if (!EnsureSessionBackup(error)) return false;
 
     sqlite3_stmt* statement = NULL;
     const char* sql =
@@ -329,6 +523,8 @@ bool LoanStore::Remove(int id, std::string* error)
         SetError(error, "A valid record identifier is required.");
         return false;
     }
+
+    if (!EnsureSessionBackup(error)) return false;
 
     sqlite3_stmt* statement = NULL;
     int rc = sqlite3_prepare_v2(db_, "DELETE FROM loans WHERE id = ?1;", -1, &statement, NULL);

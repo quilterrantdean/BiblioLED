@@ -104,3 +104,12 @@ The current `development` head has passed both jobs in GitHub Actions:
 - **Win32 compile check:** 32-bit Windows configure, SQLite amalgamation compile, native Win32 application link, and Win32 SQLite store tests pass using a modern Windows SDK/toolchain.
 
 This validates the current source on a modern Windows build runner. It does **not** validate the executable on Windows XP. The w64devkit x86 XP-targeted build has passed its separate workflow and publishes a disposable test artifact; an actual XP SP3 run remains outstanding.
+
+
+## Session backup implementation
+
+The SQLite store now creates a timestamped standalone backup with the SQLite online-backup API immediately before the first insert, update, or delete in each opened session. The backup is checked with `PRAGMA integrity_check` before the mutation is allowed. A failed backup blocks the mutation and leaves the store available for reads. Further mutations in the same session reuse the same pre-session backup; a newly opened session creates a new backup on its first mutation. Backups are not automatically deleted.
+
+The test suite exercises pre-insert and pre-update snapshots, one-backup-per-session behaviour, a second session, and fail-closed behaviour when the backup directory cannot be used. These tests use generated databases and backup files only.
+
+Remaining data-protection work: distinguish a genuine first launch from a missing expected database, add a complete manual backup/restore flow, version the schema, implement audit logging, and test crash/recovery cases. The current executable must not yet be used with the user's real database.

@@ -831,7 +831,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         JoinPath(gApplicationDirectory, L"data\\biblioteca.sqlite");
     const std::string database_utf8 = WideToUtf8(database_path);
     std::string database_error;
-    if (!gStore.Open(database_utf8, &database_error)) {
+    const std::wstring backup_directory =
+        JoinPath(gApplicationDirectory, L"data\\backups");
+    const std::string backup_directory_utf8 = WideToUtf8(backup_directory);
+    if (!gStore.Open(database_utf8, backup_directory_utf8, &database_error)) {
         MessageBoxW(NULL,
             (L"Não foi possível abrir a base de dados.\n\n" +
              Utf8ToWide(database_error)).c_str(),
