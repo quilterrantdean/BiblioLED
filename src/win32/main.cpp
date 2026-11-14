@@ -1124,7 +1124,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         if (gLoanList &&
             reinterpret_cast<NMHDR*>(lParam)->hwndFrom == ListView_GetHeader(gLoanList)) {
             const UINT code = reinterpret_cast<NMHDR*>(lParam)->code;
-            if (code == HDN_ENDDRAGW || code == HDN_ENDTRACKW) {
+            if (code == HDN_ENDDRAG || code == HDN_ENDTRACKW) {
                 PostMessageW(window, kPersistColumnsMessage, 0, 0);
                 return FALSE;
             }
