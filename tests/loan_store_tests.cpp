@@ -249,8 +249,8 @@ int main()
     std::string zlib_manual_backup;
     Check(store.CreateManualBackup(&zlib_manual_backup, &error),
           "zlib-format manual backup should be created and validated");
-    Check(zlib_manual_backup.size() >= 10 &&
-          zlib_manual_backup.compare(zlib_manual_backup.size() - 10, 10, ".sqlite.zlib") == 0,
+    Check(zlib_manual_backup.size() >= 12 &&
+          zlib_manual_backup.compare(zlib_manual_backup.size() - 12, 12, ".sqlite.zlib") == 0,
           "zlib-format backup should use the .sqlite.zlib extension");
     backups.push_back(zlib_manual_backup);
 
