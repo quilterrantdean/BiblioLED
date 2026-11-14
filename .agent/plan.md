@@ -2,7 +2,7 @@
 
 ## Current status
 
-**Stage:** the Win32/SQLite foundation now has session/manual backups, verified restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing, recoverable rotating external audit logs, an embedded executable icon, and persistent draggable table columns. Linux, modern Win32, and XP-targeted w64devkit CI pass on commit d6ab5a8. Actual Windows XP SP3 runtime validation remains outstanding.
+**Stage:** the Win32/SQLite foundation now has session/manual backups, verified restore, missing-database protection, schema version 1 and explicit legacy migration, transactional internal auditing for loan changes, migration, lifecycle, and backup/restore operations, recoverable rotating external audit logs, an embedded executable icon, and persistent draggable table columns. The new operational-audit changes require fresh CI validation. Actual Windows XP SP3 runtime validation remains outstanding.
 
 The application remains a proof of concept, not the complete replacement. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
@@ -54,7 +54,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
 - [x] Synchronise internal audit events to the external append-only UTF-8 log using stable event fingerprints; recover an incomplete final line and rotate archives at the configured size.
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; F5 retries synchronisation without requiring an application restart.
-- [ ] Extend audit coverage beyond loan CRUD and schema migration to lifecycle, backup/restore, settings, exports, warnings, errors, and failures.
+- [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
+- [ ] Extend audit coverage to settings changes, exports, warnings, errors, and failures.
 
 ### Phase 4 — Application functionality and interface
 
