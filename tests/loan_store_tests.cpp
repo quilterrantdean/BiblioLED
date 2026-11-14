@@ -353,6 +353,40 @@ int main()
     Check(reopened.GetAll(&records, &error) && records.size() == 3,
           "invalid restore source must not change the current database");
     Check(reopened.QuickCheck(&error), "quick_check should pass after restore and failure injection");
+
+    Check(reopened.GetAuditEvents(&events, &error),
+          "audit events should be readable before operational audit test");
+    const size_t operational_event_count = events.size();
+    Check(reopened.RecordAuditEvent("manual_backup", "path=isolated-test.sqlite", &error),
+          "a generic operational audit event should be recorded");
+    Check(reopened.GetAuditEvents(&events, &error) &&
+          events.size() == operational_event_count + 1,
+          "a generic operational event should append exactly one audit row");
+    if (events.size() == operational_event_count + 1) {
+        Check(events.back().action == "manual_backup" &&
+              events.back().details == "path=isolated-test.sqlite" &&
+              !events.back().has_before && !events.back().has_after,
+              "an operational audit event should preserve its action and details without loan values");
+    }
+
+    sqlite3* audit_failure_db = NULL;
+    Check(sqlite3_open(database.c_str(), &audit_failure_db) == SQLITE_OK,
+          "a second connection should open for operational audit failure injection");
+    if (audit_failure_db) {
+        Check(Execute(audit_failure_db,
+            "CREATE TRIGGER fail_audit_insert BEFORE INSERT ON audit_events "
+            "BEGIN SELECT RAISE(ABORT, 'audit write blocked'); END;"),
+            "operational audit failure trigger should be created");
+        Check(!reopened.RecordAuditEvent("restore", "must roll back", &error),
+              "an operational event should fail when its audit insert is rejected");
+        Check(reopened.GetAuditEvents(&events, &error) &&
+              events.size() == operational_event_count + 1,
+              "a failed operational audit insert must not leave an audit row");
+        Check(Execute(audit_failure_db, "DROP TRIGGER fail_audit_insert;"),
+              "operational audit failure trigger should be removed");
+        sqlite3_close(audit_failure_db);
+    }
+
     reopened.Close();
 
     // Legacy schema v0 is readable but write-protected until confirmed migration.
