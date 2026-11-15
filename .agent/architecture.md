@@ -176,3 +176,8 @@ The implementation baseline at commit `923b8d38c61f22e93055fe112db1f780da61f5bd`
 The artefact is a disposable test build, not a release. CI validates the file-move rollback path and startup checks, but does not replace runtime validation of the recovery wizard and GUI on a physical Windows XP SP3 system.
 
 The user reports having tested the application manually, but the precise artefact, Windows build and scenarios have not yet been captured. CI checks are not themselves runtime evidence from a physical Windows XP SP3 installation.
+
+
+## CI action provenance
+
+The core and XP workflows pin JavaScript actions to immutable upstream release commit SHAs rather than mutable major-version tags. `actions/checkout` v7.0.1 is pinned to `3d3c42e5aac5ba805825da76410c181273ba90b1`; `actions/upload-artifact` v7.0.2 is pinned to `cf430e030ddbb5b0abf93d22962f4752f3646cd9`. Both release manifests declare the Node.js 24 runtime. The remaining dependency review covers CMake FetchContent archives and the pinned w64devkit toolchain.

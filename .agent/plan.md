@@ -108,7 +108,9 @@ The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee592
 ### Phase 5 — Verification and delivery
 
 - [ ] Continue expanding automated coverage for power-loss/interrupted recovery, rollback-failure branches, migration, settings persistence and UI workflows. The store suite now covers recovery from missing/corrupt databases, preservation of SQLite sidecars, invalid-candidate non-interference, stale staging/decompression sidecars, invalid automatic-backup sidecar preservation, Unicode Windows database/backup paths, missing-ID update/delete without automatic backups, and a Windows failure-injection test confirming rollback after an original-sidecar move fails. All tests use synthetic/isolated data.
-- [ ] Validate the newly added Cppcheck static-analysis job and assess dependency provenance/update checks. Its first run identified two uninitialised `LoanStore` state members; their initialisation and the bounded-memory audit scan are being validated in the next run.
+- [x] Add Cppcheck 2.19.0 warning, performance and portability analysis for the portable C++11 code. Its first run identified two uninitialised `LoanStore` state members; both are now explicitly initialised, and the clean analysis run passes.
+- [x] Pin GitHub Actions to reviewed immutable Node 24 action commits: `actions/checkout` v7.0.1 and `actions/upload-artifact` v7.0.2.
+- [ ] Complete the remaining dependency provenance/update review, including the pinned CMake FetchContent sources and w64devkit archive.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
 - [x] Confirm the w64devkit XP-targeted workflow passes and publish a downloadable test build.
