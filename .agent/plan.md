@@ -2,10 +2,12 @@
 
 ## Current status
 
-**Stage:** the C++11/Win32/SQLite proof of concept now includes guided missing/corrupt-database recovery, rollback/failure-injection coverage, Unicode-safe storage/settings paths, temporary-sidecar protection, and fail-closed startup checks. Source commit `923b8d38c61f22e93055fe112db1f780da61f5bd` on `development` passed both CI workflows:
+**Stage:** the C++11/Win32/SQLite proof of concept now includes guided recovery, rollback/failure-injection coverage, Unicode-safe database/settings paths, fail-closed startup validation, strict SQLite integrity/schema checks, and bounded-memory external audit-log synchronisation. Latest source commit `c1efdd4b525e619ba4f734d126e688084d8c3086` on `development` passed the complete CI matrix:
 
-- [Core tests run 43720771401](https://github.com/quilterrantdean/BiblioLED/actions/runs/43720771401): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed, including recovery rollback failure injection, invalid automatic-backup sidecar preservation, Unicode paths, and no-op mutation checks.
-- [XP-targeted build run 43720771387](https://github.com/quilterrantdean/BiblioLED/actions/runs/43720771387): pinned w64devkit x86 build, all 7 XP-targeted CTest tests, recovery rollback failure injection, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14163967976](https://github.com/quilterrantdean/BiblioLED/actions/runs/43720771387), `BiblioLED-XP-PoC` (1,498,735 bytes), archive SHA-256 `b74248df2750df12c6b7b98262e646af65478cdd9f746055dfb25676c7b4602c`; executable SHA-256 `101cceab528567b3ac5ffb73ccbad1702a2ee352a63d4af6c33e52cdac7c482d`.
+- [Core tests run 43762231743](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231743): Ubuntu core tests, modern Windows SDK Win32 build/tests, and Cppcheck 2.19.0 all passed.
+- [XP-targeted build run 43762231788](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788): pinned w64devkit x86 2.10.0 build, all 7 XP-targeted tests, PE32/i386 + Windows GUI subsystem 5.01 + import checks, package and upload all passed. Artefact [14180238131](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788), `BiblioLED-XP-PoC`, 1,499,379 bytes; ZIP SHA-256 `8608997a072e2e98ee2ef0d8c45db5f1f04172e4f2bbf415ab459588a41e37ba`; executable SHA-256 `5cb2b169cfcaff69002b7ff794bf6be4d25900d18c1f238d540ebad6480f3cf1`.
+
+The audit-log reader now streams with a fixed 64 KiB buffer. Windows tests exercise event-fingerprint parsing when both the `event_key=` marker and the fingerprint itself straddle a read-block boundary, recovery of an incomplete active-log tail, refusal to alter an incomplete archive, read-only active-log recovery, and rotation/idempotence. `LoanStore` now initialises its schema state explicitly, validates full SQLite quick-check output and rejects incomplete schema metadata scans. Cppcheck reports no warnings in its selected portable C++11 scope.
 
 The UI implementation includes the top-level **Opções** menu, explicit audit-log retry command, event-driven refresh without polling, removal of redundant refresh UI, Ctrl+N/Ctrl+H accelerators, a resizable/reorderable/context-menu history window, statistics from a per-open snapshot, and UTF-8 resource/source handling. History controls are laid out in dialog units so they remain aligned when the window is resized.
 
@@ -68,7 +70,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; retry through **Ficheiro > Tentar sincronizar registo de auditoria...**.
 - [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
 - [x] Record general/backup settings changes and CSV exports in the transactional audit log.
-- [ ] Extend application audit-event coverage to warnings, errors, and failures. The external log transport now has dedicated Windows tests for active-log write denial and incomplete archived logs; the new assertions are awaiting CI validation.
+- [ ] Extend application audit-event coverage to warnings, errors, and failures.
+- [x] Harden external audit-log transport and verify read-only active-log recovery, incomplete archived-log rejection, rotation/idempotence and 64 KiB parser-boundary handling on both modern Windows and the XP-targeted build.
 - [x] Separate audit-only writes (including startup/shutdown and settings changes) from loan-data backup triggers.
 - [x] Implement the approved automatic-backup retention policy: 7 daily, 4 weekly, and 12 monthly snapshots. Only recognised automatic backups are pruned; manual and restore/migration safety backups are preserved. Unknown filenames are preserved.
 - [x] Integrate statically linked zlib 1.4 for streaming gzip and zlib wrappers. Verify compressed round-trips and SQLite integrity; keep `.sqlite` backups compatible.
@@ -103,7 +106,7 @@ The current CI validation baseline and XP artefact are recorded in **Current sta
 - [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
 - [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
 
-The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The guided-recovery, rollback-test and startup-protection implementation passed Core and XP-targeted CI at `923b8d38c61f22e93055fe112db1f780da61f5bd` (runs 43720771401 and 43720771387). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
+The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The latest audit streaming, parser-boundary, SQLite integrity, Cppcheck and Node 24 workflow changes passed Core and XP-targeted CI at `c1efdd4b525e619ba4f734d126e688084d8c3086` (runs 43762231743 and 43762231788). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
 
 ### Phase 5 — Verification and delivery
 
@@ -115,6 +118,7 @@ The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee592
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
 - [x] Confirm the w64devkit XP-targeted workflow passes and publish a downloadable test build.
 - [x] Run the full portable core/store/backup test suite on Linux and Windows, including Windows audit-log tests.
+- [x] Validate streamed audit-log parsing across 64 KiB read boundaries and confirm the full seven-test Windows/XP suite passes.
 - [ ] Validate the application and tests on Windows XP as well as newer systems.
 - [ ] Produce a portable 32-bit ZIP distribution.
 - [ ] Document the build and release process.

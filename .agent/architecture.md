@@ -168,15 +168,14 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-The implementation baseline at commit `923b8d38c61f22e93055fe112db1f780da61f5bd` passed:
+Latest source commit `c1efdd4b525e619ba4f734d126e688084d8c3086` on `development` passed the complete CI matrix:
 
-- [Core tests run 43720771401](https://github.com/quilterrantdean/BiblioLED/actions/runs/43720771401): Ubuntu core tests and modern Windows SDK Win32 compile/store tests, including recovery rollback failure injection, invalid automatic-backup sidecar preservation, Unicode paths, and no-op mutation checks.
-- [XP-targeted build run 43720771387](https://github.com/quilterrantdean/BiblioLED/actions/runs/43720771387): w64devkit x86 build, all 7 XP-targeted CTest tests, recovery rollback failure injection, PE32/i386 + GUI subsystem 5.01 + import inspection; artefact [14163967976](https://github.com/quilterrantdean/BiblioLED/actions/runs/43720771387), `BiblioLED-XP-PoC` (1,498,735 bytes), archive SHA-256 `b74248df2750df12c6b7b98262e646af65478cdd9f746055dfb25676c7b4602c`; executable SHA-256 `101cceab528567b3ac5ffb73ccbad1702a2ee352a63d4af6c33e52cdac7c482d`.
+- [Core tests run 43762231743](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231743): Ubuntu core tests, modern Windows SDK Win32 compile/tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43762231788](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
 
-The artefact is a disposable test build, not a release. CI validates the file-move rollback path and startup checks, but does not replace runtime validation of the recovery wizard and GUI on a physical Windows XP SP3 system.
+Latest CI artefact: [14180238131](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788), `BiblioLED-XP-PoC`, 1,499,379 bytes. ZIP SHA-256: `8608997a072e2e98ee2ef0d8c45db5f1f04172e4f2bbf415ab459588a41e37ba`; executable SHA-256: `5cb2b169cfcaff69002b7ff794bf6be4d25900d18c1f238d540ebad6480f3cf1`.
 
-The user reports having tested the application manually, but the precise artefact, Windows build and scenarios have not yet been captured. CI checks are not themselves runtime evidence from a physical Windows XP SP3 installation.
-
+The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it does not contain a database. This is a disposable validation artefact, not a normal portable release. CI verifies build compatibility metadata and isolated tests, but does not replace runtime validation of the recovery wizard, Portuguese glyph rendering and general UI on a physical Windows XP SP3 system.
 
 ## CI action provenance
 
