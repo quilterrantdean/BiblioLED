@@ -68,6 +68,9 @@ struct VisibleLoan {
     std::time_t expiry;
     long days_remaining;
 
+    std::wstring title_sort;
+    std::wstring type_sort;
+
     VisibleLoan()
         : loan_time(static_cast<std::time_t>(-1)),
           expiry(static_cast<std::time_t>(-1)),
@@ -92,6 +95,9 @@ bool gGeneralSettingsPending = false;
 AppSettings gPendingGeneralSettings;
 biblioled::LoanStore gStore;
 AppSettings gSettings;
+std::vector<VisibleLoan> gVisibleLoans;
+int gMainSortColumn = 3;
+bool gMainSortAscending = true;
 
 void CopyGeneralSettings(const AppSettings& source, AppSettings* destination)
 {
@@ -765,30 +771,96 @@ void InsertColumn(int index, const wchar_t* title, int width)
     ListView_InsertColumn(gLoanList, index, &column);
 }
 
+int CompareTextInsensitive(const std::wstring& left,
+                           const std::wstring& right)
+{
+    const int result = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE,
+        left.c_str(), -1, right.c_str(), -1);
+    if (result == 0) {
+        if (left < right) return -1;
+        if (right < left) return 1;
+        return 0;
+    }
+    return result - CSTR_EQUAL;
+}
+bool MainLoanLess(const VisibleLoan& left, const VisibleLoan& right)
+{
+    int comparison = 0;
+    switch (gMainSortColumn) {
+    case 0: comparison = CompareTextInsensitive(left.title_sort, right.title_sort); break;
+    case 1: comparison = CompareTextInsensitive(left.type_sort, right.type_sort); break;
+    case 2: comparison = left.loan_time < right.loan_time ? -1 : (left.loan_time > right.loan_time ? 1 : 0); break;
+    case 3: comparison = left.expiry < right.expiry ? -1 : (left.expiry > right.expiry ? 1 : 0); break;
+    case 4: comparison = left.days_remaining < right.days_remaining ? -1 : (left.days_remaining > right.days_remaining ? 1 : 0); break;
+    default: comparison = 0; break;
+    }
+    if (comparison == 0) return left.record.id < right.record.id;
+    return gMainSortAscending ? comparison < 0 : comparison > 0;
+}
+void SortMainLoans()
+{
+    std::sort(gVisibleLoans.begin(), gVisibleLoans.end(), MainLoanLess);
+}
+void PopulateMainLoanList()
+{
+    if (!gLoanList) return;
+    ListView_DeleteAllItems(gLoanList);
+    for (size_t i = 0; i < gVisibleLoans.size(); ++i) {
+        const VisibleLoan& item = gVisibleLoans[i];
+        const biblioled::LoanRecord& record = item.record;
+        const std::wstring type = record.type == "audiolivro" ? L"Audiolivro" : L"Livro";
+        const std::wstring loan_date = Utf8ToWide(biblioled::FormatLocalDateTime(item.loan_time, "%d/%m/%Y %H:%M"));
+        const std::wstring expiry = Utf8ToWide(biblioled::FormatLocalDateTime(item.expiry, "%d/%m/%Y %H:%M"));
+        wchar_t days[32] = {0};
+        _snwprintf(days, 31, L"%ld", item.days_remaining);
+        LVITEMW row = {};
+        row.mask = LVIF_TEXT | LVIF_PARAM;
+        row.iItem = static_cast<int>(i);
+        row.iSubItem = 0;
+        row.pszText = const_cast<LPWSTR>(item.title_sort.c_str());
+        row.lParam = record.id;
+        const int inserted = ListView_InsertItem(gLoanList, &row);
+        if (inserted >= 0) {
+            ListView_SetItemText(gLoanList, inserted, 1, const_cast<LPWSTR>(type.c_str()));
+            ListView_SetItemText(gLoanList, inserted, 2, const_cast<LPWSTR>(loan_date.c_str()));
+            ListView_SetItemText(gLoanList, inserted, 3, const_cast<LPWSTR>(expiry.c_str()));
+            ListView_SetItemText(gLoanList, inserted, 4, days);
+        }
+    }
+}
+void SelectMainRecord(int record_id)
+{
+    if (!gLoanList || record_id <= 0) return;
+    for (int i = 0; i < ListView_GetItemCount(gLoanList); ++i) {
+        LVITEMW item = {};
+        item.mask = LVIF_PARAM;
+        item.iItem = i;
+        if (ListView_GetItem(gLoanList, &item) && static_cast<int>(item.lParam) == record_id) {
+            ListView_SetItemState(gLoanList, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
+            ListView_SetItemState(gLoanList, i, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+            ListView_EnsureVisible(gLoanList, i, FALSE);
+            return;
+        }
+    }
+}
 void RefreshList()
 {
     if (!gLoanList) return;
-
     std::vector<biblioled::LoanRecord> records;
     std::string error;
     if (!gStore.GetAll(&records, &error)) {
         ShowStoreError(L"Não foi possível ler os empréstimos.", error);
         return;
     }
-
     const std::time_t now = std::time(NULL);
     std::vector<VisibleLoan> visible;
     int invalid_dates = 0;
-
     for (size_t i = 0; i < records.size(); ++i) {
         biblioled::LoanEvaluation evaluation;
-        if (!biblioled::EvaluateLoanDateTime(
-                records[i].loan_date, gSettings.loan_duration_days,
-                now, &evaluation)) {
+        if (!biblioled::EvaluateLoanDateTime(records[i].loan_date, gSettings.loan_duration_days, now, &evaluation)) {
             ++invalid_dates;
             continue;
         }
-
         // Future records remain visible and continue to reserve quota.
         // Expired records remain available in the separate history window.
         if (evaluation.visible_in_operational_list) {
@@ -797,44 +869,14 @@ void RefreshList()
             item.loan_time = evaluation.loan_time;
             item.expiry = evaluation.expiry_time;
             item.days_remaining = evaluation.days_remaining;
+            item.title_sort = Utf8ToWide(records[i].title);
+            item.type_sort = Utf8ToWide(records[i].type);
             visible.push_back(item);
         }
     }
-
-    std::sort(visible.begin(), visible.end(),
-        [](const VisibleLoan& left, const VisibleLoan& right) {
-            if (left.expiry != right.expiry) return left.expiry < right.expiry;
-            return left.record.id < right.record.id;
-        });
-
-    ListView_DeleteAllItems(gLoanList);
-
-    for (size_t i = 0; i < visible.size(); ++i) {
-        const biblioled::LoanRecord& record = visible[i].record;
-        const std::wstring title = Utf8ToWide(record.title);
-        const std::wstring type = record.type == "audiolivro" ? L"Audiolivro" : L"Livro";
-        const std::wstring loan_date = Utf8ToWide(
-            biblioled::FormatLocalDateTime(visible[i].loan_time, "%d/%m/%Y %H:%M"));
-        const std::wstring expiry = Utf8ToWide(
-            biblioled::FormatLocalDateTime(visible[i].expiry, "%d/%m/%Y %H:%M"));
-        wchar_t days[32] = {0};
-        _snwprintf(days, 31, L"%ld", visible[i].days_remaining);
-
-        LVITEMW row = {};
-        row.mask = LVIF_TEXT | LVIF_PARAM;
-        row.iItem = static_cast<int>(i);
-        row.iSubItem = 0;
-        row.pszText = const_cast<LPWSTR>(title.c_str());
-        row.lParam = record.id;
-        const int inserted = ListView_InsertItem(gLoanList, &row);
-
-        if (inserted >= 0) {
-            ListView_SetItemText(gLoanList, inserted, 1, const_cast<LPWSTR>(type.c_str()));
-            ListView_SetItemText(gLoanList, inserted, 2, const_cast<LPWSTR>(loan_date.c_str()));
-            ListView_SetItemText(gLoanList, inserted, 3, const_cast<LPWSTR>(expiry.c_str()));
-            ListView_SetItemText(gLoanList, inserted, 4, days);
-        }
-    }
+    gVisibleLoans.swap(visible);
+    SortMainLoans();
+    PopulateMainLoanList();
 
     int daily_count = 0;
     int monthly_count = 0;
@@ -872,7 +914,7 @@ void RefreshList()
     wchar_t status[256] = {0};
     _snwprintf(status, 255,
         L"%u empréstimo(s) apresentados%ls%ls%ls",
-        static_cast<unsigned int>(visible.size()),
+        static_cast<unsigned int>(gVisibleLoans.size()),
         invalid_dates ? L"  |  Existem registos com datas inválidas" : L"",
         gStore.MigrationRequired()
             ? L"  |  Só leitura: migração por confirmar" : L"",
@@ -1711,8 +1753,23 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         break;
 
     case WM_NOTIFY:
+        if (lParam) {
+            const NMHDR* notification = reinterpret_cast<const NMHDR*>(lParam);
+            if (notification->idFrom == IDC_LOAN_LIST && notification->code == LVN_COLUMNCLICK) {
+                const NMLISTVIEW* click = reinterpret_cast<const NMLISTVIEW*>(lParam);
+                if (click && click->iSubItem >= 0 && click->iSubItem < kColumnCount) {
+                    const int selected_id = SelectedRecordId();
+                    if (click->iSubItem == gMainSortColumn) gMainSortAscending = !gMainSortAscending;
+                    else { gMainSortColumn = click->iSubItem; gMainSortAscending = true; }
+                    SortMainLoans();
+                    PopulateMainLoanList();
+                    SelectMainRecord(selected_id);
+                }
+                return 0;
+            }
+        }
         if (gLoanList &&
-            reinterpret_cast<NMHDR*>(lParam)->hwndFrom == ListView_GetHeader(gLoanList)) {
+            reinterpret_cast<NMHDR*>(lParam)->hwndFrom == ListView_GetHeader(gLoanList))
             const UINT code = reinterpret_cast<NMHDR*>(lParam)->code;
             if (code == HDN_ENDDRAG || code == HDN_ENDTRACKW) {
                 PostMessageW(window, kPersistColumnsMessage, 0, 0);
