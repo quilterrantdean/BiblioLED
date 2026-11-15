@@ -160,7 +160,13 @@ std::wstring Utf8ToWide(const std::string& value)
 bool EnsureDirectory(const std::wstring& path)
 {
     if (CreateDirectoryW(path.c_str(), NULL)) return true;
-    return GetLastError() == ERROR_ALREADY_EXISTS;
+
+    const DWORD create_error = GetLastError();
+    if (create_error != ERROR_ALREADY_EXISTS) return false;
+
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
 bool FileExistsW(const std::wstring& path)
@@ -1834,11 +1840,32 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         return 0;
     }
 
-    EnsureDirectory(JoinPath(gApplicationDirectory, L"config"));
-    EnsureDirectory(JoinPath(gApplicationDirectory, L"data"));
-    EnsureDirectory(JoinPath(gApplicationDirectory, L"data\\backups"));
-    EnsureDirectory(JoinPath(gApplicationDirectory, L"exports"));
-    EnsureDirectory(JoinPath(gApplicationDirectory, L"logs"));
+    const std::wstring required_directories[] = {
+        JoinPath(gApplicationDirectory, L"config"),
+        JoinPath(gApplicationDirectory, L"data"),
+        JoinPath(gApplicationDirectory, L"data\\backups"),
+        JoinPath(gApplicationDirectory, L"exports"),
+        JoinPath(gApplicationDirectory, L"logs")
+    };
+    for (size_t i = 0;
+         i < sizeof(required_directories) / sizeof(required_directories[0]); ++i) {
+        if (!EnsureDirectory(required_directories[i])) {
+            std::wstring message =
+                L"Não foi possível criar ou utilizar a pasta necessária:\n\n";
+            message += required_directories[i];
+            message +=
+                L"\n\nConfirme que o caminho não está ocupado por um ficheiro "
+                L"e que a aplicação tem permissões de escrita.";
+            MessageBoxW(NULL, message.c_str(), L"BiblioLED",
+                        MB_OK | MB_ICONERROR);
+            if (gInstanceMutex) {
+                ReleaseMutex(gInstanceMutex);
+                CloseHandle(gInstanceMutex);
+                gInstanceMutex = NULL;
+            }
+            return 1;
+        }
+    }
 
     std::string settings_error;
     gSettingsPath = JoinPath(gApplicationDirectory, L"config\\settings.ini");
