@@ -772,6 +772,18 @@ int main()
         recovery_source.Close();
     }
 
+    // A decompression target must not reuse a basename that has an orphaned
+    // SQLite WAL from an earlier interrupted restore/recovery.
+    const std::string stale_decoded_wal =
+        recovery_backup + ".decoded_sqlite_0.tmp-wal";
+    {
+        std::ofstream stale_wal(stale_decoded_wal.c_str(),
+                                std::ios::out | std::ios::binary);
+        stale_wal << "stale WAL from an interrupted decompression";
+    }
+    Check(FileExists(stale_decoded_wal),
+          "stale decompression WAL sidecar should be created");
+
     // An abandoned sidecar from a previous interrupted recovery must not
     // be attached to a newly created staging database.
     const std::string stale_staging_wal =
@@ -791,6 +803,10 @@ int main()
           "a valid backup should recover a missing database");
     Check(FileExists(recovery_target_database),
           "missing-database recovery should install the restored database");
+    Check(FileExists(stale_decoded_wal),
+          "backup decoding should leave an unrelated stale WAL sidecar untouched");
+    Check(!FileExists(recovery_backup + ".decoded_sqlite_1.tmp"),
+          "decoded SQLite temporary file should be removed after recovery");
     Check(FileExists(stale_staging_wal),
           "recovery should leave an unrelated stale staging sidecar untouched");
     Check(preserved_database.empty(),
@@ -847,6 +863,8 @@ int main()
     Check(FileExists(recovery_backup),
           "successful recovery should leave the selected backup available");
 
+    RemoveDatabaseFiles(recovery_backup + ".decoded_sqlite_0.tmp");
+    RemoveDatabaseFiles(recovery_backup + ".decoded_sqlite_1.tmp");
     RemoveDatabaseFiles(recovery_source_database);
     RemoveDatabaseFiles(recovery_target_database);
     RemoveDatabaseFiles(recovery_target_database + ".recovery_staging_0.tmp");

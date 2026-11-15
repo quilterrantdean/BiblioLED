@@ -384,13 +384,24 @@ bool ValidateDatabaseFile(const std::string& path, std::string* error)
     return valid;
 }
 
+bool HasTemporaryDatabaseFiles(const std::string& path)
+{
+    return FileExists(path) ||
+           FileExists(path + "-journal") ||
+           FileExists(path + "-wal") ||
+           FileExists(path + "-shm");
+}
+
 std::string MakeTemporaryBackupPath(const std::string& base,
-                                      const std::string& purpose)
+                                    const std::string& purpose)
 {
     for (int suffix = 0; suffix < 1000; ++suffix) {
         std::ostringstream name;
         name << base << "." << purpose << "_" << suffix << ".tmp";
-        if (!FileExists(name.str())) return name.str();
+        const std::string candidate = name.str();
+        // Some temporary files are opened by SQLite after decompression or
+        // snapshot creation. Never reuse a basename with an orphaned sidecar.
+        if (!HasTemporaryDatabaseFiles(candidate)) return candidate;
     }
     return std::string();
 }
@@ -401,6 +412,8 @@ bool HasSuffix(const std::string& value, const char* suffix)
     return value.size() >= ending.size() &&
            value.compare(value.size() - ending.size(), ending.size(), ending) == 0;
 }
+
+void RemoveTemporaryDatabaseFiles(const std::string& path);
 
 bool DecodeBackupFile(const std::string& path,
                       std::string* sqlite_path,
@@ -416,7 +429,7 @@ bool DecodeBackupFile(const std::string& path,
         }
         if (!DecompressBackupFile(path, decoded,
                 BackupCompressionFormat::Gzip, error)) {
-            RemoveBackupFile(decoded);
+            RemoveTemporaryDatabaseFiles(decoded);
             return false;
         }
         if (sqlite_path) *sqlite_path = decoded;
@@ -431,7 +444,7 @@ bool DecodeBackupFile(const std::string& path,
         }
         if (!DecompressBackupFile(path, decoded,
                 BackupCompressionFormat::Zlib, error)) {
-            RemoveBackupFile(decoded);
+            RemoveTemporaryDatabaseFiles(decoded);
             return false;
         }
         if (sqlite_path) *sqlite_path = decoded;
@@ -446,7 +459,7 @@ struct ScopedBackupFile {
     std::string path;
     ~ScopedBackupFile()
     {
-        if (!path.empty()) RemoveBackupFile(path);
+        if (!path.empty()) RemoveTemporaryDatabaseFiles(path);
     }
 };
 
@@ -502,21 +515,9 @@ std::string SqliteError(sqlite3* db, const std::string& operation)
 }
 
 std::string MakeTemporaryDatabasePath(const std::string& base,
-                                             const std::string& purpose)
+                                     const std::string& purpose)
 {
-    for (int suffix = 0; suffix < 1000; ++suffix) {
-        std::ostringstream path;
-        path << base << "." << purpose << "_" << suffix << ".tmp";
-        const std::string candidate = path.str();
-        if (FileExists(candidate) ||
-            FileExists(candidate + "-journal") ||
-            FileExists(candidate + "-wal") ||
-            FileExists(candidate + "-shm")) {
-            continue;
-        }
-        return candidate;
-    }
-    return std::string();
+    return MakeTemporaryBackupPath(base, purpose);
 }
 
 std::string MakeRecoveryPreservedPath(const std::string& database_path, int suffix)
@@ -535,13 +536,6 @@ std::string MakeRecoveryPreservedPath(const std::string& database_path, int suff
     return path.str();
 }
 
-void RemoveTemporaryDatabaseFiles(const std::string& path)
-{
-    RemoveBackupFile(path);
-    RemoveBackupFile(path + "-journal");
-    RemoveBackupFile(path + "-wal");
-    RemoveBackupFile(path + "-shm");
-}
 
 } // namespace
 
@@ -770,6 +764,7 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(backup_db, "Could not create the temporary SQLite snapshot"));
         if (backup_db) sqlite3_close(backup_db);
+        RemoveTemporaryDatabaseFiles(raw_path);
         return false;
     }
 
@@ -783,14 +778,14 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
         if (!copy_error.empty()) message += ": " + copy_error;
         if (close_rc != SQLITE_OK) message += ": could not close the snapshot file";
         SetError(error, message);
-        RemoveBackupFile(raw_path);
+        RemoveTemporaryDatabaseFiles(raw_path);
         return false;
     }
 
     std::string validation_error;
     if (!ValidateDatabaseFile(raw_path, &validation_error)) {
         SetError(error, "The SQLite snapshot failed integrity validation: " + validation_error);
-        RemoveBackupFile(raw_path);
+        RemoveTemporaryDatabaseFiles(raw_path);
         return false;
     }
 
@@ -798,7 +793,7 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
         CompressionFormatFromName(backup_compression_format_);
     if (!CompressBackupFile(raw_path, compressed_path, format,
                             backup_compression_level_, error)) {
-        RemoveBackupFile(raw_path);
+        RemoveTemporaryDatabaseFiles(raw_path);
         return false;
     }
 
@@ -808,22 +803,22 @@ bool LoanStore::CreateAndValidateBackup(const std::string& path, std::string* er
             *error = "The compressed backup failed its SQLite round-trip integrity check: " +
                      validation_error;
         }
-        RemoveBackupFile(raw_path);
+        RemoveTemporaryDatabaseFiles(raw_path);
         RemoveBackupFile(compressed_path);
-        RemoveBackupFile(verify_path);
+        RemoveTemporaryDatabaseFiles(verify_path);
         return false;
     }
 
     if (!MoveBackupFile(compressed_path, path)) {
         SetError(error, "The verified compressed backup could not be moved to its final name.");
-        RemoveBackupFile(raw_path);
+        RemoveTemporaryDatabaseFiles(raw_path);
         RemoveBackupFile(compressed_path);
-        RemoveBackupFile(verify_path);
+        RemoveTemporaryDatabaseFiles(verify_path);
         return false;
     }
 
-    RemoveBackupFile(raw_path);
-    RemoveBackupFile(verify_path);
+    RemoveTemporaryDatabaseFiles(raw_path);
+    RemoveTemporaryDatabaseFiles(verify_path);
     return true;
 }
 
@@ -864,12 +859,12 @@ bool LoanStore::EnsureAutomaticBackup(std::string* error)
         if (DecodeBackupFile(candidates[i], &decoded_path, &temporary_path,
                              &validation_error) &&
             ValidateDatabaseFile(decoded_path, &validation_error)) {
-            if (!temporary_path.empty()) RemoveBackupFile(temporary_path);
+            if (!temporary_path.empty()) RemoveTemporaryDatabaseFiles(temporary_path);
             last_session_backup_path_ = candidates[i];
             session_backup_done_ = true;
             return true;
         }
-        if (!temporary_path.empty()) RemoveBackupFile(temporary_path);
+        if (!temporary_path.empty()) RemoveTemporaryDatabaseFiles(temporary_path);
 
         // Keep corrupt candidates for diagnosis, but move them out of the
         // automatic-backup namespace so retention and next launch can work.
