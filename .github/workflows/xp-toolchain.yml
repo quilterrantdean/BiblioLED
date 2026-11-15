@@ -240,7 +240,16 @@ jobs:
               Use apenas a pasta descartável.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
-          '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8
+          '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8BOM
+
+          $readmePath = Join-Path $package "LEIA-ME-TESTE.txt"
+          $readmeBytes = [System.IO.File]::ReadAllBytes($readmePath)
+          if ($readmeBytes.Length -lt 3 -or
+              $readmeBytes[0] -ne 0xEF -or
+              $readmeBytes[1] -ne 0xBB -or
+              $readmeBytes[2] -ne 0xBF) {
+            throw "The Portuguese test guide must be UTF-8 with BOM for Windows XP Notepad."
+          }
 
       - name: Upload disposable XP test build
         uses: actions/upload-artifact@v4
