@@ -180,3 +180,13 @@ The ZIP contains only the executable, example INI, XP test guide and PE inspecti
 ## CI action provenance
 
 The core and XP workflows pin JavaScript actions to immutable upstream release commit SHAs rather than mutable major-version tags. `actions/checkout` v7.0.1 is pinned to `3d3c42e5aac5ba805825da76410c181273ba90b1`; `actions/upload-artifact` v7.0.2 is pinned to `cf430e030ddbb5b0abf93d22962f4752f3646cd9`. Both release manifests declare the Node.js 24 runtime. The remaining dependency review covers CMake FetchContent archives and the pinned w64devkit toolchain.
+
+## Third-party build dependency provenance
+
+- SQLite amalgamation 3.53.4 is fetched from the official sqlite.org archive and pinned with SHA3-256 `628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e`.
+- zlib 1.4 is fetched from the official zlib.net fossil archive and pinned with SHA-256 `02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584`.
+- The XP workflow downloads the immutable w64devkit x86 2.10.0 release archive and verifies SHA-256 `513ff7fc571cf6764a5aedbca92f43c513f8d01085c65df5133a82db13a7e63d` before extraction. The upstream release identifies the x86 package as Windows XP-compatible and SSE2-required.
+- Cppcheck is installed from the Ubuntu runner's package repository, but the workflow requires the reported version to be exactly 2.19.0 so a runner-image/package change cannot silently alter the analysis baseline.
+- The portable Linux and modern-Windows CI jobs intentionally use their hosted runner's CMake and OS-provided development packages; the XP-targeted build uses the CMake executable included in the SHA-256-pinned w64devkit package. The CMake preset declares a minimum CMake version of 3.28.0.
+
+These hashes are integrity pins, not a substitute for reviewing release notes and compatibility whenever a dependency is deliberately upgraded.

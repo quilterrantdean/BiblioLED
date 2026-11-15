@@ -56,7 +56,12 @@ jobs:
 
       - name: Analyse portable C++11 sources and tests
         run: |
-          cppcheck --version
+          cppcheck_version="$(cppcheck --version)"
+          printf '%s\\n' "$cppcheck_version"
+          if [ "$cppcheck_version" != "Cppcheck 2.19.0" ]; then
+            echo "Expected Cppcheck 2.19.0; refusing an unreviewed analyser version." >&2
+            exit 1
+          fi
           cppcheck \
             --enable=warning,performance,portability \
             --error-exitcode=1 \

@@ -144,3 +144,5 @@ The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained th
 
 - GitHub Actions references have been upgraded from mutable `@v4` tags to immutable Node 24 release commits: checkout v7.0.1 (`3d3c42e5aac5ba805825da76410c181273ba90b1`) and upload-artifact v7.0.2 (`cf430e030ddbb5b0abf93d22962f4752f3646cd9`). The upstream `action.yml` manifests were inspected to confirm `runs.using: node24`.
 - Cppcheck 2.19.0 now completes without warnings for the portable C++11 core, backup infrastructure, and selected tests. Windows-only `audit_log.cpp` and the Win32 UI are compile-tested in the separate Windows/XP jobs, not included in this portable Cppcheck invocation.
+
+- Dependency provenance review confirms the pinned official SQLite 3.53.4 and zlib 1.4 source archives, and the signed/immutable w64devkit x86 2.10.0 release with SHA-256 verification. Cppcheck is now version-gated at 2.19.0; the Linux/modern-Windows runner-provided CMake and OS packages remain intentionally image-managed, while XP CMake is included in the pinned w64devkit archive.
