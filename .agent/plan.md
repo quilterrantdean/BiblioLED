@@ -2,10 +2,10 @@
 
 ## Current status
 
-**Stage:** the C++11/Win32/SQLite proof of concept now includes the agreed Win32 UI refinement pass and guided missing/corrupt-database recovery. Source commit `c157fa65bd4ed2a3d8bee3512844ed3347e7c82b` on `development` passed both CI workflows:
+**Stage:** the C++11/Win32/SQLite proof of concept now includes the agreed Win32 UI refinement pass, guided recovery, temporary-file sidecar protection, and Unicode-safe Windows storage/settings paths. Source commit `e1562ac5e5d449e41d909a5ecde7ac0e6818e936` on `development` passed both CI workflows:
 
-- [Core tests run 43656098892](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098892): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed, including offline recovery and the stale-staging-sidecar test.
-- [XP-targeted build run 43656098479](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098479): pinned w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14138135817](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098479), `BiblioLED-XP-PoC` (1,524,709 bytes), archive SHA-256 `998b0179fe43bfcb5b10ec033d409dfa5b36a4b3719b18cf5941ebf5956d01c7`.
+- [Core tests run 43719444107](https://github.com/quilterrantdean/BiblioLED/actions/runs/43719444107): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed, including recovery sidecar protection, Unicode database/backup paths, and no-op mutation checks.
+- [XP-targeted build run 43719444132](https://github.com/quilterrantdean/BiblioLED/actions/runs/43719444132): pinned w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14164031184](https://github.com/quilterrantdean/BiblioLED/actions/runs/43719444132), `BiblioLED-XP-PoC` (1,495,718 bytes), archive SHA-256 `70144ea9ee0f23af56faa6db38cecf7ec690c88ca1c021391c54a4fa17cc2f80`; executable SHA-256 `b2eb23a00523fd1f287169a761004475551911858aaf1b4aa76d4c41187c6985`.
 
 The UI implementation includes the top-level **Opções** menu, explicit audit-log retry command, event-driven refresh without polling, removal of redundant refresh UI, Ctrl+N/Ctrl+H accelerators, a resizable/reorderable/context-menu history window, statistics from a per-open snapshot, and UTF-8 resource/source handling. History controls are laid out in dialog units so they remain aligned when the window is resized.
 
@@ -13,7 +13,7 @@ On 2026-11-14, Actions history cleanup removed 223 older workflow runs and prese
 
 The user reports having tested the application manually. The exact tested artefact, Windows build and exercised scenarios have not yet been recorded; do not treat this as formal target-runtime sign-off. CI PE/build checks are not a substitute for testing on the target machine.
 
-The application remains a proof of concept, not the complete replacement. Guided startup recovery is now implemented and covered by isolated store tests, but interrupted-install failure injection, broader audit coverage and final target-system verification remain. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
+The application remains a proof of concept, not the complete replacement. Guided startup recovery is implemented and covered by isolated tests. Recent hardening also prevents reuse of temporary files with orphaned SQLite sidecars, uses Unicode-aware Win32 filesystem access for database existence and INI settings, and avoids daily backups for update/delete requests targeting nonexistent IDs. Interrupted-install failure injection, broader audit coverage and final target-system verification remain. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
 The `development` branch was created from `main` and now contains the first C++/Win32/SQLite prototype. All development commits remain confined to this branch.
 
@@ -59,6 +59,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Implement one automatic SQLite Online Backup snapshot before the first loan-data mutation per local calendar day; audit-only events and settings changes do not trigger it. Reuse a valid same-day snapshot and fail closed if a new snapshot cannot be created.
 - [x] Implement compressed manual backups and a confirmed restore workflow with a separately classified, verified pre-restore safety copy; keep legacy uncompressed `.sqlite` backups restorable.
 - [x] Detect a missing database after initialisation and refuse silent recreation.
+- [x] Reject update/delete requests for missing record IDs before the automatic-backup gate, so failed no-op requests do not create daily backups.
 - [x] Implement guided missing/corrupt-database recovery and reporting.
   - At startup, a missing previously initialised database or a database that cannot be opened offers an explicit backup-selection and confirmation flow. The selected backup is decompressed and schema/integrity checked, copied into a staging database, checked again, and installed only after the existing database and SQLite sidecars have been preserved under a recovery filename.
   - A failed candidate validation leaves the expected database and sidecars untouched. Staging names are also checked for stale `-journal`, `-wal`, and `-shm` files left by interrupted earlier attempts. Recovery is never automatic; the selected backup is retained, and the application reopens the installed database before continuing.
@@ -73,6 +74,8 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Integrate statically linked zlib 1.4 for streaming gzip and zlib wrappers. Verify compressed round-trips and SQLite integrity; keep `.sqlite` backups compatible.
 - [x] Add backup settings for format (`gzip` or `zlib`) and compression level (0–9, default 6) to `config/settings.ini` and a dedicated Win32 dialog. Changes are applied immediately to the open `LoanStore`, without restarting; a valid same-day automatic snapshot remains reused.
 - [x] Use native filesystem path separators for generated backup paths (`\\` on Windows, `/` on POSIX), avoiding mixed separators in messages and file operations.
+- [x] Treat Windows filesystem paths passed into the store as UTF-8, using Unicode Win32 file-attribute APIs for existence checks; test a database and compressed automatic backup under non-ASCII directory names.
+- [x] Read and write `config/settings.ini` with wide-character Win32 file APIs, retaining the temporary-file, flush, and atomic-replacement write path.
 
 The current CI validation baseline and XP artefact are recorded in **Current status** above. Keep that section authoritative when newer successful runs replace this baseline.
 
@@ -100,11 +103,11 @@ The current CI validation baseline and XP artefact are recorded in **Current sta
 - [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
 - [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
 
-The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The guided-recovery implementation and its stale-staging-sidecar hardening passed Core and XP-targeted CI at `c157fa65bd4ed2a3d8bee3512844ed3347e7c82b` (runs 43656098892 and 43656098479). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
+The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The guided-recovery and storage-hardening implementation passed Core and XP-targeted CI at `e1562ac5e5d449e41d909a5ecde7ac0e6818e936` (runs 43719444107 and 43719444132). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
 
 ### Phase 5 — Verification and delivery
 
-- [ ] Continue expanding automated coverage for interrupted recovery/install failures, rollback, migration, settings persistence and UI workflows. The store suite now covers recovery from a missing database, preservation of a corrupt database and SQLite sidecars, rejection of an invalid candidate without touching the destination, reopening the recovered database, and avoiding stale temporary SQLite sidecars from interrupted recovery attempts. All tests use synthetic/isolated data.
+- [ ] Continue expanding automated coverage for interrupted recovery/install failures, rollback, migration, settings persistence and UI workflows. The store suite now covers recovery from a missing database, preservation of a corrupt database and SQLite sidecars, rejection of an invalid candidate without touching the destination, reopening the recovered database, rejection of stale staging/decompression sidecars, Unicode Windows database/backup paths, and update/delete requests for missing IDs without automatic backups. All tests use synthetic/isolated data.
 - [ ] Add static analysis and dependency checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
