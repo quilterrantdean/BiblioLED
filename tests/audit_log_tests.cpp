@@ -76,6 +76,61 @@ bool AppendIncompleteTail(const std::wstring& path)
     return ok && flushed;
 }
 
+bool ReadFirstLine(const std::wstring& path, std::string* line)
+{
+    if (!line) return false;
+    line->clear();
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                              NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) return false;
+
+    bool found_line = false;
+    char buffer[1024];
+    while (!found_line) {
+        DWORD received = 0;
+        if (!ReadFile(file, buffer, sizeof(buffer), &received, NULL)) {
+            CloseHandle(file);
+            return false;
+        }
+        if (received == 0) break;
+        for (DWORD i = 0; i < received; ++i) {
+            if (buffer[i] == '\\n') {
+                found_line = true;
+                break;
+            }
+            line->push_back(buffer[i]);
+        }
+    }
+    CloseHandle(file);
+    if (!line->empty() && line->back() == '\\r') line->pop_back();
+    return found_line;
+}
+
+bool WriteLogContents(const std::wstring& path, const std::string& contents)
+{
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) return false;
+
+    size_t offset = 0;
+    bool ok = true;
+    while (offset < contents.size()) {
+        const size_t remaining = contents.size() - offset;
+        const DWORD count = static_cast<DWORD>(
+            remaining > 0x7fffffffUL ? 0x7fffffffUL : remaining);
+        DWORD written = 0;
+        if (!WriteFile(file, contents.data() + offset, count, &written, NULL) ||
+            written == 0) {
+            ok = false;
+            break;
+        }
+        offset += written;
+    }
+    if (ok) ok = FlushFileBuffers(file) != FALSE;
+    CloseHandle(file);
+    return ok;
+}
+
 } // namespace
 
 int main()
@@ -111,6 +166,46 @@ int main()
     Check(biblioled::SynchronizeAuditLog(directory, events, 65536, &written, &error),
           "repeated synchronisation should succeed");
     Check(written == 0, "already synchronised events must not be duplicated");
+
+    // Verify the streaming parser preserves its marker/key state when the
+    // marker and fingerprint are split across separate 64 KiB reads.
+    std::wstring boundary_directory;
+    Check(MakeTemporaryDirectory(&boundary_directory),
+          "streaming-boundary test directory should be created");
+    if (!boundary_directory.empty()) {
+        std::vector<biblioled::AuditEvent> boundary_events;
+        boundary_events.push_back(events[0]);
+        const std::wstring boundary_path = boundary_directory + L"\\audit.log";
+        Check(biblioled::SynchronizeAuditLog(
+                  boundary_directory, boundary_events, 65536, &written, &error),
+              "boundary test should first create a valid audit event");
+        std::string original_line;
+        Check(ReadFirstLine(boundary_path, &original_line),
+              "boundary test should read the generated event line");
+        const std::string marker = "event_key=";
+        const std::string::size_type marker_position = original_line.find(marker);
+        Check(marker_position != std::string::npos,
+              "generated event line should contain its fingerprint marker");
+        if (marker_position != std::string::npos) {
+            const size_t offsets[] = {65520, 65533};
+            for (size_t i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
+                const std::string injected =
+                    std::string(offsets[i], 'X') +
+                    original_line.substr(marker_position) + "\\r\\n";
+                Check(WriteLogContents(boundary_path, injected),
+                      "boundary test should write the synthetic long log line");
+                error.clear();
+                written = -1;
+                Check(biblioled::SynchronizeAuditLog(
+                          boundary_directory, boundary_events, 65536,
+                          &written, &error),
+                      "streaming parser should recognise a fingerprint split across read blocks");
+                Check(written == 0,
+                      "a fingerprint split across read blocks must not be appended again");
+            }
+        }
+        RemoveLogFiles(boundary_directory);
+    }
 
     // A read-only active log must block synchronisation without losing the
     // pending event. Once write access is restored, the event must be appended.
