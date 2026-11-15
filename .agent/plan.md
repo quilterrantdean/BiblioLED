@@ -2,10 +2,10 @@
 
 ## Current status
 
-**Stage:** the C++11/Win32/SQLite proof of concept now includes the agreed Win32 UI refinement pass and guided missing/corrupt-database recovery. Source commit `6773bd9627e6e86ea97226491aa13b2db4817bef` on `development` passed both CI workflows:
+**Stage:** the C++11/Win32/SQLite proof of concept now includes the agreed Win32 UI refinement pass and guided missing/corrupt-database recovery. Source commit `c157fa65bd4ed2a3d8bee3512844ed3347e7c82b` on `development` passed both CI workflows:
 
-- [Core tests run 43655726935](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726935): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed, including the new offline-recovery cases.
-- [XP-targeted build run 43655726939](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939): pinned w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14138355192](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939), `BiblioLED-XP-PoC` (1,523,056 bytes), archive SHA-256 `2bb59c1c72ef69992c73c36ff04516d7c47c48864e00a564715ae1b5abd3f8db`.
+- [Core tests run 43656098892](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098892): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed, including offline recovery and the stale-staging-sidecar test.
+- [XP-targeted build run 43656098479](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098479): pinned w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14138135817](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098479), `BiblioLED-XP-PoC` (1,524,709 bytes), archive SHA-256 `998b0179fe43bfcb5b10ec033d409dfa5b36a4b3719b18cf5941ebf5956d01c7`.
 
 The UI implementation includes the top-level **Opções** menu, explicit audit-log retry command, event-driven refresh without polling, removal of redundant refresh UI, Ctrl+N/Ctrl+H accelerators, a resizable/reorderable/context-menu history window, statistics from a per-open snapshot, and UTF-8 resource/source handling. History controls are laid out in dialog units so they remain aligned when the window is resized.
 
@@ -61,7 +61,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Detect a missing database after initialisation and refuse silent recreation.
 - [x] Implement guided missing/corrupt-database recovery and reporting.
   - At startup, a missing previously initialised database or a database that cannot be opened offers an explicit backup-selection and confirmation flow. The selected backup is decompressed and schema/integrity checked, copied into a staging database, checked again, and installed only after the existing database and SQLite sidecars have been preserved under a recovery filename.
-  - A failed candidate validation leaves the expected database and sidecars untouched. Recovery is never automatic; the selected backup is retained, and the application reopens the installed database before continuing.
+  - A failed candidate validation leaves the expected database and sidecars untouched. Staging names are also checked for stale `-journal`, `-wal`, and `-shm` files left by interrupted earlier attempts. Recovery is never automatic; the selected backup is retained, and the application reopens the installed database before continuing.
 - [x] Store internal audit events in the same SQLite transaction as each loan create/edit/delete; include before/after values and migration events.
 - [x] Synchronise internal audit events to the external append-only UTF-8 log using stable event fingerprints; recover an incomplete final line and rotate archives at the configured size.
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; retry through **Ficheiro > Tentar sincronizar registo de auditoria...**.
@@ -100,11 +100,11 @@ The current CI validation baseline and XP artefact are recorded in **Current sta
 - [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
 - [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
 
-The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The subsequent guided-recovery implementation passed Core and XP-targeted CI at `6773bd9627e6e86ea97226491aa13b2db4817bef` (runs 43655726935 and 43655726939). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
+The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The guided-recovery implementation and its stale-staging-sidecar hardening passed Core and XP-targeted CI at `c157fa65bd4ed2a3d8bee3512844ed3347e7c82b` (runs 43656098892 and 43656098479). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
 
 ### Phase 5 — Verification and delivery
 
-- [ ] Continue expanding automated coverage for interrupted recovery/install failures, rollback, migration, settings persistence and UI workflows. The store suite now covers recovery from a missing database, preservation of a corrupt database and SQLite sidecars, rejection of an invalid candidate without touching the destination, and reopening the recovered database. All tests use synthetic/isolated data.
+- [ ] Continue expanding automated coverage for interrupted recovery/install failures, rollback, migration, settings persistence and UI workflows. The store suite now covers recovery from a missing database, preservation of a corrupt database and SQLite sidecars, rejection of an invalid candidate without touching the destination, reopening the recovered database, and avoiding stale temporary SQLite sidecars from interrupted recovery attempts. All tests use synthetic/isolated data.
 - [ ] Add static analysis and dependency checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.

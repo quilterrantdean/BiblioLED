@@ -84,7 +84,7 @@ All paths are resolved from the executable directory. The existing application i
 - The version 0 to 1 migration creates and validates a full backup first, then adds the audit table and indexes transactionally. It does not rewrite or discard loan records.
 - Do not silently create a fresh database when an expected database cannot be opened.
 - A small initialisation marker in `config/database.initialized` distinguishes first launch from a database that has gone missing; if the marker exists but the database does not, stop and explain rather than creating an empty database.
-- If the marker exists but the database is missing, or if an existing database cannot be opened, startup offers explicit recovery from a user-selected backup. The candidate is decompressed and checked for full SQLite integrity and a supported BiblioLED schema, copied to a staging database and validated again before installation. Existing database files and any `-journal`, `-wal`, or `-shm` sidecars are renamed together and retained; the chosen backup is never consumed. An invalid candidate does not alter the destination. Recovery is never automatic.
+- If the marker exists but the database is missing, or if an existing database cannot be opened, startup offers explicit recovery from a user-selected backup. The candidate is decompressed and checked for full SQLite integrity and a supported BiblioLED schema, copied to a staging database and validated again before installation. Existing database files and any `-journal`, `-wal`, or `-shm` sidecars are renamed together and retained; the chosen backup is never consumed. An invalid candidate does not alter the destination. Staging filenames are skipped when stale SQLite sidecars from an interrupted attempt remain. Recovery is never automatic.
 - Test databases are always isolated from the user's real database.
 - Use SQLite's Online Backup API to create a consistent snapshot in a temporary file.
 - Create at most one automatic snapshot per local calendar day, immediately before the first actual loan-data mutation that day. Reuse a valid same-day snapshot. Audit-only events (including startup/shutdown), settings changes, and read-only launches do not trigger automatic snapshots.
@@ -165,10 +165,10 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-The implementation baseline at commit `6773bd9627e6e86ea97226491aa13b2db4817bef` passed:
+The implementation baseline at commit `c157fa65bd4ed2a3d8bee3512844ed3347e7c82b` passed:
 
-- [Core tests run 43655726935](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726935): Ubuntu core tests and modern Windows SDK Win32 compile/store tests, including offline recovery.
-- [XP-targeted build run 43655726939](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939): w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection; artefact [14138355192](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939), `BiblioLED-XP-PoC` (1,523,056 bytes), archive SHA-256 `2bb59c1c72ef69992c73c36ff04516d7c47c48864e00a564715ae1b5abd3f8db`.
+- [Core tests run 43656098892](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098892): Ubuntu core tests and modern Windows SDK Win32 compile/store tests, including offline recovery and stale staging sidecar handling.
+- [XP-targeted build run 43656098479](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098479): w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection; artefact [14138135817](https://github.com/quilterrantdean/BiblioLED/actions/runs/43656098479), `BiblioLED-XP-PoC` (1,524,709 bytes), archive SHA-256 `998b0179fe43bfcb5b10ec033d409dfa5b36a4b3719b18cf5941ebf5956d01c7`.
 
 The artefact is a disposable test build, not a release. These CI results do not replace runtime validation on a physical Windows XP SP3 system.
 
