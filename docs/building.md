@@ -8,7 +8,7 @@ The current application is a proof of concept, not a supported release. It alrea
 
 **Do not use the current proof of concept with the real BiblioLED database.** Automated tests create isolated synthetic databases. The downloadable XP artefact contains no database.
 
-A successful XP-targeted build, PE-header inspection, and automated tests do not prove that the application runs correctly on a physical Windows XP SP3 installation. The recovery wizard, Portuguese resource glyphs, dialogs, and general UI still require a recorded run on the target machine.
+The user confirmed on 2026-11-15 that the executable runs well on Windows XP and that the secondary-window Portuguese text encoding is corrected. The exact executable hash, XP build and exercised scenarios have not been recorded. The recovery wizard, backup/restore failure paths and a reproducible full target-system test record remain outstanding.
 
 ## Toolchains and dependencies
 
@@ -206,6 +206,10 @@ The scanner reads files with a fixed 64 KiB buffer and bounded per-line parser s
 
 If external diagnostics are deliberately disabled, SQLite auditing continues and external synchronisation pauses; the backlog is replayed when diagnostics are re-enabled. If diagnostics are enabled but synchronisation fails, reads remain available but further database mutations are blocked until logging recovers. The recovery command is **Ficheiro > Tentar sincronizar registo de auditoria...**. It is not bound to F5.
 
+## Column sorting
+
+The main loans list and full-history list sort when a column header is clicked. The first click on a column sorts ascending; clicking that same header again sorts descending. Titles and types use case-insensitive alphabetical order, IDs and remaining days use numeric order, and loan/expiry dates use chronological order. Sorting is performed on the displayed in-memory rows and does not modify database records.
+
 ## Safe manual XP test
 
 Use a fresh disposable folder, for example `C:\Temp\BiblioLED_ação`. Do not copy the real database or replace the current installation.
@@ -214,6 +218,7 @@ The package's `LEIA-ME-TESTE.txt` contains the detailed manual test sequence. It
 
 - first launch and creation of a synthetic database;
 - creating, editing, deleting, and viewing fictitious loan records;
+- ascending/descending sorting in the main and history lists, including alphabetical text, numeric IDs/days and chronological dates;
 - history filters, statistics, CSV export, and settings persistence;
 - gzip/zlib format and compression-level changes;
 - manual backup and restore from a test backup;

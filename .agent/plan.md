@@ -13,7 +13,7 @@ The UI implementation includes the top-level **Opções** menu, explicit audit-l
 
 On 2026-11-14, Actions history cleanup removed 223 older workflow runs and preserved the then-latest successful Core and XP-targeted runs (225 total before, 2 afterwards). Later pushes created new runs normally. `main` remains the unchanged Python reference; all implementation and documentation commits remain on `development`.
 
-The user reports having tested the application manually. The exact tested artefact, Windows build and exercised scenarios have not yet been recorded; do not treat this as formal target-runtime sign-off. CI PE/build checks are not a substitute for testing on the target machine.
+The user confirmed on 2026-11-15 that the current executable runs well on Windows XP and that the secondary-window text-encoding issue is corrected. The exact tested artefact/hash, XP build and exercised scenarios have not been recorded, so this is a user-confirmed runtime smoke check rather than a reproducible full validation record. CI PE/build checks are not a substitute for broader target-machine testing.
 
 The application remains a proof of concept, not the complete replacement. Guided startup recovery is implemented and covered by isolated tests, including Windows failure injection that proves rollback when a sidecar cannot be moved. Recent hardening also preserves invalid automatic-backup sidecars as a group, prevents reuse of temporary files with orphaned SQLite sidecars, uses Unicode-aware Win32 filesystem access for database existence and INI settings, avoids daily backups for update/delete requests targeting nonexistent IDs, validates required directories, and fails closed if single-instance coordination cannot be established. The external audit log is scanned in fixed-size chunks rather than loading complete archived files into memory; its fingerprint de-duplication set still scales with the number of distinct historical events. Power-loss/interruption coverage, broader audit coverage and final target-system verification remain. The XP-targeted workflow builds with pinned w64devkit x86, runs both SQLite-store and external-log tests, checks PE32/i386, GUI subsystem 5.01 and imports, and publishes a disposable test artefact. The user's real database has not been opened, copied, migrated, or modified.
 
@@ -47,7 +47,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] Select and document the initial XP-targeted compiler baseline: w64devkit x86 (XP-compatible x86 package; Pentium 4/SSE2 requirement).
 - [x] Validate the pinned w64devkit build, SQLite store test, and PE headers in the dedicated XP-targeted CI job.
 - [ ] Decide whether the current w64devkit baseline is final after real XP runtime validation.
-- [ ] Build and run the Win32 application on Windows XP SP3.
+- [x] Build and run the Win32 application on Windows XP SP3 (user-confirmed working executable; exact artefact and test record still need to be captured).
 - [ ] Measure startup time, executable size, memory use, and responsiveness.
 - [ ] Decide whether Free Pascal still merits a direct comparison after the C++ XP test.
 
@@ -104,9 +104,10 @@ The current CI validation baseline and XP artefact are recorded in **Current sta
 - [x] Added a Win32 accelerator table and message-loop translation for Ctrl+N and Ctrl+H. Existing list-view activation handles Enter; Delete is handled from the list-view key notification.
 - [x] Made the history dialog resizable, added a minimum tracking size, enabled header drag-and-drop and added a right-click Edit/Delete context menu. Double-click editing remains.
 - [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
-- [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
+- [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly; the user subsequently confirmed that secondary-window text encoding is now correct on XP.
+- [x] Added click-to-sort to the main loans list and history list: alphabetical text sorting, numeric ID/days sorting, chronological date sorting, and ascending/descending toggling on repeated clicks.
 
-The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The exact legacy-loans and version-1 audit-table schema validation, seven negative schema/non-interference tests, SQL prepare-failure cleanup, non-empty audit timestamp guard, durable backup output flush, official zlib-release URL, checked rollback handling, mid-DDL migration-failure test, audit streaming/parser-boundary tests, strict SQLite integrity/metadata checks, Cppcheck 2.19.0 version guard and Node 24 workflow passed Core and XP-targeted CI at validated head `e8c87dd828b4b161822ee53f647f625fd5a5dbf2` (runs 43767914091 and 43767914092). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
+The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The exact legacy-loans and version-1 audit-table schema validation, seven negative schema/non-interference tests, SQL prepare-failure cleanup, non-empty audit timestamp guard, durable backup output flush, official zlib-release URL, checked rollback handling, mid-DDL migration-failure test, audit streaming/parser-boundary tests, strict SQLite integrity/metadata checks, Cppcheck 2.19.0 version guard and Node 24 workflow passed Core and XP-targeted CI at validated head `e8c87dd828b4b161822ee53f647f625fd5a5dbf2` (runs 43767914091 and 43767914092). The user has confirmed that secondary-window encoding is corrected and that the executable runs well on XP. The resized history layout and recovery dialog have not been separately documented in the target-system test record; CI compilation and isolated tests do not prove those specific workflows.
 
 ### Phase 5 — Verification and delivery
 
@@ -125,7 +126,7 @@ The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee592
 - [x] Check SQLite parameter-binding and statement-finalisation results in CRUD, audit, lookup, list and quota-count paths; confirm Linux, modern Win32 and the XP-targeted build/tests pass.
 - [x] Centralise transaction rollback, check its result, and close the database connection if a failed rollback leaves the transaction active; verify partial migration DDL is rolled back and can be reopened cleanly.
 - [x] Finalise any partial SQLite statement after a failed prepare, reject empty audit timestamps, and flush completed backup streams to stable storage before publishing the final backup.
-- [ ] Validate the application and tests on Windows XP as well as newer systems.
+- [ ] Complete and record the Windows XP SP3 validation matrix, including recovery, backup/restore, resource rendering and failure scenarios. The user has confirmed that the executable runs well and the secondary-window encoding is corrected; a reproducible artefact/hash, XP build and scenario record are still missing.
 - [ ] Produce a portable 32-bit ZIP distribution.
 - [x] Document the current proof-of-concept build, CI tests, dependencies, recovery, backup and audit behaviour in `docs/building.md`.
 - [ ] Define the normal portable release process after physical Windows XP validation.

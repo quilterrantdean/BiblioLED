@@ -92,6 +92,7 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 - External audit logs rotate at the configured maximum size (default 5 MB), with timestamped archives retained indefinitely. If external logging is disabled, SQLite auditing continues and the file backlog is queued. If enabled logging fails, reads remain possible but the store blocks further mutations until synchronisation recovers; retry via **Ficheiro > Tentar sincronizar registo de auditoria...**. Current event coverage includes loan CRUD, schema migration, application startup/shutdown, manual backup/restore, general/backup settings changes and CSV export. Warnings, errors, and failure events remain outstanding.
 - Store paths are UTF-8 on Windows. Existence checks use `GetFileAttributesW`, and settings INI reads/writes use wide-character Win32 file APIs; Windows tests create and reopen a database and compressed backup beneath a directory containing non-ASCII characters. Startup validates config/data/backups/exports/logs as directories, aborts before database access on file/directory collisions, and fails closed if the single-instance mutex cannot be created.
 - The main table enables native header drag-and-drop. Logical column order and individual widths are loaded from and saved to `config/settings.ini`. Layout saving is disabled when the settings file was invalid, preserving the original file.
+- The main loans list and full-history list support click-to-sort: text fields sort alphabetically, identifiers and remaining days numerically, and date fields chronologically. Repeated clicks on the same column reverse the order.
 - Isolated tests cover CRUD, UTF-8, future-dated quota counts, daily snapshot reuse, audit-only writes without backup triggers, rejection/preservation of an unrelated but integrity-valid SQLite file under the automatic-backup namespace, compressed automatic/manual/safety backup round-trips, GZIP/zlib at levels 0/1/6/9, truncated/trailing stream rejection, retention with manual/safety and malformed-name preservation, compressed and legacy `.sqlite` restore, offline recovery of missing/corrupt databases, preservation of SQLite sidecars, invalid-candidate non-interference, rejection of stale temporary staging/decompression sidecars, preservation of invalid automatic-backup sidecars as a group, recovery rollback after an injected Windows file-move failure, Unicode database and backup paths on Windows, missing-ID update/delete without automatic backups, backup failure, explicit legacy migration, unsupported schemas, audit rollback, and the external-log mutation gate.
 - Windows-only audit-log tests cover idempotent replay, recovery of an incomplete active-log tail, size-based rotation, and duplicate detection across archives.
 - GitHub Actions: Linux core tests, modern Win32 compile/tests, and a separate w64devkit x86 XP-targeted build with PE architecture/subsystem/import checks and a disposable ZIP artefact.
@@ -110,7 +111,7 @@ All automated tests use generated databases and temporary backup files. The user
 
 ## Implemented Win32 UI refinements
 
-The following changes are now in the application source; the new CI run is the compile/test gate, and visual confirmation of resource glyphs remains a manual check:
+The following changes are now in the application source; CI is the compile/test gate. The user has confirmed that secondary-window Portuguese text encoding is corrected and the executable runs well on Windows XP; the exact tested artefact and scenario record remain to be captured:
 
 - Settings commands are grouped under the **Opções** menu.
 - Main-window manual refresh UI and its "Actualizado às ..." timestamp have been removed. List reads remain event-driven; no timer or periodic SQLite polling exists.
@@ -118,9 +119,9 @@ The following changes are now in the application source; the new CI run is the c
 - The main window uses a Win32 accelerator table for Ctrl+N and Ctrl+H. List activation handles Enter; Delete is handled through the list-view key notification.
 - The history dialog is resizable with a minimum size, header drag-and-drop and a right-click context menu for edit/delete. Existing double-click editing remains.
 - Statistics no longer has a manual refresh button or F5 reload path; it reads the complete record snapshot on open and calculates year changes from memory.
-- `dialogs.rc` declares UTF-8 code page 65001 and MSVC C++ compilation is explicitly UTF-8. Statistics error messages now use a UTF-8-to-wide conversion helper.
+- `dialogs.rc` declares UTF-8 code page 65001 and MSVC C++ compilation is explicitly UTF-8. Statistics error messages now use a UTF-8-to-wide conversion helper; the user confirmed the secondary-window encoding correction on XP.
 
-The rendering of Portuguese resource strings still needs visual confirmation on the target Windows installation; a successful resource compilation does not guarantee glyph display.
+The user confirmed on 2026-11-15 that secondary-window Portuguese text encoding is corrected and that the executable runs well on Windows XP. The exact executable hash, XP build and tested scenarios are not recorded; recovery and failure-path coverage still requires a reproducible target-system test.
 
 ## XP-targeted build baseline
 

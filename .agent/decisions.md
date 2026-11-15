@@ -30,6 +30,7 @@ This file records decisions explicitly agreed with the user. Status labels disti
 | D-063 | Remove the statistics window's manual refresh button. Load records when the window opens; do not poll the database while it remains open. | Confirmed |
 | D-064 | Advertised keyboard shortcuts must actually work through Win32 accelerator handling; menu-caption text alone is not a shortcut implementation. | Confirmed |
 | D-065 | Correct the Portuguese text-encoding defects in secondary dialogs at their source, preserving proper European Portuguese characters. Diagnose resource encoding and conversion boundaries rather than changing fonts blindly. | Confirmed |
+| D-066 | Clicking a column header in the main loans list or full-history list sorts by that column. A first click sorts ascending; clicking the same header again reverses the order. Text fields use case-insensitive alphabetical order, IDs and numeric values use numeric order, and loan/expiry dates use chronological order. | Confirmed |
 
 ## Data, settings, and portability
 

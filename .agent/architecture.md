@@ -136,11 +136,12 @@ These UI refinements are implemented:
 - Main-list refresh is event-driven: startup and successful create/edit/delete/restore only. There is no periodic polling, manual refresh command/button, or "Actualizado às ..." timestamp.
 - History and statistics load a snapshot when opened. Statistics year changes recalculate from cached records; the redundant statistics refresh button and F5 reload path have been removed.
 - History is resizable, enforces a minimum track size, supports header drag-and-drop and provides right-click Edit/Delete actions. Double-click-to-edit remains.
+- The main and history lists support header-click sorting. Text columns sort alphabetically, IDs/days numerically, and date columns chronologically; repeated clicks toggle ascending/descending.
 - Ctrl+N and Ctrl+H use a Win32 accelerator table translated by `TranslateAcceleratorW`. Enter invokes the list-view activation action, and Delete is handled as a list-view key notification.
 - The resource script declares code page 65001, and MSVC C++ source compilation explicitly uses UTF-8. Statistics error strings now convert from UTF-8 correctly.
 - F5 is not used for main-window refresh or audit retry. Audit-log recovery remains available from the explicit Ficheiro command.
-
-The resource encoding must still be visually checked on the target system; compilation does not prove that all dialog glyphs render correctly.
+- Clicking a header in the main loans list or history list sorts by that column; a repeated click reverses direction. Titles and types use case-insensitive locale-aware alphabetical comparison, IDs and remaining days use numeric comparison, and loan/expiry dates use chronological comparison.
+- The user confirmed on 2026-11-15 that the executable runs well on Windows XP and that secondary-window Portuguese text encoding is corrected. The exact executable hash, XP build and exercised test scenarios remain undocumented; recovery and failure-path validation still need a reproducible record.
 
 ## Initial proof-of-concept implementation
 

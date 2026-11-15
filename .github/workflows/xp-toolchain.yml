@@ -206,7 +206,10 @@ jobs:
              e confirme que a nova cópia usa a extensão .sqlite.zlib.
           7. Reponha uma cópia comprimida. Confirme que é criada uma cópia de
              segurança BiblioLED_safety_restore_ da base de dados anterior.
-          8. Arraste os cabeçalhos das colunas, feche e volte a abrir; confirme que
+          8. Na janela principal, clique em Título/Tipo para ordenar alfabeticamente
+             e em Empréstimo/Expira em/Dias para ordenar cronologicamente ou
+             numericamente. Volte a clicar no mesmo cabeçalho e confirme a ordem inversa.
+             Arraste os cabeçalhos das colunas, feche e volte a abrir; confirme que
              a ordem e as larguras são mantidas.
           9. Abra logs\audit.log e confirme que as operações aparecem no log.
           10. Opcional: teste a recuperação apenas nesta pasta descartável.
@@ -221,7 +224,9 @@ jobs:
                  danificado com o sufixo .recovery_preserved_...
               Não execute estes ensaios na pasta com dados reais.
           11. Abra Ver > Histórico (Ctrl+H). Confirme que aparecem registos
-              expirados e futuros. Pesquise por título, data e ID, filtre por
+              expirados e futuros. Clique em ID, Título, Tipo e Data e hora para
+              verificar ordenação numérica, alfabética e cronológica; volte a clicar
+              para inverter a ordem. Pesquise por título, data e ID, filtre por
               Livro/Audiolivro, edite um registo fictício e elimine outro.
               Confirme que o histórico e a janela principal são actualizados.
           12. Em Opções > Definições gerais, altere os limites ou a duração.
