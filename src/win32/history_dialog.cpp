@@ -2,6 +2,7 @@
 #include "biblioled/loan_store.h"
 #include "resource.h"
 #include <commctrl.h>
+#include <algorithm>
 #include <cstdio>
 #include <cwchar>
 #include <string>
@@ -10,15 +11,19 @@
 namespace {
 struct HistoryRow {
     int id;
-    std::wstring id_text, title, type, type_key, date, search_key;
-    HistoryRow() : id(0) {}
+    std::wstring id_text, title, type, type_key, date, date_sort_key, search_key;
+    bool date_sort_valid;
+    HistoryRow() : id(0), date_sort_valid(false) {}
 };
 struct HistoryContext {
     HWND owner;
     biblioled::LoanStore* store;
     std::vector<HistoryRow> rows;
     unsigned int invalid_dates;
-    HistoryContext() : owner(NULL), store(NULL), invalid_dates(0) {}
+    int sort_column;
+    bool sort_ascending;
+    HistoryContext() : owner(NULL), store(NULL), invalid_dates(0),
+        sort_column(0), sort_ascending(true) {}
 };
 
 std::wstring Utf8ToWide(const std::string& value)
@@ -54,6 +59,41 @@ std::wstring DisplayDate(const std::string& value)
     }
     return Utf8ToWide(value);
 }
+int CompareTextInsensitive(const std::wstring& left, const std::wstring& right)
+{
+    const int result = CompareStringW(LOCALE_USER_DEFAULT, NORM_IGNORECASE,
+        left.c_str(), -1, right.c_str(), -1);
+    if (result == 0) {
+        if (left < right) return -1;
+        if (right < left) return 1;
+        return 0;
+    }
+    return result - CSTR_EQUAL;
+}
+bool HistoryRowLess(const HistoryRow& left, const HistoryRow& right, const HistoryContext* context)
+{
+    int comparison = 0;
+    switch (context->sort_column) {
+    case 0: comparison = left.id < right.id ? -1 : (left.id > right.id ? 1 : 0); break;
+    case 1: comparison = CompareTextInsensitive(left.title, right.title); break;
+    case 2: comparison = CompareTextInsensitive(left.type, right.type); break;
+    case 3:
+        if (left.date_sort_valid != right.date_sort_valid) return left.date_sort_valid;
+        comparison = CompareTextInsensitive(left.date_sort_key, right.date_sort_key);
+        break;
+    default: comparison = 0; break;
+    }
+    if (comparison == 0) return left.id < right.id;
+    return context->sort_ascending ? comparison < 0 : comparison > 0;
+}
+void SortHistoryRows(HistoryContext* context)
+{
+    if (!context) return;
+    std::sort(context->rows.begin(), context->rows.end(),
+        [context](const HistoryRow& left, const HistoryRow& right) {
+            return HistoryRowLess(left, right, context);
+        });
+}
 bool LoadRows(HistoryContext* context, std::string* error)
 {
     if (!context || !context->store) {
@@ -78,7 +118,9 @@ bool LoadRows(HistoryContext* context, std::string* error)
         else if (row.type_key==L"livro") row.type=L"Livro";
         else row.type=Utf8ToWide(record.type);
         row.date=DisplayDate(record.loan_date);
-        if (!HasDateTimeShape(record.loan_date)) ++context->invalid_dates;
+        row.date_sort_key=Utf8ToWide(record.loan_date);
+        row.date_sort_valid=HasDateTimeShape(record.loan_date);
+        if (!row.date_sort_valid) ++context->invalid_dates;
         row.search_key=Lowercase(row.title+L" "+row.type+L" "+row.date+L" "+row.id_text);
         context->rows.push_back(row);
     }
@@ -148,6 +190,23 @@ int SelectedId(HWND dialog)
     item.iItem=selected;
     return ListView_GetItem(list,&item)?static_cast<int>(item.lParam):0;
 }
+void SelectHistoryId(HWND dialog, int record_id)
+{
+    if (record_id <= 0) return;
+    HWND list=GetDlgItem(dialog,IDC_HISTORY_LIST);
+    for (int i=0;i<ListView_GetItemCount(list);++i) {
+        LVITEMW item={};
+        item.mask=LVIF_PARAM;
+        item.iItem=i;
+        if(ListView_GetItem(list,&item) && static_cast<int>(item.lParam)==record_id) {
+            ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+            ListView_SetItemState(list,i,LVIS_SELECTED|LVIS_FOCUSED,
+                                  LVIS_SELECTED|LVIS_FOCUSED);
+            ListView_EnsureVisible(list,i,FALSE);
+            return;
+        }
+    }
+}
 void Reload(HWND dialog,HistoryContext* context)
 {
     std::string error;
@@ -156,6 +215,7 @@ void Reload(HWND dialog,HistoryContext* context)
             Utf8ToWide(error)).c_str(),L"BiblioLED",MB_OK|MB_ICONERROR);
         return;
     }
+    SortHistoryRows(context);
     RefreshList(dialog,context);
 }
 void EditSelected(HWND dialog,HistoryContext* context)
@@ -319,6 +379,7 @@ INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lPara
             EndDialog(dialog,IDCANCEL);
             return TRUE;
         }
+        SortHistoryRows(context);
         RefreshList(dialog,context);
         LayoutControls(dialog);
         SetFocus(GetDlgItem(dialog,IDC_HISTORY_SEARCH));
@@ -351,6 +412,22 @@ INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lPara
     if(message==WM_NOTIFY && context) {
         const NMHDR* header=reinterpret_cast<const NMHDR*>(lParam);
         if(header && header->idFrom==IDC_HISTORY_LIST) {
+            if(header->code==LVN_COLUMNCLICK) {
+                const NMLISTVIEW* click=reinterpret_cast<const NMLISTVIEW*>(lParam);
+                if(click && click->iSubItem>=0 && click->iSubItem<4) {
+                    const int selected_id=SelectedId(dialog);
+                    if(click->iSubItem==context->sort_column)
+                        context->sort_ascending=!context->sort_ascending;
+                    else {
+                        context->sort_column=click->iSubItem;
+                        context->sort_ascending=true;
+                    }
+                    SortHistoryRows(context);
+                    RefreshList(dialog,context);
+                    SelectHistoryId(dialog,selected_id);
+                }
+                return TRUE;
+            }
             if(header->code==NM_RCLICK) {
                 const NMLISTVIEW* click=reinterpret_cast<const NMLISTVIEW*>(lParam);
                 POINT point=click?click->ptAction:POINT();
