@@ -366,6 +366,34 @@ bool HasLegacyLoanTitle(const std::string& path)
     return found && close_rc == SQLITE_OK;
 }
 
+bool CreateDatabaseWithAuditSchema(const std::string& path,
+                                   const char* audit_schema_sql)
+{
+    sqlite3* db = NULL;
+    if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
+
+    bool ok = Execute(db,
+        "CREATE TABLE loans ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " title TEXT NOT NULL,"
+        " loan_date TEXT NOT NULL,"
+        " type TEXT NOT NULL"
+        ");");
+    if (ok) {
+        ok = Execute(db,
+            "INSERT INTO loans (id, title, loan_date, type) "
+            "VALUES (1, 'Registo legado preservado', '2024-01-15 10:30', 'livro');");
+    }
+    if (ok) ok = Execute(db, audit_schema_sql);
+    if (ok) ok = Execute(db, "PRAGMA user_version = 1;");
+
+    const int close_rc = sqlite3_close(db);
+    return ok && close_rc == SQLITE_OK;
+}
+
 bool ReadAll(biblioled::LoanStore& store,
              std::vector<biblioled::LoanRecord>* records,
              const char* message)
@@ -420,6 +448,9 @@ int main()
         database + ".failed-ddl-migration-backups";
     const std::string unsupported_database = database + ".unsupported.sqlite";
     const std::string malformed_v1_database = database + ".malformed-v1.sqlite";
+    const std::string malformed_audit_type_database = database + ".malformed-audit-type.sqlite";
+    const std::string malformed_audit_nullable_database = database + ".malformed-audit-nullable.sqlite";
+    const std::string malformed_audit_extra_database = database + ".malformed-audit-extra.sqlite";
     const std::string malformed_legacy_type_database = database + ".malformed-legacy-type.sqlite";
     const std::string malformed_legacy_key_database = database + ".malformed-legacy-key.sqlite";
     const std::string malformed_legacy_nullable_database = database + ".malformed-legacy-nullable.sqlite";
@@ -1027,6 +1058,50 @@ int main()
           "version 1 without its audit table should be rejected");
     malformed.Close();
 
+    // Version 1 also requires the exact audit-table contract. Each malformed
+    // variant keeps its loan row intact and must be refused before any write.
+    const char* malformed_audit_type_sql =
+        "CREATE TABLE audit_events ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, occurred_at TEXT NOT NULL, "
+        "action INTEGER NOT NULL, loan_id INTEGER, before_title TEXT, "
+        "before_loan_date TEXT, before_type TEXT, after_title TEXT, "
+        "after_loan_date TEXT, after_type TEXT, details TEXT NOT NULL);";
+    const char* malformed_audit_nullable_sql =
+        "CREATE TABLE audit_events ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, occurred_at TEXT NOT NULL, "
+        "action TEXT NOT NULL, loan_id INTEGER, before_title TEXT, "
+        "before_loan_date TEXT, before_type TEXT, after_title TEXT, "
+        "after_loan_date TEXT, after_type TEXT, details TEXT);";
+    const char* malformed_audit_extra_sql =
+        "CREATE TABLE audit_events ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, occurred_at TEXT NOT NULL, "
+        "action TEXT NOT NULL, loan_id INTEGER, before_title TEXT, "
+        "before_loan_date TEXT, before_type TEXT, after_title TEXT, "
+        "after_loan_date TEXT, after_type TEXT, details TEXT NOT NULL, "
+        "unsupported TEXT);";
+    Check(CreateDatabaseWithAuditSchema(malformed_audit_type_database,
+                                        malformed_audit_type_sql),
+          "version-1 database with an incompatible audit action type should be created");
+    Check(CreateDatabaseWithAuditSchema(malformed_audit_nullable_database,
+                                        malformed_audit_nullable_sql),
+          "version-1 database with nullable audit details should be created");
+    Check(CreateDatabaseWithAuditSchema(malformed_audit_extra_database,
+                                        malformed_audit_extra_sql),
+          "version-1 database with an unsupported audit column should be created");
+    const std::string malformed_audit_paths[] = {
+        malformed_audit_type_database,
+        malformed_audit_nullable_database,
+        malformed_audit_extra_database
+    };
+    for (size_t i = 0; i < sizeof(malformed_audit_paths) / sizeof(malformed_audit_paths[0]); ++i) {
+        biblioled::LoanStore incompatible_audit;
+        Check(!incompatible_audit.Open(malformed_audit_paths[i], ".", &error),
+              "version-1 database with an incompatible audit-table shape must be rejected");
+        incompatible_audit.Close();
+        Check(HasLegacyLoanTitle(malformed_audit_paths[i]),
+              "rejecting a malformed version-1 audit table must preserve the loan row");
+    }
+
     // A matching set of column names is not enough: the legacy data
     // contract requires an INTEGER primary key, TEXT NOT NULL fields, and
     // exactly the four supported columns.
@@ -1279,6 +1354,9 @@ int main()
     RemoveDatabaseFiles(failed_ddl_migration_database);
     RemoveDatabaseFiles(unsupported_database);
     RemoveDatabaseFiles(malformed_v1_database);
+    RemoveDatabaseFiles(malformed_audit_type_database);
+    RemoveDatabaseFiles(malformed_audit_nullable_database);
+    RemoveDatabaseFiles(malformed_audit_extra_database);
     RemoveDatabaseFiles(malformed_legacy_type_database);
     RemoveDatabaseFiles(malformed_legacy_key_database);
     RemoveDatabaseFiles(malformed_legacy_nullable_database);

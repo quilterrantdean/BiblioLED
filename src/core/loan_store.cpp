@@ -169,10 +169,24 @@ bool HasAuditTable(sqlite3* db, bool* exists, std::string* error)
 
 bool HasAuditSchema(sqlite3* db)
 {
-    static const char* columns[] = {
-        "id", "occurred_at", "action", "loan_id",
-        "before_title", "before_loan_date", "before_type",
-        "after_title", "after_loan_date", "after_type", "details"
+    struct ExpectedColumn {
+        const char* name;
+        const char* declared_type;
+        int not_null;
+        int primary_key;
+    };
+    static const ExpectedColumn expected[] = {
+        {"id", "INTEGER", 0, 1},
+        {"occurred_at", "TEXT", 1, 0},
+        {"action", "TEXT", 1, 0},
+        {"loan_id", "INTEGER", 0, 0},
+        {"before_title", "TEXT", 0, 0},
+        {"before_loan_date", "TEXT", 0, 0},
+        {"before_type", "TEXT", 0, 0},
+        {"after_title", "TEXT", 0, 0},
+        {"after_loan_date", "TEXT", 0, 0},
+        {"after_type", "TEXT", 0, 0},
+        {"details", "TEXT", 1, 0}
     };
 
     sqlite3_stmt* statement = NULL;
@@ -182,21 +196,47 @@ bool HasAuditSchema(sqlite3* db)
         return false;
     }
 
-    bool found[11] = {false};
+    bool found[sizeof(expected) / sizeof(expected[0])] = {false};
+    bool valid = true;
+    size_t column_count = 0;
     int step = SQLITE_OK;
     while ((step = sqlite3_step(statement)) == SQLITE_ROW) {
+        ++column_count;
         const unsigned char* name = sqlite3_column_text(statement, 1);
-        if (!name) continue;
-        for (size_t i = 0; i < sizeof(columns) / sizeof(columns[0]); ++i) {
-            if (sqlite3_stricmp(reinterpret_cast<const char*>(name), columns[i]) == 0) {
-                found[i] = true;
+        const unsigned char* declared_type = sqlite3_column_text(statement, 2);
+        if (!name || !declared_type) {
+            valid = false;
+            continue;
+        }
+
+        size_t match = sizeof(expected) / sizeof(expected[0]);
+        for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+            if (sqlite3_stricmp(reinterpret_cast<const char*>(name),
+                                expected[i].name) == 0) {
+                match = i;
+                break;
             }
         }
-    }
-    const int finalize_rc = sqlite3_finalize(statement);
-    if (step != SQLITE_DONE || finalize_rc != SQLITE_OK) return false;
+        if (match == sizeof(expected) / sizeof(expected[0]) || found[match]) {
+            valid = false;
+            continue;
+        }
 
-    for (size_t i = 0; i < sizeof(columns) / sizeof(columns[0]); ++i) {
+        found[match] = true;
+        if (sqlite3_stricmp(reinterpret_cast<const char*>(declared_type),
+                            expected[match].declared_type) != 0 ||
+            sqlite3_column_int(statement, 3) != expected[match].not_null ||
+            sqlite3_column_int(statement, 5) != expected[match].primary_key) {
+            valid = false;
+        }
+    }
+
+    const int finalize_rc = sqlite3_finalize(statement);
+    if (step != SQLITE_DONE || finalize_rc != SQLITE_OK ||
+        !valid || column_count != sizeof(expected) / sizeof(expected[0])) {
+        return false;
+    }
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
         if (!found[i]) return false;
     }
     return true;

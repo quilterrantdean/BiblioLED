@@ -80,7 +80,7 @@ All paths are resolved from the executable directory. The existing application i
 - SQLite is the authoritative store.
 - Database schema version is stored in SQLite PRAGMA user_version.
 - Version 0 is the existing loans-only schema; it remains readable but read-only until the user confirms migration.
-- Version 1 adds audit_events and its indexes. New databases are created directly at this version.
+- Version 1 adds audit_events and its indexes. New databases are created directly at this version. Its `audit_events` table is validated against the full 11-column contract (declared type, required/optional fields and INTEGER primary key), not just column names.
 - The version 0 to 1 migration creates and validates a full backup first, then adds the audit table and indexes transactionally. It does not rewrite or discard loan records. The legacy `loans` table is accepted only when it has exactly four supported columns: `id INTEGER PRIMARY KEY`, `title TEXT NOT NULL`, `loan_date TEXT NOT NULL`, and `type TEXT NOT NULL`. Same-name look-alike schemas with a text ID, no integer primary key, or nullable required fields and additional unsupported columns are rejected without being modified.
 - Do not silently create a fresh database when an expected database cannot be opened.
 - A small initialisation marker in `config/database.initialized` distinguishes first launch from a database that has gone missing. If the marker exists but the database does not, never create an empty database; offer the guided recovery flow instead.
