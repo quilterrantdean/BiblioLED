@@ -56,19 +56,20 @@ bool HasColumn(sqlite3* db, const char* column_name)
 {
     sqlite3_stmt* statement = NULL;
     if (sqlite3_prepare_v2(db, "PRAGMA table_info(loans);", -1, &statement, NULL) != SQLITE_OK) {
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
     bool found = false;
-    while (sqlite3_step(statement) == SQLITE_ROW) {
+    int step = SQLITE_OK;
+    while ((step = sqlite3_step(statement)) == SQLITE_ROW) {
         const unsigned char* name = sqlite3_column_text(statement, 1);
         if (name && sqlite3_stricmp(reinterpret_cast<const char*>(name), column_name) == 0) {
             found = true;
-            break;
         }
     }
-    sqlite3_finalize(statement);
-    return found;
+    const int finalize_rc = sqlite3_finalize(statement);
+    return step == SQLITE_DONE && finalize_rc == SQLITE_OK && found;
 }
 
 bool HasExpectedSchema(sqlite3* db)
@@ -88,19 +89,22 @@ bool HasAuditTable(sqlite3* db, bool* exists, std::string* error)
     const int rc = sqlite3_prepare_v2(db, sql, -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         if (error) *error = sqlite3_errmsg(db);
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
-    const int step = sqlite3_step(statement);
-    if (step == SQLITE_ROW) {
-        if (exists) *exists = true;
-    } else if (step != SQLITE_DONE) {
+    bool found = false;
+    int step = SQLITE_OK;
+    while ((step = sqlite3_step(statement)) == SQLITE_ROW) {
+        found = true;
+    }
+    const int finalize_rc = sqlite3_finalize(statement);
+    if (step != SQLITE_DONE || finalize_rc != SQLITE_OK) {
         if (error) *error = sqlite3_errmsg(db);
-        sqlite3_finalize(statement);
         return false;
     }
 
-    sqlite3_finalize(statement);
+    if (exists) *exists = found;
     return true;
 }
 
@@ -149,18 +153,32 @@ bool ReadUserVersion(sqlite3* db, int* version, std::string* error)
     const int rc = sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         if (error) *error = sqlite3_errmsg(db);
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
-    const int step = sqlite3_step(statement);
-    if (step != SQLITE_ROW) {
+    const int first_step = sqlite3_step(statement);
+    if (first_step != SQLITE_ROW) {
+        const std::string detail = sqlite3_errmsg(db);
+        const int finalize_rc = sqlite3_finalize(statement);
+        if (error) {
+            *error = detail;
+            if (finalize_rc != SQLITE_OK) {
+                *error += " (SQLite statement finalisation also failed.)";
+            }
+        }
+        return false;
+    }
+
+    const int value = sqlite3_column_int(statement, 0);
+    const int terminal_step = sqlite3_step(statement);
+    const int finalize_rc = sqlite3_finalize(statement);
+    if (terminal_step != SQLITE_DONE || finalize_rc != SQLITE_OK) {
         if (error) *error = sqlite3_errmsg(db);
-        sqlite3_finalize(statement);
         return false;
     }
 
-    *version = sqlite3_column_int(statement, 0);
-    sqlite3_finalize(statement);
+    *version = value;
     return true;
 }
 
