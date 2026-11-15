@@ -171,12 +171,12 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated source head `909628715a09b9fa9106124c3c2a5b9d1a30e877` on `development` passed the complete CI matrix, including the exact legacy-schema contract and three negative-shape tests:
+Latest validated source head `deec38accdf271a1c9429fb96fa54fcba7b258cd` on `development` passed the complete CI matrix, including four negative tests for incompatible legacy-loans table shapes (text ID, missing primary key, nullable required field, and unsupported extra column):
 
-- [Core tests run 43766820549](https://github.com/quilterrantdean/BiblioLED/actions/runs/43766820549): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43766820536](https://github.com/quilterrantdean/BiblioLED/actions/runs/43766820536): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
+- [Core tests run 43767351189](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351189): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43767351264](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
 
-Latest CI artefact: [14182637061](https://github.com/quilterrantdean/BiblioLED/actions/runs/43766820536), `BiblioLED-XP-PoC`, 1,502,035 bytes. ZIP SHA-256: `d80f22b9b2b31edd8cf9be528954e2c0503f54058fb1885453f756fa69fa577e`; executable SHA-256: `3129b7ffeafbd82ecf49ff2fbc13dba243cf83f13e2a8122cf498846a47f8d28`.
+Latest CI artefact: [14182732618](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264), `BiblioLED-XP-PoC`, 1,502,035 bytes. ZIP SHA-256: `a838aa34d637d07dfd1ca05b4527cd7060a7d4d4f4709238991a9d5187ffe8ee`; executable SHA-256: `0971f07f1097d85361d30c19c44fcd6032eac3823bf810e8f05bdac40fa0225e`.
 
 The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. The README is UTF-8 with BOM. This is a disposable validation artefact, not a normal portable release. CI verifies build compatibility metadata and isolated tests, but does not replace runtime validation of the recovery wizard, Portuguese glyph rendering and general UI on a physical Windows XP SP3 system.
 

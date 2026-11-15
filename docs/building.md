@@ -122,16 +122,16 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `909628715a09b9fa9106124c3c2a5b9d1a30e877`. Its validation passed:
+The latest validated product-code commit is `deec38accdf271a1c9429fb96fa54fcba7b258cd`. Its validation passed:
 
-- [Core tests run 43766820549](https://github.com/quilterrantdean/BiblioLED/actions/runs/43766820549): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed, including tests for rejecting incompatible look-alike legacy schemas without changing their records.
-- [XP-targeted build run 43766820536](https://github.com/quilterrantdean/BiblioLED/actions/runs/43766820536): w64devkit x86 2.10.0, all seven tests, PE32/i386, GUI subsystem 5.01, and import checks.
+- [Core tests run 43767351189](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351189): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed, including tests for rejecting incompatible look-alike legacy schemas without changing their records.
+- [XP-targeted build run 43767351264](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264): w64devkit x86 2.10.0, all seven tests, PE32/i386, GUI subsystem 5.01, and import checks.
 
-The disposable artefact is [14182637061](https://github.com/quilterrantdean/BiblioLED/actions/runs/43766820536), `BiblioLED-XP-PoC`:
+The disposable artefact is [14182732618](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264), `BiblioLED-XP-PoC`:
 
 - ZIP size: 1,502,035 bytes
-- ZIP SHA-256: `d80f22b9b2b31edd8cf9be528954e2c0503f54058fb1885453f756fa69fa577e`
-- `BiblioLED.exe` SHA-256: `3129b7ffeafbd82ecf49ff2fbc13dba243cf83f13e2a8122cf498846a47f8d28`
+- ZIP SHA-256: `a838aa34d637d07dfd1ca05b4527cd7060a7d4d4f4709238991a9d5187ffe8ee`
+- `BiblioLED.exe` SHA-256: `0971f07f1097d85361d30c19c44fcd6032eac3823bf810e8f05bdac40fa0225e`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
