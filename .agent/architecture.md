@@ -80,7 +80,7 @@ All paths are resolved from the executable directory. The existing application i
 - SQLite is the authoritative store.
 - Database schema version is stored in SQLite PRAGMA user_version.
 - Version 0 is the existing loans-only schema; it remains readable but read-only until the user confirms migration.
-- Version 1 adds audit_events and its indexes. New databases are created directly at this version. Its `audit_events` table is validated against the full 11-column contract (declared type, required/optional fields and INTEGER primary key), not just column names.
+- Version 1 adds audit_events and its indexes. New databases are created directly at this version. Its `audit_events` table is validated against the full 11-column contract (declared type, required/optional fields and INTEGER primary key), not just column names. The required fields are `occurred_at`, `action`, and `details` (`TEXT NOT NULL`); `id` is an INTEGER primary key; `loan_id` is nullable INTEGER; the before/after title/date/type fields are nullable TEXT. The exact 11-column count is enforced; a wrong action type, nullable details, or an extra column is rejected.
 - The version 0 to 1 migration creates and validates a full backup first, then adds the audit table and indexes transactionally. It does not rewrite or discard loan records. The legacy `loans` table is accepted only when it has exactly four supported columns: `id INTEGER PRIMARY KEY`, `title TEXT NOT NULL`, `loan_date TEXT NOT NULL`, and `type TEXT NOT NULL`. Same-name look-alike schemas with a text ID, no integer primary key, or nullable required fields and additional unsupported columns are rejected without being modified.
 - Do not silently create a fresh database when an expected database cannot be opened.
 - A small initialisation marker in `config/database.initialized` distinguishes first launch from a database that has gone missing. If the marker exists but the database does not, never create an empty database; offer the guided recovery flow instead.
@@ -171,12 +171,12 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated source head `deec38accdf271a1c9429fb96fa54fcba7b258cd` on `development` passed the complete CI matrix, including four negative tests for incompatible legacy-loans table shapes (text ID, missing primary key, nullable required field, and unsupported extra column):
+Latest validated source head `e8c87dd828b4b161822ee53f647f625fd5a5dbf2` on `development` passed the complete CI matrix, including four negative tests for incompatible legacy `loans` tables and three negative tests for malformed version-1 `audit_events` tables. Each rejection test verifies that the original loan row remains unchanged.
 
-- [Core tests run 43767351189](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351189): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43767351264](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
+- [Core tests run 43767914091](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914091): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43767914092](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
 
-Latest CI artefact: [14182732618](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264), `BiblioLED-XP-PoC`, 1,502,035 bytes. ZIP SHA-256: `a838aa34d637d07dfd1ca05b4527cd7060a7d4d4f4709238991a9d5187ffe8ee`; executable SHA-256: `0971f07f1097d85361d30c19c44fcd6032eac3823bf810e8f05bdac40fa0225e`.
+Latest CI artefact: [14182658928](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092), `BiblioLED-XP-PoC`, 1,502,087 bytes. ZIP SHA-256: `99b20011c0fe8e587ea4449f3c3b7618b4752a64263e10ed456b22a074eb3498`; executable SHA-256: `2fff55d57b47883dedcc13383c1af766ccaddca55a27d8255c98a1f23ba6289c`.
 
 The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. The README is UTF-8 with BOM. This is a disposable validation artefact, not a normal portable release. CI verifies build compatibility metadata and isolated tests, but does not replace runtime validation of the recovery wizard, Portuguese glyph rendering and general UI on a physical Windows XP SP3 system.
 

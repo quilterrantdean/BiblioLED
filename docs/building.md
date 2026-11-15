@@ -122,16 +122,16 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `deec38accdf271a1c9429fb96fa54fcba7b258cd`. Its validation passed:
+The latest validated product-code commit is `e8c87dd828b4b161822ee53f647f625fd5a5dbf2`. Its validation passed:
 
-- [Core tests run 43767351189](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351189): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed, including tests for rejecting incompatible look-alike legacy schemas without changing their records.
-- [XP-targeted build run 43767351264](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264): w64devkit x86 2.10.0, all seven tests, PE32/i386, GUI subsystem 5.01, and import checks.
+- [Core tests run 43767914091](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914091): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed, including tests for rejecting incompatible look-alike legacy schemas without changing their records.
+- [XP-targeted build run 43767914092](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092): w64devkit x86 2.10.0, all seven tests, PE32/i386, GUI subsystem 5.01, and import checks.
 
-The disposable artefact is [14182732618](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767351264), `BiblioLED-XP-PoC`:
+The disposable artefact is [14182658928](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092), `BiblioLED-XP-PoC`:
 
-- ZIP size: 1,502,035 bytes
-- ZIP SHA-256: `a838aa34d637d07dfd1ca05b4527cd7060a7d4d4f4709238991a9d5187ffe8ee`
-- `BiblioLED.exe` SHA-256: `0971f07f1097d85361d30c19c44fcd6032eac3823bf810e8f05bdac40fa0225e`
+- ZIP size: 1,502,087 bytes
+- ZIP SHA-256: `99b20011c0fe8e587ea4449f3c3b7618b4752a64263e10ed456b22a074eb3498`
+- `BiblioLED.exe` SHA-256: `2fff55d57b47883dedcc13383c1af766ccaddca55a27d8255c98a1f23ba6289c`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
@@ -167,7 +167,7 @@ On Windows, application/store paths are passed as UTF-8 and converted to UTF-16 
 The schema version is stored in `PRAGMA user_version`. The legacy `loans` table is accepted only in its exact four-column form: `id INTEGER PRIMARY KEY` with `title`, `loan_date`, and `type` declared `TEXT NOT NULL`. Look-alike tables with a text ID, no integer primary key, or unsupported extra columns are rejected without modification:
 
 - Version 0 is the legacy `loans(id, title, loan_date, type)` table.
-- Version 1 is the same loans table plus `audit_events` and its indexes.
+- Version 1 is the same loans table plus `audit_events` and its indexes. The audit table has exactly 11 columns: `id INTEGER PRIMARY KEY`, required `occurred_at`, `action`, and `details` as TEXT, nullable INTEGER `loan_id`, and six nullable TEXT before/after fields. Wrong declared types, wrong nullability, a malformed primary key, or extra columns are rejected.
 
 New databases are created directly at version 1. An existing version-0 database can be read, but loan changes are blocked until the user explicitly confirms migration. Migration first creates and validates a complete safety backup, then adds the audit table/indexes and records the migration in one SQLite transaction. The existing loan rows are not rewritten. A failed migration rolls back its partial DDL and leaves the database at version 0.
 
