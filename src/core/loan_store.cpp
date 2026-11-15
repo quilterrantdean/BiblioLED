@@ -496,6 +496,8 @@ BackupCompressionFormat CompressionFormatFromName(const std::string& name)
                           : BackupCompressionFormat::Gzip;
 }
 
+std::string InvalidBackupPath(const std::string& original, int suffix);
+
 bool PreserveInvalidBackupGroup(const std::string& path,
                                std::string* error)
 {
