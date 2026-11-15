@@ -345,7 +345,7 @@ bool ReadLoanById(sqlite3* db,
         rc = sqlite3_step(statement);
     }
     if (rc != SQLITE_DONE) {
-        if (error) *error = SqliteError(db, "Unable to read loan record");
+        if (error) *error = std::string("Unable to read loan record: ") + sqlite3_errmsg(db);
         sqlite3_finalize(statement);
         return false;
     }
