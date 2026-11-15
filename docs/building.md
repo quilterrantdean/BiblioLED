@@ -122,20 +122,19 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `e8c87dd828b4b161822ee53f647f625fd5a5dbf2`. Its validation passed:
+The latest validated product-code commit is `5f5c9b5f0e49b3e430167c0ec144a3cde2c0e1d3`. Its validation passed:
 
-- [Core tests run 43767914091](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914091): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed, including tests for rejecting incompatible look-alike legacy schemas without changing their records.
-- [XP-targeted build run 43767914092](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092): w64devkit x86 2.10.0, all seven tests, PE32/i386, GUI subsystem 5.01, and import checks.
+- [Core tests run 43772056948](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056948): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
+- [XP-targeted build run 43772056931](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931): w64devkit x86 2.10.0, all seven tests, PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
 
-The disposable artefact is [14182658928](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092), `BiblioLED-XP-PoC`:
+The disposable artefact is [14185170648](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931), `BiblioLED-XP-PoC`:
 
-- ZIP size: 1,502,087 bytes
-- ZIP SHA-256: `99b20011c0fe8e587ea4449f3c3b7618b4752a64263e10ed456b22a074eb3498`
-- `BiblioLED.exe` SHA-256: `2fff55d57b47883dedcc13383c1af766ccaddca55a27d8255c98a1f23ba6289c`
+- ZIP size: 1,548,901 bytes
+- ZIP SHA-256: `72de8853d9f61dfe52484de43b6a883f56dbe1cd7f5f3d11f72ededee20ae138`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
-This ZIP is a disposable CI test artefact, not a normal portable distribution or release.
+This ZIP is a disposable CI test artefact, not a normal portable distribution or release. The user also confirmed that the executable runs well on Windows XP and that secondary-window Portuguese text encoding is corrected; the exact manual test artefact and scenarios have not been recorded.
 
 ## Portable directory layout and settings
 

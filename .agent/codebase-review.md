@@ -127,10 +127,13 @@ The user confirmed on 2026-11-15 that secondary-window Portuguese text encoding 
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest validated product-code and CI head is `e8c87dd828b4b161822ee53f647f625fd5a5dbf2` on `development`.
+The latest validated product-code and CI head is `5f5c9b5f0e49b3e430167c0ec144a3cde2c0e1d3` on `development`.
 
-- [Core tests run 43767914091](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914091) succeeded: Ubuntu tests, modern Windows SDK Win32 build/store tests, and Cppcheck 2.19.0 all passed. The test suite rejects four incompatible loans-table schemas and three incompatible audit-table schemas, verifying that the original loan record remains unchanged.
-- [XP-targeted Win32 build run 43767914092](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092) succeeded using pinned w64devkit x86 2.10.0. All 7 CTest tests passed, PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed, and artifact [14182658928](https://github.com/quilterrantdean/BiblioLED/actions/runs/43767914092) was published. ZIP SHA-256: `99b20011c0fe8e587ea4449f3c3b7618b4752a64263e10ed456b22a074eb3498`; executable SHA-256: `2fff55d57b47883dedcc13383c1af766ccaddca55a27d8255c98a1f23ba6289c`.
+- [Core tests run 43772056948](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056948) succeeded: Ubuntu tests, modern Windows SDK Win32 build/store tests, and Cppcheck 2.19.0 all passed.
+- [XP-targeted Win32 build run 43772056931](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931) succeeded using pinned w64devkit x86 2.10.0. All 7 CTest tests passed, PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- Artefact [14185170648](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931), `BiblioLED-XP-PoC`: 1,548,901 bytes; ZIP SHA-256 `72de8853d9f61dfe52484de43b6a883f56dbe1cd7f5f3d11f72ededee20ae138`.
+
+The sorting implementation is included in this validated source head. The user confirmed on 2026-11-15 that secondary-window Portuguese text encoding is corrected and that the executable runs well on Windows XP. The exact manually tested executable hash and scenario list remain unrecorded.
 
 The explicit `ROLLBACK` statement failure path itself and abrupt process/power-loss interruption remain untested; the existing tests cover successful rollback after a forced DDL failure and rollback of file-preservation moves.
 
