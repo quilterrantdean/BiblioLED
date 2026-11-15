@@ -368,6 +368,10 @@ int main()
     const std::string no_op_database = database + ".no-op.sqlite";
     const std::string legacy_database = database + ".legacy.sqlite";
     const std::string failed_migration_database = database + ".failed-migration.sqlite";
+    const std::string failed_ddl_migration_database =
+        database + ".failed-ddl-migration.sqlite";
+    const std::string failed_ddl_migration_backup_dir =
+        database + ".failed-ddl-migration-backups";
     const std::string unsupported_database = database + ".unsupported.sqlite";
     const std::string malformed_v1_database = database + ".malformed-v1.sqlite";
     const std::string missing_backup_directory = database + ".missing-backup-directory";
@@ -871,6 +875,77 @@ int main()
     if (migration_backup_decoded != migration_backup) RemoveDatabaseFiles(migration_backup_decoded);
     legacy.Close();
 
+    // A DDL failure after part of the schema has been created must roll
+    // the whole migration back and leave the legacy database usable.
+    Check(CreateLegacyDatabase(failed_ddl_migration_database, 0),
+          "legacy database for mid-migration failure injection should be created");
+    Check(MakeDirectory(failed_ddl_migration_backup_dir),
+          "mid-migration failure backup directory should be created");
+
+    sqlite3* conflict_db = NULL;
+    const int conflict_open_rc = sqlite3_open(
+        failed_ddl_migration_database.c_str(), &conflict_db);
+    Check(conflict_open_rc == SQLITE_OK,
+          "legacy database should open for migration-index conflict setup");
+    if (conflict_open_rc == SQLITE_OK && conflict_db) {
+        Check(Execute(conflict_db,
+            "CREATE TABLE migration_conflict (id INTEGER PRIMARY KEY);"
+            "CREATE INDEX idx_audit_events_occurred_at ON migration_conflict(id);"),
+            "conflicting index should be created before migration");
+        const int conflict_close_rc = sqlite3_close(conflict_db);
+        Check(conflict_close_rc == SQLITE_OK,
+              "migration-index conflict setup connection should close cleanly");
+    } else if (conflict_db) {
+        sqlite3_close(conflict_db);
+    }
+
+    biblioled::LoanStore failed_ddl_migration;
+    Check(failed_ddl_migration.Open(
+              failed_ddl_migration_database,
+              failed_ddl_migration_backup_dir, &error),
+          "legacy database with an unrelated index conflict should open");
+    if (failed_ddl_migration.IsOpen()) {
+        std::string failed_ddl_backup;
+        error.clear();
+        Check(!failed_ddl_migration.MigrateLegacySchema(&failed_ddl_backup, &error),
+              "migration should fail when audit-index creation collides with an existing index");
+        Check(!failed_ddl_backup.empty() && FileExists(failed_ddl_backup),
+              "failed mid-migration attempt should retain its mandatory pre-migration backup");
+        if (!failed_ddl_backup.empty()) backups.push_back(failed_ddl_backup);
+        Check(failed_ddl_migration.IsOpen(),
+              "a successful rollback should keep the legacy database connection usable");
+        Check(failed_ddl_migration.SchemaVersion() == 0 &&
+              failed_ddl_migration.MigrationRequired(),
+              "failed DDL migration should preserve the version-0 read-only state");
+        Check(failed_ddl_migration.GetAll(&records, &error) &&
+              records.size() == 1 && records[0].title == "Registo legado",
+              "failed DDL migration should preserve all legacy loan data");
+        failed_ddl_migration.Close();
+    }
+
+    // Reopening runs the schema validator again. It must see an ordinary v0
+    // database, not a partially created audit table left by the failed DDL.
+    biblioled::LoanStore verified_failed_ddl_migration;
+    Check(verified_failed_ddl_migration.Open(
+              failed_ddl_migration_database,
+              failed_ddl_migration_backup_dir, &error),
+          "failed DDL migration should reopen as a clean legacy database");
+    if (verified_failed_ddl_migration.IsOpen()) {
+        Check(verified_failed_ddl_migration.SchemaVersion() == 0 &&
+              verified_failed_ddl_migration.MigrationRequired(),
+              "reopened failed DDL migration should still report schema version 0");
+        Check(verified_failed_ddl_migration.GetAll(&records, &error) &&
+              records.size() == 1 && records[0].title == "Registo legado",
+              "reopened failed DDL migration should retain the original loan record");
+        verified_failed_ddl_migration.Close();
+    }
+    RemoveFilesWithPrefix(failed_ddl_migration_backup_dir, "BiblioLED_");
+#ifdef _WIN32
+    RemoveDirectoryA(failed_ddl_migration_backup_dir.c_str());
+#else
+    rmdir(failed_ddl_migration_backup_dir.c_str());
+#endif
+
     // Failed migration backup must leave the legacy database unchanged and readable.
     Check(CreateLegacyDatabase(failed_migration_database, 0),
           "second legacy database should be created");
@@ -1111,6 +1186,7 @@ int main()
     RemoveDatabaseFiles(blocked_database);
     RemoveDatabaseFiles(legacy_database);
     RemoveDatabaseFiles(failed_migration_database);
+    RemoveDatabaseFiles(failed_ddl_migration_database);
     RemoveDatabaseFiles(unsupported_database);
     RemoveDatabaseFiles(malformed_v1_database);
     RemoveDatabaseFiles(invalid_backup);
