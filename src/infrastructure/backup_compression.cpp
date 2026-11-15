@@ -4,10 +4,14 @@
 
 #include <cstdio>
 #include <cerrno>
+#include <stdint.h>
 #include <string>
 
 #ifdef _WIN32
 #include <windows.h>
+#include <io.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace biblioled {
@@ -60,10 +64,28 @@ bool WriteOutput(FILE* output, const unsigned char* bytes, size_t size)
     return true;
 }
 
+bool FlushOutputFile(FILE* output)
+{
+    if (!output || std::fflush(output) != 0) return false;
+
+#ifdef _WIN32
+    const int descriptor = _fileno(output);
+    if (descriptor < 0) return false;
+    const intptr_t native_handle = _get_osfhandle(descriptor);
+    if (native_handle == -1) return false;
+    return FlushFileBuffers(reinterpret_cast<HANDLE>(native_handle)) != FALSE;
+#else
+    const int descriptor = fileno(output);
+    return descriptor >= 0 && fsync(descriptor) == 0;
+#endif
+}
+
 bool FinishFiles(FILE* input, FILE* output)
 {
     bool ok = true;
-    if (output && std::fflush(output) != 0) ok = false;
+    // Flush the C runtime buffer and then ask the operating system to commit
+    // file data before a validated backup is installed under its final name.
+    if (output && !FlushOutputFile(output)) ok = false;
     if (input && std::fclose(input) != 0) ok = false;
     if (output && std::fclose(output) != 0) ok = false;
     return ok;
