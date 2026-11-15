@@ -23,7 +23,7 @@ struct HistoryContext {
     int sort_column;
     bool sort_ascending;
     HistoryContext() : owner(NULL), store(NULL), invalid_dates(0),
-        sort_column(0), sort_ascending(true) {}
+        sort_column(-1), sort_ascending(true) {}
 };
 
 std::wstring Utf8ToWide(const std::string& value)
