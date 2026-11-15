@@ -1039,7 +1039,17 @@ bool PromptAndRecoverDatabase(const std::wstring& database_path,
     dialog.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST |
                    OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
-    if (!GetOpenFileNameW(&dialog)) return false;
+    if (!GetOpenFileNameW(&dialog)) {
+        const DWORD dialog_error = CommDlgExtendedError();
+        if (dialog_error != 0) {
+            std::wostringstream message;
+            message << L"Não foi possível abrir o selector de cópias de segurança. "
+                    << L"Código de erro do Windows: " << dialog_error << L".";
+            MessageBoxW(NULL, message.str().c_str(), L"Recuperação da base de dados",
+                        MB_OK | MB_ICONERROR);
+        }
+        return false;
+    }
 
     const std::wstring selected(filename);
     std::wstring confirmation =
@@ -1093,7 +1103,16 @@ void RestoreDatabaseFromBackup()
     dialog.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST |
                    OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
 
-    if (!GetOpenFileNameW(&dialog)) return;
+    if (!GetOpenFileNameW(&dialog)) {
+        const DWORD dialog_error = CommDlgExtendedError();
+        if (dialog_error != 0) {
+            std::wostringstream message;
+            message << L"Não foi possível abrir o selector de cópias de segurança. "
+                    << L"Código de erro do Windows: " << dialog_error << L".";
+            ShowStoreError(message.str(), "The Windows common file dialog failed.");
+        }
+        return;
+    }
 
     const std::wstring selected = filename;
     std::wstring confirmation =
@@ -1788,7 +1807,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
                DirectoryHash(gApplicationDirectory));
 
     gInstanceMutex = CreateMutexW(NULL, TRUE, mutex_name);
-    if (gInstanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
+    const DWORD mutex_status = GetLastError();
+    if (!gInstanceMutex) {
+        std::wostringstream message;
+        message << L"Não foi possível garantir a execução de uma única instância "
+                << L"do BiblioLED nesta pasta. A aplicação não será iniciada.\n\n"
+                << L"Código de erro do Windows: " << mutex_status << L".";
+        MessageBoxW(NULL, message.str().c_str(), L"BiblioLED",
+                    MB_OK | MB_ICONERROR);
+        return 1;
+    }
+    if (mutex_status == ERROR_ALREADY_EXISTS) {
         HWND existing = NULL;
         for (int attempt = 0; attempt < 20 && !existing; ++attempt) {
             existing = FindWindowW(kWindowClass, NULL);
