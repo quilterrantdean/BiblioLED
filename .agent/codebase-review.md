@@ -139,4 +139,5 @@ The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained th
 ## Latest audit and static-analysis work
 
 - The version 1 audit-schema inspector now rejects incomplete/failed `PRAGMA table_info` execution, including a non-successful statement finalisation, rather than accepting a partial scan.
+- The external audit-log scanner now uses a fixed 64 KiB read buffer and bounded event-key parser state, avoiding memory use proportional to the size of an archived log. It truncates only an incomplete active-log tail; an incomplete archive is rejected unchanged.
 - Windows audit-log tests now cover an active log becoming read-only (pending events remain queued and synchronisation succeeds after permissions are restored) and an archived log ending with an incomplete line (synchronisation must fail without appending). The new Cppcheck workflow scans the portable C++11 core, backup infrastructure and corresponding portable tests; its first CI result is pending.

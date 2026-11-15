@@ -631,6 +631,8 @@ std::string MakeRecoveryPreservedPath(const std::string& database_path, int suff
 LoanStore::LoanStore()
     : db_(NULL),
       session_backup_done_(false),
+      schema_version_(-1),
+      migration_required_(false),
       external_audit_log_enabled_(false),
       external_audit_log_healthy_(true),
       backup_compression_format_("gzip"),

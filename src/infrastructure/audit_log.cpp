@@ -90,34 +90,92 @@ std::string MakeLine(const AuditEvent& e,const std::string& key)
     if(!e.details.empty()) o<<" | details=\""<<Escape(e.details)<<"\"";
     o<<"\r\n"; return o.str();
 }
-bool ReadBytes(HANDLE f,std::vector<char>* bytes)
+bool ReadLog(HANDLE file, bool active,
+             std::set<std::string>* keys, std::string* error)
 {
-    DWORD size=GetFileSize(f,NULL);
-    if(size==INVALID_FILE_SIZE && GetLastError()!=NO_ERROR) return false;
-    bytes->assign(size,0); DWORD done=0;
-    while(done<size) {
-        DWORD got=0;
-        if(!ReadFile(f,&(*bytes)[done],size-done,&got,NULL)||!got) return false;
-        done+=got;
+    static const char marker[] = "event_key=";
+    const size_t marker_length = sizeof(marker) - 1;
+    char buffer[64 * 1024];
+    LONGLONG total_bytes = 0;
+    LONGLONG complete_bytes = 0;
+    std::string marker_window;
+    std::string pending_key;
+    bool key_found = false;
+    bool key_started = false;
+    bool key_valid = true;
+    bool line_has_data = false;
+
+    while (true) {
+        DWORD received = 0;
+        if (!ReadFile(file, buffer, sizeof(buffer), &received, NULL)) {
+            SetError(error, "Não foi possível ler um ficheiro de auditoria.");
+            return false;
+        }
+        if (received == 0) break;
+
+        for (DWORD i = 0; i < received; ++i) {
+            const char value = buffer[i];
+            ++total_bytes;
+
+            if (value == '\n') {
+                if (key_found && key_valid && pending_key.size() == 16) {
+                    keys->insert(pending_key);
+                }
+                marker_window.clear();
+                pending_key.clear();
+                key_found = false;
+                key_started = false;
+                key_valid = true;
+                line_has_data = false;
+                complete_bytes = total_bytes;
+                continue;
+            }
+
+            line_has_data = true;
+            if (key_started) {
+                if (value == ' ' || value == '|' || value == '\r') {
+                    key_started = false;
+                } else {
+                    const bool hexadecimal =
+                        (value >= '0' && value <= '9') ||
+                        (value >= 'a' && value <= 'f') ||
+                        (value >= 'A' && value <= 'F');
+                    if (!hexadecimal || pending_key.size() >= 16) {
+                        key_valid = false;
+                    } else {
+                        pending_key.push_back(value);
+                    }
+                }
+            } else if (!key_found) {
+                if (marker_window.size() == marker_length) {
+                    marker_window.erase(0, 1);
+                }
+                marker_window.push_back(value);
+                if (marker_window == marker) {
+                    key_found = true;
+                    key_started = true;
+                    marker_window.clear();
+                }
+            }
+        }
+    }
+
+    if (line_has_data) {
+        if (!active) {
+            SetError(error, "Um log arquivado termina numa linha incompleta.");
+            return false;
+        }
+
+        LARGE_INTEGER position;
+        position.QuadPart = complete_bytes;
+        if (!SetFilePointerEx(file, position, NULL, FILE_BEGIN) ||
+            !SetEndOfFile(file) ||
+            !FlushFileBuffers(file)) {
+            SetError(error, "Não foi possível recuperar a última linha incompleta do log.");
+            return false;
+        }
     }
     return true;
-}
-void CollectKeys(const std::vector<char>& bytes,std::set<std::string>* keys)
-{
-    size_t start=0;
-    while(start<bytes.size()) {
-        size_t end=start; while(end<bytes.size()&&bytes[end]!='\n') ++end;
-        if(end==bytes.size()) break;
-        std::string line(bytes.begin()+start,bytes.begin()+end);
-        const std::string marker="event_key=";
-        size_t at=line.find(marker);
-        if(at!=std::string::npos) {
-            size_t first=at+marker.size(), last=line.find(" |",first);
-            if(last==std::string::npos) last=line.size();
-            if(last>first) keys->insert(line.substr(first,last-first));
-        }
-        start=end+1;
-    }
 }
 bool ScanLogs(const std::wstring& dir,std::set<std::string>* keys,std::string* error)
 {
@@ -139,30 +197,9 @@ bool ScanLogs(const std::wstring& dir,std::set<std::string>* keys,std::string* e
             SetError(error,"Não foi possível abrir um ficheiro de auditoria.");
             ok=false; break;
         }
-        std::vector<char> bytes;
-        ok=ReadBytes(f,&bytes);
-        if(ok && !bytes.empty() && bytes.back()!='\n') {
-            size_t keep=bytes.size();
-            while(keep>0 && bytes[keep-1]!='\n') --keep;
-            if(!active) {
-                SetError(error,"Um log arquivado termina numa linha incompleta.");
-                ok=false;
-            } else {
-                SetLastError(NO_ERROR);
-                const DWORD position = SetFilePointer(
-                    f, static_cast<LONG>(keep), NULL, FILE_BEGIN);
-                if ((position == INVALID_SET_FILE_POINTER && GetLastError() != NO_ERROR) ||
-                    !SetEndOfFile(f)) {
-                    SetError(error,"Não foi possível recuperar a última linha incompleta do log.");
-                    ok=false;
-                } else {
-                    bytes.resize(keep);
-                }
-            }
-        }
+        ok=ReadLog(f,active,keys,error);
         CloseHandle(f);
         if(!ok) break;
-        CollectKeys(bytes,keys);
     } while(FindNextFileW(find,&data));
     DWORD last=GetLastError(); FindClose(find);
     if(ok && last!=ERROR_NO_MORE_FILES) {
