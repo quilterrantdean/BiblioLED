@@ -26,7 +26,7 @@ bool FileExists(const std::string& path)
         CP_UTF8, 0, path.c_str(), -1, NULL, 0);
     if (length <= 1) return false;
 
-    std::wstring wide_path(static_cast<size_t>(length), L'\\0');
+    std::wstring wide_path(static_cast<size_t>(length), L'\0');
     if (!MultiByteToWideChar(
             CP_UTF8, 0, path.c_str(), -1, &wide_path[0], length)) {
         return false;

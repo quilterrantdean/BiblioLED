@@ -55,7 +55,7 @@ std::string WidePathToUtf8(const std::wstring& path)
     const int length = WideCharToMultiByte(
         CP_UTF8, 0, path.c_str(), -1, NULL, 0, NULL, NULL);
     if (length <= 1) return std::string();
-    std::string result(static_cast<size_t>(length), '\\0');
+    std::string result(static_cast<size_t>(length), '\0');
     if (!WideCharToMultiByte(
             CP_UTF8, 0, path.c_str(), -1, &result[0], length, NULL, NULL)) {
         return std::string();
