@@ -1701,6 +1701,17 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
         SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
+
+    // Check the target before creating the daily snapshot. A stale UI or an
+    // invalid identifier must not create a backup when no loan can be changed.
+    LoanRecord existing;
+    bool existing_found = false;
+    if (!ReadLoanById(db_, record.id, &existing, &existing_found, error)) return false;
+    if (!existing_found) {
+        SetError(error, "Loan record was not found.");
+        return false;
+    }
+
     if (!EnsureAutomaticBackup(error)) return false;
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
@@ -1760,6 +1771,17 @@ bool LoanStore::Remove(int id, std::string* error)
         SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
+
+    // As with updates, a missing identifier is not a data mutation and must
+    // not trigger a daily snapshot.
+    LoanRecord existing;
+    bool existing_found = false;
+    if (!ReadLoanById(db_, id, &existing, &existing_found, error)) return false;
+    if (!existing_found) {
+        SetError(error, "Loan record was not found.");
+        return false;
+    }
+
     if (!EnsureAutomaticBackup(error)) return false;
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 

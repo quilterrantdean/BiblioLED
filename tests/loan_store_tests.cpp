@@ -290,6 +290,7 @@ int main()
     const std::string database =
         "loan-store-test-" + std::to_string(std::rand()) + ".sqlite";
     const std::string blocked_database = database + ".blocked.sqlite";
+    const std::string no_op_database = database + ".no-op.sqlite";
     const std::string legacy_database = database + ".legacy.sqlite";
     const std::string failed_migration_database = database + ".failed-migration.sqlite";
     const std::string unsupported_database = database + ".unsupported.sqlite";
@@ -323,6 +324,28 @@ int main()
     Check(store.GetAuditEvents(&events, &error), "new audit table should be readable");
     Check(events.empty(), "new database should start with no audit events");
     Check(!store.HasSessionBackup(), "opening a database should not create a backup");
+
+    // Missing record identifiers are rejected before the automatic-backup gate.
+    biblioled::LoanStore no_op_store;
+    Check(no_op_store.Open(no_op_database, ".", &error),
+          "isolated no-op database should open");
+    if (no_op_store.IsOpen()) {
+        biblioled::LoanRecord missing_record;
+        missing_record.id = 42;
+        missing_record.title = "Registo inexistente";
+        missing_record.loan_date = "2099-01-01 10:00";
+        missing_record.type = "livro";
+        Check(!no_op_store.Update(missing_record, &error),
+              "updating a missing record should fail");
+        Check(!no_op_store.HasSessionBackup(),
+              "updating a missing record must not create a daily backup");
+        Check(!no_op_store.Remove(42, &error),
+              "deleting a missing record should fail");
+        Check(!no_op_store.HasSessionBackup(),
+              "deleting a missing record must not create a daily backup");
+        no_op_store.Close();
+    }
+    RemoveDatabaseFiles(no_op_database);
 
     // Audit-only writes (such as startup/shutdown) must not create automatic backups.
     const std::string audit_only_database = database + ".audit-only.sqlite";
