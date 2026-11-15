@@ -93,6 +93,7 @@ All paths are resolved from the executable directory. The existing application i
 - Build filesystem paths with the platform-native separator (`\\` on Windows, `/` on POSIX) even though Win32 file APIs accept both slash styles; do not emit mixed separators in user-visible backup paths.
 - The store's Windows path inputs are UTF-8. Existence checks convert to UTF-16 and use `GetFileAttributesW`; the settings INI is read/written through wide-character Win32 file APIs so non-ASCII executable-directory paths work with the portable layout. At startup, each required portable directory is checked as an actual directory (not merely an existing path); a file/directory collision or creation failure stops startup before the database is opened.
 - Manual backups remain until the user deletes them. Safety backups made before restore or migration are also preserved and are never removed by automatic retention. Historical backups created by older versions with generic `BiblioLED_YYYYMMDD_HHMMSS.sqlite` names are also left untouched: their original purpose cannot be reliably distinguished, and they remain restorable.
+- Flush completed compressed backup output with `fflush` and then the native OS durability primitive (`FlushFileBuffers` on Windows, `fsync` on POSIX) before installing the final backup filename.
 - Compress new backups using statically linked zlib 1.4. The supported standard wrappers are gzip (`.sqlite.gz`) and zlib (`.sqlite.zlib`); the format and level (0–9, default 6) are selected in the backup settings and stored in `config/settings.ini`. Do not use raw DEFLATE. Changes made in the backup-settings dialog are applied to the open `LoanStore` immediately; they affect the next backup created without restarting. A valid automatic snapshot already created for the current day remains reused.
 - Stream compression/decompression with a fixed-size buffer; never load the complete database into memory.
 - Backup creation sequence: SQLite snapshot -> SQLite integrity check -> compression -> decompression round-trip -> second SQLite integrity check -> move to final filename. A failed step must not publish a final backup or allow the pending loan mutation.
@@ -170,14 +171,14 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated source commit `4d1651a339738734175dd03f12d35e7e3a6a2f32` on `development` passed the complete CI matrix, including the exact Cppcheck 2.19.0 version guard, checked SQLite bind/step/finalisation handling, checked transaction rollback and partial-DDL migration rollback coverage:
+Latest validated source head `95e04e86095e59e505f51ec5834ad9410b4357ec` on `development` passed the complete CI matrix:
 
-- [Core tests run 43764943073](https://github.com/quilterrantdean/BiblioLED/actions/runs/43764943073): Ubuntu core tests, modern Windows SDK Win32 compile/tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43764943080](https://github.com/quilterrantdean/BiblioLED/actions/runs/43764943080): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
+- [Core tests run 43765754809](https://github.com/quilterrantdean/BiblioLED/actions/runs/43765754809): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43765754788](https://github.com/quilterrantdean/BiblioLED/actions/runs/43765754788): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
 
-Latest CI artefact: [14181707716](https://github.com/quilterrantdean/BiblioLED/actions/runs/43764943080), `BiblioLED-XP-PoC`, 1,501,896 bytes. ZIP SHA-256: `30de1947085e277da71036d4837dca03b2bd7f944c57ef918d63b7b57231a8f0`; executable SHA-256: `43de6a1c7273e2e1cb1921123ceeb1b8dbda74df09a76d0f3a42c42a201bb483`.
+Latest CI artefact: [14181694269](https://github.com/quilterrantdean/BiblioLED/actions/runs/43765754788), `BiblioLED-XP-PoC`, 1,502,011 bytes. ZIP SHA-256: `da8408dd04e233b04af90684e02abfd117bbbd335a9c3a188349fbb39d5b9381`; executable SHA-256: `e057cf7d22ae84dbcf1765040ae7bcfbfa22c5c2ab7a513dae10148f08fe38c4`.
 
-The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it does not contain a database. This is a disposable validation artefact, not a normal portable release. CI verifies build compatibility metadata and isolated tests, but does not replace runtime validation of the recovery wizard, Portuguese glyph rendering and general UI on a physical Windows XP SP3 system.
+The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. The README is UTF-8 with BOM. This is a disposable validation artefact, not a normal portable release. CI verifies build compatibility metadata and isolated tests, but does not replace runtime validation of the recovery wizard, Portuguese glyph rendering and general UI on a physical Windows XP SP3 system.
 
 ## CI action provenance
 
