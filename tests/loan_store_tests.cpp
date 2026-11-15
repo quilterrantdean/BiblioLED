@@ -193,6 +193,47 @@ bool HasFileWithPrefix(const std::string& directory, const std::string& prefix)
 #endif
 }
 
+bool HasFileWithPrefixAndSuffix(const std::string& directory,
+                              const std::string& prefix,
+                              const std::string& suffix)
+{
+#ifdef _WIN32
+    WIN32_FIND_DATAA data;
+    const std::string pattern = directory + "\\" + prefix + "*";
+    HANDLE find = FindFirstFileA(pattern.c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE) return false;
+    bool found = false;
+    do {
+        if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            const std::string name(data.cFileName);
+            if (name.size() >= suffix.size() &&
+                name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                found = true;
+                break;
+            }
+        }
+    } while (FindNextFileA(find, &data));
+    FindClose(find);
+    return found;
+#else
+    DIR* dir = opendir(directory.c_str());
+    if (!dir) return false;
+    struct dirent* entry = NULL;
+    bool found = false;
+    while ((entry = readdir(dir)) != NULL) {
+        const std::string name(entry->d_name);
+        if (name.compare(0, prefix.size(), prefix) == 0 &&
+            name.size() >= suffix.size() &&
+            name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            found = true;
+            break;
+        }
+    }
+    closedir(dir);
+    return found;
+#endif
+}
+
 bool RemoveFilesWithPrefix(const std::string& directory, const std::string& prefix)
 {
 #ifdef _WIN32
@@ -407,6 +448,13 @@ int main()
         candidate_backup_dir + "/" + candidate_prefix + ".sqlite";
     Check(CreateUnrelatedSqliteFile(unrelated_candidate),
           "unrelated but integrity-valid SQLite candidate should be created");
+    {
+        std::ofstream stale_wal((unrelated_candidate + "-wal").c_str(),
+                                std::ios::out | std::ios::binary);
+        stale_wal << "stale WAL sidecar from an invalid automatic backup";
+    }
+    Check(FileExists(unrelated_candidate + "-wal"),
+          "invalid automatic backup WAL sidecar should be created");
     biblioled::LoanStore candidate_store;
     Check(candidate_store.Open(candidate_database, candidate_backup_dir, &error),
           "daily-candidate test database should open");
@@ -419,6 +467,13 @@ int main()
               "loan mutation should create a proper daily snapshot when the candidate schema is invalid");
         Check(!FileExists(unrelated_candidate),
               "unrelated same-day SQLite file must be moved out of the automatic namespace");
+        Check(!FileExists(unrelated_candidate + "-wal"),
+              "invalid automatic backup WAL must move with its database file");
+        Check(HasFileWithPrefixAndSuffix(
+                  candidate_backup_dir,
+                  "BiblioLED_invalid_auto_" + candidate_date + "_",
+                  ".sqlite-wal"),
+              "invalid automatic backup WAL sidecar should remain preserved beside the renamed database");
         Check(HasFileWithPrefix(candidate_backup_dir,
                                 "BiblioLED_invalid_auto_" + candidate_date + "_"),
               "unrelated SQLite candidate should be preserved under an invalid-backup name");

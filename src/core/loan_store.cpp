@@ -496,6 +496,64 @@ BackupCompressionFormat CompressionFormatFromName(const std::string& name)
                           : BackupCompressionFormat::Gzip;
 }
 
+bool PreserveInvalidBackupGroup(const std::string& path,
+                               std::string* error)
+{
+    const std::string sidecar_suffixes[] = {"", "-journal", "-wal", "-shm"};
+    bool source_exists[4] = {false, false, false, false};
+    for (size_t i = 0; i < 4; ++i) {
+        source_exists[i] = FileExists(path + sidecar_suffixes[i]);
+    }
+
+    for (int suffix = 0; suffix < 1000; ++suffix) {
+        const std::string preserved_path = InvalidBackupPath(path, suffix);
+        if (preserved_path.empty()) break;
+
+        bool available = true;
+        for (size_t i = 0; i < 4; ++i) {
+            if (FileExists(preserved_path + sidecar_suffixes[i])) {
+                available = false;
+                break;
+            }
+        }
+        if (!available) continue;
+
+        std::vector<std::string> moved_sources;
+        std::vector<std::string> moved_destinations;
+        for (size_t i = 0; i < 4; ++i) {
+            if (!source_exists[i]) continue;
+            const std::string source = path + sidecar_suffixes[i];
+            const std::string destination = preserved_path + sidecar_suffixes[i];
+            if (!MoveBackupFile(source, destination)) {
+                bool rollback_ok = true;
+                for (size_t moved = moved_sources.size(); moved > 0; --moved) {
+                    if (!MoveBackupFile(moved_destinations[moved - 1],
+                                        moved_sources[moved - 1])) {
+                        rollback_ok = false;
+                    }
+                }
+                if (error) {
+                    *error = "A corrupt automatic backup and its SQLite sidecars "
+                             "could not all be preserved.";
+                    if (!rollback_ok) {
+                        *error += " Some files remain under the preservation prefix: ";
+                        *error += preserved_path;
+                    }
+                }
+                return false;
+            }
+            moved_sources.push_back(source);
+            moved_destinations.push_back(destination);
+        }
+        return true;
+    }
+
+    if (error) {
+        *error = "Could not choose an unused name to preserve a corrupt automatic backup.";
+    }
+    return false;
+}
+
 std::string InvalidBackupPath(const std::string& original, int suffix)
 {
     const std::string::size_type separator = original.find_last_of("/\\");
@@ -893,22 +951,12 @@ bool LoanStore::EnsureAutomaticBackup(std::string* error)
         }
         if (!temporary_path.empty()) RemoveTemporaryDatabaseFiles(temporary_path);
 
-        // Keep corrupt candidates for diagnosis, but move them out of the
-        // automatic-backup namespace so retention and next launch can work.
-        bool preserved = false;
-        for (int suffix = 0; suffix < 1000; ++suffix) {
-            const std::string invalid_path = InvalidBackupPath(candidates[i], suffix);
-            if (invalid_path.empty()) break;
-            if (FileExists(invalid_path)) continue;
-            if (MoveBackupFile(candidates[i], invalid_path)) {
-                preserved = true;
-                break;
-            }
-        }
-        if (!preserved) {
+        // Keep a corrupt candidate and any SQLite sidecars together for
+        // diagnosis, but move the group out of the automatic-backup namespace.
+        std::string preservation_error;
+        if (!PreserveInvalidBackupGroup(candidates[i], &preservation_error)) {
             SetError(error,
-                "A corrupt daily backup could not be renamed safely. "
-                "No loan data was changed.");
+                preservation_error + " No loan data was changed.");
             return false;
         }
     }
