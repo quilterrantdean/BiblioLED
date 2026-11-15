@@ -168,12 +168,12 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest source commit `3f381306309e2809ec9de7331e56b1830029c6ac` on `development` passed the complete CI matrix:
+Latest validated head `dd43a759ac2a897905f34d1b0b1349659cb3ed60` (product-code commit `3f381306309e2809ec9de7331e56b1830029c6ac`) on `development` passed the complete CI matrix, including the exact Cppcheck 2.19.0 version guard:
 
-- [Core tests run 43762780116](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780116): Ubuntu core tests, modern Windows SDK Win32 compile/tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43762780109](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780109): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
+- [Core tests run 43763157966](https://github.com/quilterrantdean/BiblioLED/actions/runs/43763157966): Ubuntu core tests, modern Windows SDK Win32 compile/tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43763157994](https://github.com/quilterrantdean/BiblioLED/actions/runs/43763157994): pinned w64devkit x86 2.10.0 configured and built the application/tests, all 7 CTest tests passed, PE32/i386, GUI subsystem 5.01 and import checks passed, and the disposable test ZIP was uploaded.
 
-Latest CI artefact: [14181008026](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780109), `BiblioLED-XP-PoC`, 1,499,584 bytes. ZIP SHA-256: `8cf7f5eacce05f5e3db2c8246f662d1e3b19e65fbd634b7043c2512155fcab97`; executable SHA-256: `2d236bb2225c309fca2c0b837dd5525416ae5c79d8b275415664070aef540ba9`.
+Latest CI artefact: [14181330757](https://github.com/quilterrantdean/BiblioLED/actions/runs/43763157994), `BiblioLED-XP-PoC`, 1,499,584 bytes. ZIP SHA-256: `0b0c1f04bc3c96f321f306fe251c38fc7d15416e96448bbad6e316f75578c69a`; executable SHA-256: `97a72ab84f90471654b75c9f17ad0f228a0a67bb31e1cbce9c03a17fa1fb76cc`.
 
 The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it does not contain a database. This is a disposable validation artefact, not a normal portable release. CI verifies build compatibility metadata and isolated tests, but does not replace runtime validation of the recovery wizard, Portuguese glyph rendering and general UI on a physical Windows XP SP3 system.
 
