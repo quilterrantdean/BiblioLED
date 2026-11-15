@@ -422,6 +422,7 @@ int main()
     const std::string malformed_v1_database = database + ".malformed-v1.sqlite";
     const std::string malformed_legacy_type_database = database + ".malformed-legacy-type.sqlite";
     const std::string malformed_legacy_key_database = database + ".malformed-legacy-key.sqlite";
+    const std::string malformed_legacy_nullable_database = database + ".malformed-legacy-nullable.sqlite";
     const std::string malformed_legacy_extra_database = database + ".malformed-legacy-extra.sqlite";
     const std::string missing_backup_directory = database + ".missing-backup-directory";
     const std::string invalid_backup = database + ".invalid-backup.sqlite";
@@ -1040,6 +1041,11 @@ int main()
               "loan_date TEXT NOT NULL, type TEXT NOT NULL);"),
           "legacy database without an ID primary key should be created");
     Check(CreateDatabaseWithSchema(
+              malformed_legacy_nullable_database,
+              "CREATE TABLE loans (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+              "title TEXT, loan_date TEXT NOT NULL, type TEXT NOT NULL);"),
+          "legacy database with a nullable title column should be created");
+    Check(CreateDatabaseWithSchema(
               malformed_legacy_extra_database,
               "CREATE TABLE loans (id INTEGER PRIMARY KEY AUTOINCREMENT, "
               "title TEXT NOT NULL, loan_date TEXT NOT NULL, type TEXT NOT NULL, "
@@ -1049,6 +1055,7 @@ int main()
     const std::string malformed_legacy_paths[] = {
         malformed_legacy_type_database,
         malformed_legacy_key_database,
+        malformed_legacy_nullable_database,
         malformed_legacy_extra_database
     };
     for (size_t i = 0; i < sizeof(malformed_legacy_paths) / sizeof(malformed_legacy_paths[0]); ++i) {
@@ -1274,6 +1281,7 @@ int main()
     RemoveDatabaseFiles(malformed_v1_database);
     RemoveDatabaseFiles(malformed_legacy_type_database);
     RemoveDatabaseFiles(malformed_legacy_key_database);
+    RemoveDatabaseFiles(malformed_legacy_nullable_database);
     RemoveDatabaseFiles(malformed_legacy_extra_database);
     RemoveDatabaseFiles(invalid_backup);
     for (size_t i = 0; i < backups.size(); ++i) {
