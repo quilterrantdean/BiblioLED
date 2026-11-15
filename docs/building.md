@@ -208,7 +208,7 @@ If external diagnostics are deliberately disabled, SQLite auditing continues and
 
 ## Safe manual XP test
 
-Use a fresh disposable folder, for example `C:\Temp\\BiblioLED_ação`. Do not copy the real database or replace the current installation.
+Use a fresh disposable folder, for example `C:\Temp\BiblioLED_ação`. Do not copy the real database or replace the current installation.
 
 The package's `LEIA-ME-TESTE.txt` contains the detailed manual test sequence. It includes:
 
@@ -218,7 +218,7 @@ The package's `LEIA-ME-TESTE.txt` contains the detailed manual test sequence. It
 - gzip/zlib format and compression-level changes;
 - manual backup and restore from a test backup;
 - startup recovery from a deliberately missing/corrupt test database;
-- Unicode paths such as `C:\Temp\\BiblioLED_ação`;
+- Unicode paths such as `C:\Temp\BiblioLED_ação`;
 - required-directory collision behaviour.
 
 Run the tests in a separate disposable directory. Preserve the real installation and data unchanged.
