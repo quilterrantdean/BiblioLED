@@ -165,9 +165,11 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-The implementation baseline at commit `bda018b0ee5924c736b9388cf4a6efa45dc1bdfb` passed:
+The implementation baseline at commit `6773bd9627e6e86ea97226491aa13b2db4817bef` passed:
 
-- [Core tests run 43652481224](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481224): Ubuntu core tests and modern Windows SDK Win32 compile/store tests.
-- [XP-targeted build run 43652481252](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252): w64devkit x86 build, all 7 XP-targeted tests, PE32/i386 + GUI subsystem 5.01 + import inspection; artefact [14135909694](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252), `BiblioLED-XP-PoC`, SHA-256 `7f3942f71828c9f5e4f0e05b9b68003f9d432ceb33cae620c15527e3f01d7585`.
+- [Core tests run 43655726935](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726935): Ubuntu core tests and modern Windows SDK Win32 compile/store tests, including offline recovery.
+- [XP-targeted build run 43655726939](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939): w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection; artefact [14138355192](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939), `BiblioLED-XP-PoC` (1,523,056 bytes), archive SHA-256 `2bb59c1c72ef69992c73c36ff04516d7c47c48864e00a564715ae1b5abd3f8db`.
+
+The artefact is a disposable test build, not a release. These CI results do not replace runtime validation on a physical Windows XP SP3 system.
 
 The user reports having tested the application manually, but the precise artefact, Windows build and scenarios have not yet been captured. CI checks are not themselves runtime evidence from a physical Windows XP SP3 installation.

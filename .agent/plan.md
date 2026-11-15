@@ -2,14 +2,14 @@
 
 ## Current status
 
-**Stage:** the C++11/Win32/SQLite proof of concept now includes the agreed Win32 UI refinement pass. Source commit `bda018b0ee5924c736b9388cf4a6efa45dc1bdfb` on `development` passed both CI workflows:
+**Stage:** the C++11/Win32/SQLite proof of concept now includes the agreed Win32 UI refinement pass and guided missing/corrupt-database recovery. Source commit `6773bd9627e6e86ea97226491aa13b2db4817bef` on `development` passed both CI workflows:
 
-- [Core tests run 43652481224](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481224): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed.
-- [XP-targeted build run 43652481252](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252): pinned w64devkit x86 build, all 7 XP-targeted tests, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14135909694](https://github.com/quilterrantdean/BiblioLED/actions/runs/43652481252), `BiblioLED-XP-PoC`, SHA-256 `7f3942f71828c9f5e4f0e05b9b68003f9d432ceb33cae620c15527e3f01d7585`.
+- [Core tests run 43655726935](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726935): Ubuntu core tests and modern Windows SDK Win32 build/store tests passed, including the new offline-recovery cases.
+- [XP-targeted build run 43655726939](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939): pinned w64devkit x86 build, all 7 XP-targeted CTest tests, PE32/i386 + GUI subsystem 5.01 + import inspection and artefact publication passed. Artefact [14138355192](https://github.com/quilterrantdean/BiblioLED/actions/runs/43655726939), `BiblioLED-XP-PoC` (1,523,056 bytes), archive SHA-256 `2bb59c1c72ef69992c73c36ff04516d7c47c48864e00a564715ae1b5abd3f8db`.
 
 The UI implementation includes the top-level **Opções** menu, explicit audit-log retry command, event-driven refresh without polling, removal of redundant refresh UI, Ctrl+N/Ctrl+H accelerators, a resizable/reorderable/context-menu history window, statistics from a per-open snapshot, and UTF-8 resource/source handling. History controls are laid out in dialog units so they remain aligned when the window is resized.
 
-On 2026-11-14, Actions history cleanup removed 223 older workflow runs and preserved the then-latest successful Core and XP-targeted runs (225 total before, 2 afterwards). Later pushes created new runs normally. At this baseline, `development` was 134 commits ahead of `main`, with none behind; `main` remains the unchanged Python reference.
+On 2026-11-14, Actions history cleanup removed 223 older workflow runs and preserved the then-latest successful Core and XP-targeted runs (225 total before, 2 afterwards). Later pushes created new runs normally. `main` remains the unchanged Python reference; all implementation and documentation commits remain on `development`.
 
 The user reports having tested the application manually. The exact tested artefact, Windows build and exercised scenarios have not yet been recorded; do not treat this as formal target-runtime sign-off. CI PE/build checks are not a substitute for testing on the target machine.
 
@@ -100,7 +100,7 @@ The current CI validation baseline and XP artefact are recorded in **Current sta
 - [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
 - [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
 
-All changes above are implementation-complete and passed the Core and XP-targeted CI workflows at `bda018b0ee5924c736b9388cf4a6efa45dc1bdfb`. The UTF-8 resource encoding fix and resized history layout still require visual confirmation on the user's target system; CI compilation alone cannot prove rendered glyphs.
+The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The subsequent guided-recovery implementation passed Core and XP-targeted CI at `6773bd9627e6e86ea97226491aa13b2db4817bef` (runs 43655726935 and 43655726939). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
 
 ### Phase 5 — Verification and delivery
 

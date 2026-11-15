@@ -191,7 +191,7 @@ jobs:
              que a cópia automática diária é reutilizada.
           5. Use Ficheiro > Criar cópia de segurança e confirme que o nome começa
              por BiblioLED_manual_ e tem a extensão de compressão configurada.
-          6. Em Ficheiro > Definições de cópias, experimente zlib e outro nível.
+          6. Em Opções > Definições de cópias, experimente zlib e outro nível.
              Sem reiniciar, use Ficheiro > Criar cópia de segurança novamente
              e confirme que a nova cópia usa a extensão .sqlite.zlib.
           7. Reponha uma cópia comprimida. Confirme que é criada uma cópia de
@@ -214,7 +214,7 @@ jobs:
               expirados e futuros. Pesquise por título, data e ID, filtre por
               Livro/Audiolivro, edite um registo fictício e elimine outro.
               Confirme que o histórico e a janela principal são actualizados.
-          12. Em Ficheiro > Definições gerais, altere os limites ou a duração.
+          12. Em Opções > Definições gerais, altere os limites ou a duração.
               Confirme que a sessão actual não muda. Feche e reabra a aplicação;
               os novos valores deverão então ser aplicados. Teste apenas nesta
               pasta descartável.
