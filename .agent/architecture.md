@@ -42,7 +42,7 @@ Responsibilities:
 - Portable path resolution based on the executable location, not the process working directory.
 - Settings file loading, validation, and saving.
 - Diagnostic log writing and archival.
-- Single-instance coordination.
+- Single-instance coordination uses a named Win32 mutex derived from the executable directory. If Windows cannot create the mutex, startup fails closed rather than opening the database without the single-instance guarantee.
 - File-system operations and application lifecycle support.
 
 The application should not depend on AppData, registry installation, Windows services, or administrator privileges.

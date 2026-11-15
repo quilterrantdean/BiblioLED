@@ -1043,7 +1043,7 @@ bool PromptAndRecoverDatabase(const std::wstring& database_path,
         const DWORD dialog_error = CommDlgExtendedError();
         if (dialog_error != 0) {
             std::wostringstream message;
-            message << L"Não foi possível abrir o selector de cópias de segurança. "
+            message << L"Não foi possível abrir o janela de selecção de cópias de segurança. "
                     << L"Código de erro do Windows: " << dialog_error << L".";
             MessageBoxW(NULL, message.str().c_str(), L"Recuperação da base de dados",
                         MB_OK | MB_ICONERROR);
@@ -1109,7 +1109,7 @@ void RestoreDatabaseFromBackup()
             std::ostringstream detail;
             detail << "Windows common file dialog error " << dialog_error << ".";
             ShowStoreError(
-                L"Não foi possível abrir o selector de cópias de segurança.",
+                L"Não foi possível abrir o janela de selecção de cópias de segurança.",
                 detail.str());
         }
         return;
