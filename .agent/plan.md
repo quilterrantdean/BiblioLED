@@ -2,12 +2,12 @@
 
 ## Current status
 
-**Stage:** the C++11/Win32/SQLite proof of concept now includes guided recovery, rollback/failure-injection coverage, Unicode-safe database/settings paths, fail-closed startup validation, strict SQLite integrity/schema checks, and bounded-memory external audit-log synchronisation. Latest source commit `c1efdd4b525e619ba4f734d126e688084d8c3086` on `development` passed the complete CI matrix:
+**Stage:** the C++11/Win32/SQLite proof of concept includes guided recovery, rollback/failure-injection coverage, Unicode-safe paths, fail-closed startup validation, strict SQLite integrity/schema reads, and bounded-memory external audit-log synchronisation. Latest source commit `3f381306309e2809ec9de7331e56b1830029c6ac` on `development` passed the complete CI matrix:
 
-- [Core tests run 43762231743](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231743): Ubuntu core tests, modern Windows SDK Win32 build/tests, and Cppcheck 2.19.0 all passed.
-- [XP-targeted build run 43762231788](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788): pinned w64devkit x86 2.10.0 build, all 7 XP-targeted tests, PE32/i386 + Windows GUI subsystem 5.01 + import checks, package and upload all passed. Artefact [14180238131](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788), `BiblioLED-XP-PoC`, 1,499,379 bytes; ZIP SHA-256 `8608997a072e2e98ee2ef0d8c45db5f1f04172e4f2bbf415ab459588a41e37ba`; executable SHA-256 `5cb2b169cfcaff69002b7ff794bf6be4d25900d18c1f238d540ebad6480f3cf1`.
+- [Core tests run 43762780116](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780116): Ubuntu core tests, modern Windows SDK Win32 build/tests, and Cppcheck 2.19.0 all passed.
+- [XP-targeted build run 43762780109](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780109): pinned w64devkit x86 2.10.0 build, all 7 XP-targeted tests, PE32/i386 + Windows GUI subsystem 5.01 + import checks, package and upload all passed. Artefact [14181008026](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780109), `BiblioLED-XP-PoC`, 1,499,584 bytes; ZIP SHA-256 `8cf7f5eacce05f5e3db2c8246f662d1e3b19e65fbd634b7043c2512155fcab97`; executable SHA-256 `2d236bb2225c309fca2c0b837dd5525416ae5c79d8b275415664070aef540ba9`.
 
-The audit-log reader now streams with a fixed 64 KiB buffer. Windows tests exercise event-fingerprint parsing when both the `event_key=` marker and the fingerprint itself straddle a read-block boundary, recovery of an incomplete active-log tail, refusal to alter an incomplete archive, read-only active-log recovery, and rotation/idempotence. `LoanStore` now initialises its schema state explicitly, validates full SQLite quick-check output and rejects incomplete schema metadata scans. Cppcheck reports no warnings in its selected portable C++11 scope.
+The external audit-log reader streams with a fixed 64 KiB buffer. Windows tests exercise fingerprints with both the `event_key=` marker and the 16-character key split across read-block boundaries, incomplete active-log recovery, immutable incomplete archives, read-only active-log recovery, rotation and idempotence. SQLite metadata inspection now drains and validates `PRAGMA table_info`, `sqlite_master` and `PRAGMA user_version` results, checks statement finalisation, and requires the full `PRAGMA quick_check` result set to be successful. Cppcheck reports no findings in the selected portable C++11 scope.
 
 The UI implementation includes the top-level **Opções** menu, explicit audit-log retry command, event-driven refresh without polling, removal of redundant refresh UI, Ctrl+N/Ctrl+H accelerators, a resizable/reorderable/context-menu history window, statistics from a per-open snapshot, and UTF-8 resource/source handling. History controls are laid out in dialog units so they remain aligned when the window is resized.
 
@@ -106,7 +106,7 @@ The current CI validation baseline and XP artefact are recorded in **Current sta
 - [x] Removed the statistics dialog refresh button and F5 reload path. Statistics continue to load once when opened and recalculate from the cached snapshot when the selected year changes.
 - [x] Added UTF-8 code-page declaration to the resource script and explicit UTF-8 source handling for MSVC. Corrected one statistics error-message conversion that widened UTF-8 bytes incorrectly.
 
-The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The latest audit streaming, parser-boundary, SQLite integrity, Cppcheck and Node 24 workflow changes passed Core and XP-targeted CI at `c1efdd4b525e619ba4f734d126e688084d8c3086` (runs 43762231743 and 43762231788). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
+The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee5924c736b9388cf4a6efa45dc1b`. The audit streaming/parser-boundary, strict SQLite integrity and metadata checks, Cppcheck and Node 24 workflow changes passed Core and XP-targeted CI at `3f381306309e2809ec9de7331e56b1830029c6ac` (runs 43762780116 and 43762780109). The UTF-8 resource encoding fix, resized history layout and recovery dialog still require visual/behavioural confirmation on the user's target system; CI compilation and isolated tests cannot prove physical XP runtime behaviour.
 
 ### Phase 5 — Verification and delivery
 
@@ -119,6 +119,7 @@ The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee592
 - [x] Confirm the w64devkit XP-targeted workflow passes and publish a downloadable test build.
 - [x] Run the full portable core/store/backup test suite on Linux and Windows, including Windows audit-log tests.
 - [x] Validate streamed audit-log parsing across 64 KiB read boundaries and confirm the full seven-test Windows/XP suite passes.
+- [x] Require complete SQLite schema-metadata and integrity-check reads, including successful statement finalisation; validate normal, legacy and unsupported-schema paths in the full CI suite.
 - [ ] Validate the application and tests on Windows XP as well as newer systems.
 - [ ] Produce a portable 32-bit ZIP distribution.
 - [ ] Document the build and release process.

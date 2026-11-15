@@ -126,10 +126,10 @@ The rendering of Portuguese resource strings still needs visual confirmation on 
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest documented validation baseline is commit `c1efdd4b525e619ba4f734d126e688084d8c3086` on `development`.
+The latest documented validation baseline is commit `3f381306309e2809ec9de7331e56b1830029c6ac` on `development`.
 
-- [Core tests run 43762231743](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231743) succeeded: Ubuntu tests, modern Windows SDK Win32 build/tests, and Cppcheck 2.19.0 all passed.
-- [XP-targeted Win32 build run 43762231788](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788) succeeded using pinned w64devkit x86 2.10.0. All 7 CTest tests passed, PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed, and artifact [14180238131](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762231788) was published. ZIP SHA-256: `8608997a072e2e98ee2ef0d8c45db5f1f04172e4f2bbf415ab459588a41e37ba`; executable SHA-256: `5cb2b169cfcaff69002b7ff794bf6be4d25900d18c1f238d540ebad6480f3cf1`.
+- [Core tests run 43762780116](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780116) succeeded: Ubuntu tests, modern Windows SDK Win32 build/tests, and Cppcheck 2.19.0 all passed.
+- [XP-targeted Win32 build run 43762780109](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780109) succeeded using pinned w64devkit x86 2.10.0. All 7 CTest tests passed, PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed, and artifact [14181008026](https://github.com/quilterrantdean/BiblioLED/actions/runs/43762780109) was published. ZIP SHA-256: `8cf7f5eacce05f5e3db2c8246f662d1e3b19e65fbd634b7043c2512155fcab97`; executable SHA-256: `2d236bb2225c309fca2c0b837dd5525416ae5c79d8b275415664070aef540ba9`.
 
 The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained the two then-current successful validation runs. Later commits and workflows create new runs normally. The user reports having tested the application manually; exact artefact, operating-system build and scenarios have not yet been recorded.
 
@@ -138,7 +138,7 @@ The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained th
 
 ## Latest audit and static-analysis work
 
-- The version 1 audit-schema inspector now rejects incomplete/failed `PRAGMA table_info` execution, including a non-successful statement finalisation, rather than accepting a partial scan.
+- The version 1 audit-schema inspector now rejects incomplete/failed `PRAGMA table_info` execution, including a non-successful statement finalisation, rather than accepting a partial scan. Loan-column inspection, audit-table discovery via `sqlite_master`, and `PRAGMA user_version` now likewise require successful complete reads and finalisation; `PRAGMA quick_check` drains and validates every result row.
 - The external audit-log scanner now uses a fixed 64 KiB read buffer and bounded event-key parser state, avoiding memory use proportional to the size of an archived log. It truncates only an incomplete active-log tail; an incomplete archive is rejected unchanged.
 - Windows audit-log tests now cover an active log becoming read-only (pending events remain queued and synchronisation succeeds after permissions are restored) and an archived log ending with an incomplete line (synchronisation must fail without appending). They also verify that both the `event_key=` marker and the 16-character event fingerprint can straddle a 64 KiB read boundary without creating duplicate events; these tests passed on modern Windows and the XP-targeted build. Cppcheck 2.19.0 scans the selected portable C++11 core, backup infrastructure and tests with no findings; the full Core and XP workflows pass.
 
