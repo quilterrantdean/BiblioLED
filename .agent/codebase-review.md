@@ -146,3 +146,5 @@ The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained th
 - Cppcheck 2.19.0 now completes without warnings for the portable C++11 core, backup infrastructure, and selected tests. Windows-only `audit_log.cpp` and the Win32 UI are compile-tested in the separate Windows/XP jobs, not included in this portable Cppcheck invocation.
 
 - Dependency provenance review confirms the pinned official SQLite 3.53.4 and zlib 1.4 source archives, and the signed/immutable w64devkit x86 2.10.0 release with SHA-256 verification. Cppcheck is now version-gated at 2.19.0; the Linux/modern-Windows runner-provided CMake and OS packages remain intentionally image-managed, while XP CMake is included in the pinned w64devkit archive.
+
+- The CMake zlib 1.4 source URL now uses the official `madler/zlib` v1.4 GitHub Release asset rather than the zlib.net fossils endpoint. The expected SHA-256 is unchanged and matches the release asset digest reported by the upstream GitHub Releases API. This addresses repeated inconsistent responses from the zlib.net endpoint without relaxing integrity verification.

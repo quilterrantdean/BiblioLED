@@ -71,7 +71,7 @@ if(WIN32)
     set(ZLIB_BUILD_MINIZIP OFF CACHE BOOL "" FORCE)
     set(ZLIB_INSTALL OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(zlib
-        URL https://zlib.net/fossils/zlib-1.4.tar.gz
+        URL https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz
         URL_HASH SHA256=02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584
     )
     FetchContent_MakeAvailable(zlib)

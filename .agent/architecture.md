@@ -184,9 +184,11 @@ The core and XP workflows pin JavaScript actions to immutable upstream release c
 ## Third-party build dependency provenance
 
 - SQLite amalgamation 3.53.4 is fetched from the official sqlite.org archive and pinned with SHA3-256 `628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e`.
-- zlib 1.4 is fetched from the official zlib.net fossil archive and pinned with SHA-256 `02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584`.
+- zlib 1.4 is fetched from the upstream `madler/zlib` v1.4 GitHub Release asset and pinned with SHA-256 `02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584`. The upstream Releases API reports the same asset digest; this replaces the zlib.net fossil endpoint after repeated inconsistent responses from that endpoint in CI.
 - The XP workflow downloads the immutable w64devkit x86 2.10.0 release archive and verifies SHA-256 `513ff7fc571cf6764a5aedbca92f43c513f8d01085c65df5133a82db13a7e63d` before extraction. The upstream release identifies the x86 package as Windows XP-compatible and SSE2-required.
 - Cppcheck is installed from the Ubuntu runner's package repository, but the workflow requires the reported version to be exactly 2.19.0 so a runner-image/package change cannot silently alter the analysis baseline.
 - The portable Linux and modern-Windows CI jobs intentionally use their hosted runner's CMake and OS-provided development packages; the XP-targeted build uses the CMake executable included in the SHA-256-pinned w64devkit package. The CMake preset declares a minimum CMake version of 3.28.0.
 
 These hashes are integrity pins, not a substitute for reviewing release notes and compatibility whenever a dependency is deliberately upgraded.
+
+The modern Windows CI run 43763428212 failed during CMake configuration because six consecutive downloads from `zlib.net/fossils/zlib-1.4.tar.gz` returned six differing SHA-256 values, none matching the official release digest. The build source was switched to the upstream GitHub Release asset while retaining the official expected SHA-256. The failure was external to compilation and did not affect the XP-targeted build, which succeeded.
