@@ -17,6 +17,25 @@
 namespace biblioled {
 namespace {
 
+bool CheckSqliteResult(sqlite3* db, int actual, int expected,
+                       const char* operation, std::string* error)
+{
+    if (actual == expected) return true;
+    if (error) {
+        *error = operation;
+        *error += ": ";
+        *error += db ? sqlite3_errmsg(db) : "SQLite database is not open";
+    }
+    return false;
+}
+
+bool FinalizeSqliteStatement(sqlite3* db, sqlite3_stmt* statement,
+                             const char* operation, std::string* error)
+{
+    return CheckSqliteResult(
+        db, sqlite3_finalize(statement), SQLITE_OK, operation, error);
+}
+
 bool FileExists(const std::string& path)
 {
 #ifdef _WIN32
@@ -207,13 +226,14 @@ std::string CurrentTimestamp()
     return buffer;
 }
 
-void BindOptionalText(sqlite3_stmt* statement, int index, const std::string* value)
+bool BindOptionalText(sqlite3* db, sqlite3_stmt* statement, int index,
+                      const std::string* value, std::string* error)
 {
-    if (value) {
-        sqlite3_bind_text(statement, index, value->c_str(), -1, SQLITE_TRANSIENT);
-    } else {
-        sqlite3_bind_null(statement, index);
-    }
+    const int rc = value
+        ? sqlite3_bind_text(statement, index, value->c_str(), -1, SQLITE_TRANSIENT)
+        : sqlite3_bind_null(statement, index);
+    return CheckSqliteResult(db, rc, SQLITE_OK,
+                             "Unable to bind an audit-event value", error);
 }
 
 bool InsertAuditEvent(sqlite3* db,
@@ -239,26 +259,51 @@ bool InsertAuditEvent(sqlite3* db,
     }
 
     const std::string timestamp = CurrentTimestamp();
-    sqlite3_bind_text(statement, 1, timestamp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 2, action, -1, SQLITE_TRANSIENT);
-    if (loan_id > 0) sqlite3_bind_int(statement, 3, loan_id);
-    else sqlite3_bind_null(statement, 3);
-
-    BindOptionalText(statement, 4, before ? &before->title : NULL);
-    BindOptionalText(statement, 5, before ? &before->loan_date : NULL);
-    BindOptionalText(statement, 6, before ? &before->type : NULL);
-    BindOptionalText(statement, 7, after ? &after->title : NULL);
-    BindOptionalText(statement, 8, after ? &after->loan_date : NULL);
-    BindOptionalText(statement, 9, after ? &after->type : NULL);
-    sqlite3_bind_text(statement, 10, details.c_str(), -1, SQLITE_TRANSIENT);
-
-    rc = sqlite3_step(statement);
-    sqlite3_finalize(statement);
-    if (rc != SQLITE_DONE) {
-        if (error) *error = sqlite3_errmsg(db);
-        return false;
+    bool ok =
+        CheckSqliteResult(db,
+            sqlite3_bind_text(statement, 1, timestamp.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind audit timestamp", error) &&
+        CheckSqliteResult(db,
+            sqlite3_bind_text(statement, 2, action, -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind audit action", error);
+    if (ok) {
+        rc = loan_id > 0
+            ? sqlite3_bind_int(statement, 3, loan_id)
+            : sqlite3_bind_null(statement, 3);
+        ok = CheckSqliteResult(db, rc, SQLITE_OK,
+                               "Unable to bind audit loan identifier", error);
     }
-    return true;
+
+    if (ok) ok = BindOptionalText(db, statement, 4,
+                                  before ? &before->title : NULL, error);
+    if (ok) ok = BindOptionalText(db, statement, 5,
+                                  before ? &before->loan_date : NULL, error);
+    if (ok) ok = BindOptionalText(db, statement, 6,
+                                  before ? &before->type : NULL, error);
+    if (ok) ok = BindOptionalText(db, statement, 7,
+                                  after ? &after->title : NULL, error);
+    if (ok) ok = BindOptionalText(db, statement, 8,
+                                  after ? &after->loan_date : NULL, error);
+    if (ok) ok = BindOptionalText(db, statement, 9,
+                                  after ? &after->type : NULL, error);
+    if (ok) {
+        rc = sqlite3_bind_text(statement, 10, details.c_str(), -1, SQLITE_TRANSIENT);
+        ok = CheckSqliteResult(db, rc, SQLITE_OK,
+                               "Unable to bind audit details", error);
+    }
+
+    if (ok) {
+        rc = sqlite3_step(statement);
+        ok = CheckSqliteResult(db, rc, SQLITE_DONE,
+                               "Unable to insert audit event", error);
+    }
+    if (ok) {
+        ok = FinalizeSqliteStatement(db, statement,
+                                     "Unable to finalise audit insertion", error);
+    } else {
+        sqlite3_finalize(statement);
+    }
+    return ok;
 }
 
 bool ReadLoanById(sqlite3* db,
@@ -277,9 +322,17 @@ bool ReadLoanById(sqlite3* db,
         return false;
     }
 
-    sqlite3_bind_int(statement, 1, id);
+    rc = sqlite3_bind_int(statement, 1, id);
+    if (!CheckSqliteResult(db, rc, SQLITE_OK,
+                           "Unable to bind loan identifier", error)) {
+        sqlite3_finalize(statement);
+        return false;
+    }
+
     rc = sqlite3_step(statement);
+    bool row_found = false;
     if (rc == SQLITE_ROW) {
+        row_found = true;
         if (record) {
             record->id = sqlite3_column_int(statement, 0);
             const unsigned char* title = sqlite3_column_text(statement, 1);
@@ -289,14 +342,19 @@ bool ReadLoanById(sqlite3* db,
             record->loan_date = loan_date ? reinterpret_cast<const char*>(loan_date) : "";
             record->type = type ? reinterpret_cast<const char*>(type) : "";
         }
-        if (found) *found = true;
-    } else if (rc != SQLITE_DONE) {
-        if (error) *error = sqlite3_errmsg(db);
+        rc = sqlite3_step(statement);
+    }
+    if (rc != SQLITE_DONE) {
+        if (error) *error = SqliteError(db, "Unable to read loan record");
         sqlite3_finalize(statement);
         return false;
     }
 
-    sqlite3_finalize(statement);
+    if (!FinalizeSqliteStatement(
+            db, statement, "Unable to finalise loan lookup", error)) {
+        return false;
+    }
+    if (found) *found = row_found;
     return true;
 }
 
@@ -416,7 +474,11 @@ bool ValidateDatabaseFile(const std::string& path, std::string* error)
         }
     }
 
-    sqlite3_finalize(statement);
+    const int finalize_rc = sqlite3_finalize(statement);
+    if (finalize_rc != SQLITE_OK) {
+        valid = false;
+        if (error) *error = SqliteError(check_db, "Could not finalise backup integrity check");
+    }
     const int close_rc = sqlite3_close(check_db);
     if (close_rc != SQLITE_OK) {
         valid = false;
@@ -1607,12 +1669,13 @@ bool LoanStore::GetAuditEvents(std::vector<AuditEvent>* events, std::string* err
         events->push_back(event);
     }
 
-    sqlite3_finalize(statement);
     if (rc != SQLITE_DONE) {
         SetError(error, SqliteError(db_, "Unable to read audit events"));
+        sqlite3_finalize(statement);
         return false;
     }
-    return true;
+    return FinalizeSqliteStatement(
+        db_, statement, "Unable to finalise audit-event query", error);
 }
 
 bool LoanStore::RecordAuditEvent(const std::string& action,
@@ -1678,12 +1741,13 @@ bool LoanStore::GetAll(std::vector<LoanRecord>* records, std::string* error)
         records->push_back(record);
     }
 
-    sqlite3_finalize(statement);
     if (rc != SQLITE_DONE) {
         SetError(error, SqliteError(db_, "Unable to read loans"));
+        sqlite3_finalize(statement);
         return false;
     }
-    return true;
+    return FinalizeSqliteStatement(
+        db_, statement, "Unable to finalise loan query", error);
 }
 
 bool LoanStore::GetById(int id, LoanRecord* record, std::string* error)
@@ -1703,9 +1767,16 @@ bool LoanStore::GetById(int id, LoanRecord* record, std::string* error)
         return false;
     }
 
-    sqlite3_bind_int(statement, 1, id);
+    rc = sqlite3_bind_int(statement, 1, id);
+    if (!CheckSqliteResult(db_, rc, SQLITE_OK,
+                           "Unable to bind loan identifier", error)) {
+        sqlite3_finalize(statement);
+        return false;
+    }
+
     rc = sqlite3_step(statement);
-    if (rc == SQLITE_ROW) {
+    const bool found = rc == SQLITE_ROW;
+    if (found) {
         record->id = sqlite3_column_int(statement, 0);
         const unsigned char* title = sqlite3_column_text(statement, 1);
         const unsigned char* loan_date = sqlite3_column_text(statement, 2);
@@ -1713,17 +1784,20 @@ bool LoanStore::GetById(int id, LoanRecord* record, std::string* error)
         record->title = title ? reinterpret_cast<const char*>(title) : "";
         record->loan_date = loan_date ? reinterpret_cast<const char*>(loan_date) : "";
         record->type = type ? reinterpret_cast<const char*>(type) : "";
-        sqlite3_finalize(statement);
-        return true;
+        rc = sqlite3_step(statement);
     }
 
-    sqlite3_finalize(statement);
-    if (rc == SQLITE_DONE) {
-        SetError(error, "Loan record was not found.");
-    } else {
+    if (rc != SQLITE_DONE) {
         SetError(error, SqliteError(db_, "Unable to read loan record"));
+        sqlite3_finalize(statement);
+        return false;
     }
-    return false;
+    if (!FinalizeSqliteStatement(
+            db_, statement, "Unable to finalise loan lookup", error)) {
+        return false;
+    }
+    if (!found) SetError(error, "Loan record was not found.");
+    return found;
 }
 
 bool LoanStore::Insert(LoanRecord* record, std::string* error)
@@ -1752,14 +1826,28 @@ bool LoanStore::Insert(LoanRecord* record, std::string* error)
     if (!ok) SetError(error, SqliteError(db_, "Unable to prepare loan insertion"));
 
     if (ok) {
-        sqlite3_bind_text(statement, 1, record->title.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(statement, 2, record->loan_date.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(statement, 3, record->type.c_str(), -1, SQLITE_TRANSIENT);
-        rc = sqlite3_step(statement);
-        ok = rc == SQLITE_DONE;
-        if (!ok) SetError(error, SqliteError(db_, "Unable to insert loan"));
+        ok = CheckSqliteResult(db_,
+            sqlite3_bind_text(statement, 1, record->title.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind loan title", error) &&
+             CheckSqliteResult(db_,
+            sqlite3_bind_text(statement, 2, record->loan_date.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind loan date", error) &&
+             CheckSqliteResult(db_,
+            sqlite3_bind_text(statement, 3, record->type.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind loan type", error);
     }
-    if (statement) sqlite3_finalize(statement);
+    if (ok) {
+        rc = sqlite3_step(statement);
+        ok = CheckSqliteResult(db_, rc, SQLITE_DONE, "Unable to insert loan", error);
+    }
+    if (statement) {
+        if (ok) {
+            ok = FinalizeSqliteStatement(
+                db_, statement, "Unable to finalise loan insertion", error);
+        } else {
+            sqlite3_finalize(statement);
+        }
+    }
 
     const int new_id = ok
         ? static_cast<int>(sqlite3_last_insert_rowid(db_)) : 0;
@@ -1826,15 +1914,35 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
     if (!ok) SetError(error, SqliteError(db_, "Unable to prepare loan update"));
 
     if (ok) {
-        sqlite3_bind_text(statement, 1, record.title.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(statement, 2, record.loan_date.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(statement, 3, record.type.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int(statement, 4, record.id);
-        rc = sqlite3_step(statement);
-        ok = rc == SQLITE_DONE && sqlite3_changes(db_) > 0;
-        if (!ok) SetError(error, SqliteError(db_, "Unable to update loan"));
+        ok = CheckSqliteResult(db_,
+            sqlite3_bind_text(statement, 1, record.title.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind updated loan title", error) &&
+             CheckSqliteResult(db_,
+            sqlite3_bind_text(statement, 2, record.loan_date.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind updated loan date", error) &&
+             CheckSqliteResult(db_,
+            sqlite3_bind_text(statement, 3, record.type.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind updated loan type", error) &&
+             CheckSqliteResult(db_,
+            sqlite3_bind_int(statement, 4, record.id),
+            SQLITE_OK, "Unable to bind updated loan identifier", error);
     }
-    if (statement) sqlite3_finalize(statement);
+    if (ok) {
+        rc = sqlite3_step(statement);
+        ok = CheckSqliteResult(db_, rc, SQLITE_DONE, "Unable to update loan", error);
+        if (ok && sqlite3_changes(db_) == 0) {
+            SetError(error, "The requested loan update did not change a record.");
+            ok = false;
+        }
+    }
+    if (statement) {
+        if (ok) {
+            ok = FinalizeSqliteStatement(
+                db_, statement, "Unable to finalise loan update", error);
+        } else {
+            sqlite3_finalize(statement);
+        }
+    }
 
     if (ok) ok = InsertAuditEvent(db_, "update", record.id, &before, &record, "", error);
     if (!ok) {
@@ -1895,12 +2003,25 @@ bool LoanStore::Remove(int id, std::string* error)
     if (!ok) SetError(error, SqliteError(db_, "Unable to prepare loan deletion"));
 
     if (ok) {
-        sqlite3_bind_int(statement, 1, id);
-        rc = sqlite3_step(statement);
-        ok = rc == SQLITE_DONE && sqlite3_changes(db_) > 0;
-        if (!ok) SetError(error, SqliteError(db_, "Unable to delete loan"));
+        ok = CheckSqliteResult(db_, sqlite3_bind_int(statement, 1, id),
+                               SQLITE_OK, "Unable to bind loan identifier", error);
     }
-    if (statement) sqlite3_finalize(statement);
+    if (ok) {
+        rc = sqlite3_step(statement);
+        ok = CheckSqliteResult(db_, rc, SQLITE_DONE, "Unable to delete loan", error);
+        if (ok && sqlite3_changes(db_) == 0) {
+            SetError(error, "The requested loan deletion did not remove a record.");
+            ok = false;
+        }
+    }
+    if (statement) {
+        if (ok) {
+            ok = FinalizeSqliteStatement(
+                db_, statement, "Unable to finalise loan deletion", error);
+        } else {
+            sqlite3_finalize(statement);
+        }
+    }
 
     if (ok) ok = InsertAuditEvent(db_, "delete", id, &before, NULL, "", error);
     if (!ok) {
@@ -1929,16 +2050,32 @@ bool LoanStore::CountSince(const std::string& date_time, int* count, std::string
         return false;
     }
 
-    sqlite3_bind_text(statement, 1, date_time.c_str(), -1, SQLITE_TRANSIENT);
+    if (!CheckSqliteResult(db_,
+            sqlite3_bind_text(statement, 1, date_time.c_str(), -1, SQLITE_TRANSIENT),
+            SQLITE_OK, "Unable to bind loan-count date", error)) {
+        sqlite3_finalize(statement);
+        return false;
+    }
+
     rc = sqlite3_step(statement);
     if (rc != SQLITE_ROW) {
         SetError(error, SqliteError(db_, "Unable to count loans"));
         sqlite3_finalize(statement);
         return false;
     }
+    const int result_count = sqlite3_column_int(statement, 0);
+    rc = sqlite3_step(statement);
+    if (rc != SQLITE_DONE) {
+        SetError(error, SqliteError(db_, "Unable to complete loan count"));
+        sqlite3_finalize(statement);
+        return false;
+    }
+    if (!FinalizeSqliteStatement(
+            db_, statement, "Unable to finalise loan count", error)) {
+        return false;
+    }
 
-    *count = sqlite3_column_int(statement, 0);
-    sqlite3_finalize(statement);
+    *count = result_count;
     return true;
 }
 
