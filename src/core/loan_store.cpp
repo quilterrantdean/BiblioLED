@@ -501,6 +501,24 @@ std::string SqliteError(sqlite3* db, const std::string& operation)
     return message;
 }
 
+std::string MakeTemporaryDatabasePath(const std::string& base,
+                                             const std::string& purpose)
+{
+    for (int suffix = 0; suffix < 1000; ++suffix) {
+        std::ostringstream path;
+        path << base << "." << purpose << "_" << suffix << ".tmp";
+        const std::string candidate = path.str();
+        if (FileExists(candidate) ||
+            FileExists(candidate + "-journal") ||
+            FileExists(candidate + "-wal") ||
+            FileExists(candidate + "-shm")) {
+            continue;
+        }
+        return candidate;
+    }
+    return std::string();
+}
+
 std::string MakeRecoveryPreservedPath(const std::string& database_path, int suffix)
 {
     const std::time_t now = std::time(NULL);
@@ -1115,7 +1133,7 @@ bool LoanStore::RecoverFromBackup(const std::string& database_path,
     }
 
     const std::string staging_path =
-        MakeTemporaryBackupPath(database_path, "recovery_staging");
+        MakeTemporaryDatabasePath(database_path, "recovery_staging");
     if (staging_path.empty()) {
         sqlite3_close(source_db);
         SetError(error, "Could not reserve a temporary database file for recovery.");

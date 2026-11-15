@@ -772,6 +772,18 @@ int main()
         recovery_source.Close();
     }
 
+    // An abandoned sidecar from a previous interrupted recovery must not
+    // be attached to a newly created staging database.
+    const std::string stale_staging_wal =
+        recovery_target_database + ".recovery_staging_0.tmp-wal";
+    {
+        std::ofstream stale_wal(stale_staging_wal.c_str(),
+                                std::ios::out | std::ios::binary);
+        stale_wal << "stale sidecar from an interrupted recovery";
+    }
+    Check(FileExists(stale_staging_wal),
+          "stale recovery staging sidecar should be created");
+
     biblioled::LoanStore missing_recovery;
     std::string preserved_database;
     Check(missing_recovery.RecoverFromBackup(
@@ -779,6 +791,8 @@ int main()
           "a valid backup should recover a missing database");
     Check(FileExists(recovery_target_database),
           "missing-database recovery should install the restored database");
+    Check(FileExists(stale_staging_wal),
+          "recovery should leave an unrelated stale staging sidecar untouched");
     Check(preserved_database.empty(),
           "missing-database recovery should not report a preserved database that did not exist");
     biblioled::LoanStore recovered_missing;
@@ -835,6 +849,7 @@ int main()
 
     RemoveDatabaseFiles(recovery_source_database);
     RemoveDatabaseFiles(recovery_target_database);
+    RemoveDatabaseFiles(recovery_target_database + ".recovery_staging_0.tmp");
     RemoveDatabaseFiles(corrupt_target_database);
     RemoveDatabaseFiles(preserved_database);
     RemoveFilesWithPrefix(recovery_backup_directory, "BiblioLED_");
