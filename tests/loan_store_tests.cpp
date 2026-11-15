@@ -82,25 +82,59 @@ bool TestUnicodeDatabasePath()
 
     if (!CreateDirectoryW(directory.c_str(), NULL)) return false;
 
-    std::wstring database_path = directory + L"\\biblioteca.sqlite";
+    const std::wstring backup_directory = directory + L"\\backups";
+    if (!CreateDirectoryW(backup_directory.c_str(), NULL)) {
+        RemoveDirectoryW(directory.c_str());
+        return false;
+    }
+
+    const std::wstring database_path = directory + L"\\biblioteca.sqlite";
     const std::string database_utf8 = WidePathToUtf8(database_path);
-    const std::string directory_utf8 = WidePathToUtf8(directory);
+    const std::string backup_directory_utf8 = WidePathToUtf8(backup_directory);
     std::string error;
 
-    bool ok = !database_utf8.empty() && !directory_utf8.empty();
+    bool ok = !database_utf8.empty() && !backup_directory_utf8.empty();
     biblioled::LoanStore first;
-    if (ok) ok = first.Open(database_utf8, directory_utf8, &error);
+    if (ok) ok = first.Open(database_utf8, backup_directory_utf8, &error);
+    if (ok) {
+        biblioled::LoanRecord record;
+        record.title = "Registo num caminho Unicode";
+        record.loan_date = "2099-03-01 10:00";
+        record.type = "livro";
+        ok = first.Insert(&record, &error);
+    }
     first.Close();
 
-    // Reopening is the important assertion: FileExists must recognise the
-    // existing UTF-8 path rather than treating it as a new database.
+    // Reopening proves that the UTF-8 database path is recognised as existing.
+    // The insert also exercises compressed backup creation and retention in a
+    // second directory whose path contains non-ASCII characters.
     biblioled::LoanStore second;
-    if (ok) ok = second.Open(database_utf8, directory_utf8, &error);
+    std::vector<biblioled::LoanRecord> records;
+    if (ok) ok = second.Open(database_utf8, backup_directory_utf8, &error);
+    if (ok) ok = second.GetAll(&records, &error) &&
+                 records.size() == 1 &&
+                 records[0].title == "Registo num caminho Unicode";
     second.Close();
 
-    const BOOL deleted = DeleteFileW(database_path.c_str());
-    const BOOL removed = RemoveDirectoryW(directory.c_str());
-    return ok && deleted && removed;
+    WIN32_FIND_DATAW data;
+    const std::wstring pattern = backup_directory + L"\\*";
+    HANDLE find = FindFirstFileW(pattern.c_str(), &data);
+    if (find != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                DeleteFileW((backup_directory + L"\\" + data.cFileName).c_str());
+            }
+        } while (FindNextFileW(find, &data));
+        FindClose(find);
+    }
+
+    DeleteFileW((database_path + L"-journal").c_str());
+    DeleteFileW((database_path + L"-wal").c_str());
+    DeleteFileW((database_path + L"-shm").c_str());
+    const BOOL backup_directory_removed = RemoveDirectoryW(backup_directory.c_str());
+    const BOOL database_deleted = DeleteFileW(database_path.c_str());
+    const BOOL directory_removed = RemoveDirectoryW(directory.c_str());
+    return ok && backup_directory_removed && database_deleted && directory_removed;
 }
 #endif
 
