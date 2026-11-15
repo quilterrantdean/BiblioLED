@@ -161,6 +161,12 @@ jobs:
             dados esperada desaparecer depois da inicialização.
           - Os caminhos Windows usados pela base de dados, pelas cópias e pelo ficheiro
             config\settings.ini suportam nomes de pastas com caracteres Unicode.
+          - As pastas config, data, data\\backups, exports e logs são verificadas no
+            arranque; se um caminho existir como ficheiro em vez de pasta, a aplicação
+            pára antes de abrir a base de dados.
+          - A aplicação não arranca se não conseguir garantir a instância única para
+            esta pasta. Um problema técnico na janela de selecção de cópias é reportado;
+            cancelar a janela continua a ser uma operação normal.
           - As tentativas de alterar ou eliminar IDs inexistentes não criam cópias
             automáticas, pois não podem modificar a base de dados.
 
@@ -182,7 +188,7 @@ jobs:
           o problema, escolha Ficheiro > Tentar sincronizar registo de auditoria,
           sem reiniciar a aplicação.
 
-          A recuperação guiada de bases de dados em falta/corrompidas está implementada: a aplicação valida uma cópia seleccionada, preserva a base anterior e os ficheiros auxiliares SQLite antes de instalar a cópia validada. Continuam a faltar futuras migrações de esquema e outras funcionalidades da aplicação final. O registo interno de auditoria
+          A recuperação guiada de bases de dados em falta/corrompidas está implementada: a aplicação valida uma cópia seleccionada, preserva a base anterior e os ficheiros auxiliares SQLite antes de instalar a cópia validada. As cópias automáticas inválidas e respectivos auxiliares também são preservados em conjunto fora da área de retenção. Continuam a faltar futuras migrações de esquema e outras funcionalidades da aplicação final. O registo interno de auditoria
           não tem visualizador.
 
           Ensaio sugerido (apenas numa pasta temporária):
@@ -238,6 +244,11 @@ jobs:
               surge em data\backups. Este ensaio cobre caminhos Unicode do
               executável, do INI, da base de dados e das cópias de segurança.
               Use apenas a pasta descartável.
+          17. Opcional: numa segunda pasta descartável, feche a aplicação, mude
+              temporariamente a pasta logs para logs.old e crie um ficheiro normal
+              chamado logs no seu lugar. Volte a iniciar. A aplicação deverá indicar
+              o caminho em conflito e terminar sem abrir/criar a base de dados.
+              Feche, apague o ficheiro logs e restaure o nome logs.old para logs.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8BOM
