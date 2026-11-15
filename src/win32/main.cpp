@@ -1106,10 +1106,11 @@ void RestoreDatabaseFromBackup()
     if (!GetOpenFileNameW(&dialog)) {
         const DWORD dialog_error = CommDlgExtendedError();
         if (dialog_error != 0) {
-            std::wostringstream message;
-            message << L"Não foi possível abrir o selector de cópias de segurança. "
-                    << L"Código de erro do Windows: " << dialog_error << L".";
-            ShowStoreError(message.str(), "The Windows common file dialog failed.");
+            std::ostringstream detail;
+            detail << "Windows common file dialog error " << dialog_error << ".";
+            ShowStoreError(
+                L"Não foi possível abrir o selector de cópias de segurança.",
+                detail.str());
         }
         return;
     }
