@@ -477,7 +477,7 @@ bool ValidateDatabaseFile(const std::string& path, std::string* error)
     const int finalize_rc = sqlite3_finalize(statement);
     if (finalize_rc != SQLITE_OK) {
         valid = false;
-        if (error) *error = SqliteError(check_db, "Could not finalise backup integrity check");
+        if (error) *error = std::string("Could not finalise backup integrity check: ") + sqlite3_errmsg(check_db);
     }
     const int close_rc = sqlite3_close(check_db);
     if (close_rc != SQLITE_OK) {
