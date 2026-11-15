@@ -413,7 +413,13 @@ bool HasSuffix(const std::string& value, const char* suffix)
            value.compare(value.size() - ending.size(), ending.size(), ending) == 0;
 }
 
-void RemoveTemporaryDatabaseFiles(const std::string& path);
+void RemoveTemporaryDatabaseFiles(const std::string& path)
+{
+    RemoveBackupFile(path);
+    RemoveBackupFile(path + "-journal");
+    RemoveBackupFile(path + "-wal");
+    RemoveBackupFile(path + "-shm");
+}
 
 bool DecodeBackupFile(const std::string& path,
                       std::string* sqlite_path,
