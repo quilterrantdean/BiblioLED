@@ -71,32 +71,72 @@ std::string JoinPath(const std::string& directory, const std::string& name)
 #endif
 }
 
-bool HasColumn(sqlite3* db, const char* column_name)
+bool HasExpectedSchema(sqlite3* db)
 {
+    struct ExpectedColumn {
+        const char* name;
+        const char* declared_type;
+        int not_null;
+        int primary_key;
+    };
+    static const ExpectedColumn expected[] = {
+        {"id", "INTEGER", 0, 1},
+        {"title", "TEXT", 1, 0},
+        {"loan_date", "TEXT", 1, 0},
+        {"type", "TEXT", 1, 0}
+    };
+
     sqlite3_stmt* statement = NULL;
-    if (sqlite3_prepare_v2(db, "PRAGMA table_info(loans);", -1, &statement, NULL) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db, "PRAGMA table_info(loans);",
+                           -1, &statement, NULL) != SQLITE_OK) {
         if (statement) sqlite3_finalize(statement);
         return false;
     }
 
-    bool found = false;
+    bool found[sizeof(expected) / sizeof(expected[0])] = {false};
+    bool valid = true;
+    size_t column_count = 0;
     int step = SQLITE_OK;
     while ((step = sqlite3_step(statement)) == SQLITE_ROW) {
+        ++column_count;
         const unsigned char* name = sqlite3_column_text(statement, 1);
-        if (name && sqlite3_stricmp(reinterpret_cast<const char*>(name), column_name) == 0) {
-            found = true;
+        const unsigned char* declared_type = sqlite3_column_text(statement, 2);
+        if (!name || !declared_type) {
+            valid = false;
+            continue;
+        }
+
+        size_t match = sizeof(expected) / sizeof(expected[0]);
+        for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+            if (sqlite3_stricmp(reinterpret_cast<const char*>(name),
+                                expected[i].name) == 0) {
+                match = i;
+                break;
+            }
+        }
+        if (match == sizeof(expected) / sizeof(expected[0]) || found[match]) {
+            valid = false;
+            continue;
+        }
+
+        found[match] = true;
+        if (sqlite3_stricmp(reinterpret_cast<const char*>(declared_type),
+                            expected[match].declared_type) != 0 ||
+            sqlite3_column_int(statement, 3) != expected[match].not_null ||
+            sqlite3_column_int(statement, 5) != expected[match].primary_key) {
+            valid = false;
         }
     }
-    const int finalize_rc = sqlite3_finalize(statement);
-    return step == SQLITE_DONE && finalize_rc == SQLITE_OK && found;
-}
 
-bool HasExpectedSchema(sqlite3* db)
-{
-    return HasColumn(db, "id") &&
-           HasColumn(db, "title") &&
-           HasColumn(db, "loan_date") &&
-           HasColumn(db, "type");
+    const int finalize_rc = sqlite3_finalize(statement);
+    if (step != SQLITE_DONE || finalize_rc != SQLITE_OK ||
+        !valid || column_count != sizeof(expected) / sizeof(expected[0])) {
+        return false;
+    }
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+        if (!found[i]) return false;
+    }
+    return true;
 }
 
 bool HasAuditTable(sqlite3* db, bool* exists, std::string* error)

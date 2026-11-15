@@ -34,7 +34,7 @@ Responsibilities:
 - Schema versioning and migrations.
 - Backup creation, integrity validation, and restore support.
 
-The current database schema is the compatibility baseline: `loans(id, title, loan_date, type)`.
+The current database schema is the compatibility baseline: `loans(id, title, loan_date, type)`. Existing version-0 databases must retain the original declaration contract: `id INTEGER PRIMARY KEY AUTOINCREMENT`, followed by `title`, `loan_date`, and `type` as `TEXT NOT NULL`. The store rejects look-alike tables with an incompatible ID type, missing primary key, or extra unsupported columns rather than treating names alone as proof of compatibility.
 
 ### 4. Infrastructure
 

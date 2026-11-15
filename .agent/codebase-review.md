@@ -78,7 +78,7 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 
 - C++11 core, CMake build, native Win32 application; `port.ico` is compiled into the executable as a Win32 icon resource. No separate icon file is required at runtime or in the portable ZIP.
 - SQLite 3.53.4 statically linked in Windows builds. This version is pinned for the XP target; SQLite 3.54.0 introduced a Windows SRW-lock dependency unavailable on XP.
-- Current table compatibility: `loans(id, title, loan_date, type)`; prepared-statement CRUD and quota counts.
+- Current table compatibility: `loans(id, title, loan_date, type)`; prepared-statement CRUD and quota counts. Schema validation checks declared types, nullability, the INTEGER primary key, and the exact supported four-column layout; tests prove incompatible look-alike legacy schemas are rejected without altering the stored row.
 - Main Win32 window with loan list, create/edit/delete, delete confirmation, external INI limits, single-instance coordination, and application-relative storage paths. Startup fails closed if the named mutex cannot be created; it does not silently run without the per-installation single-instance guarantee.
 - Future-dated loans appear in the main list and are counted immediately; expired loans remain in the database but are omitted from that view.
 - Daily automatic SQLite Online Backup snapshot immediately before the first loan-data mutation of the local day. Same-day snapshots are reused; startup/shutdown and other audit-only writes do not trigger snapshots. New snapshots are integrity-checked and compressed with zlib 1.4 as gzip or zlib streams. A failed snapshot/compression/round-trip validation blocks the pending loan mutation.

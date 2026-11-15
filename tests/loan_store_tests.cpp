@@ -320,6 +320,52 @@ bool CreateLegacyDatabase(const std::string& path, int version)
     return ok && close_rc == SQLITE_OK;
 }
 
+bool CreateDatabaseWithSchema(const std::string& path, const char* schema_sql)
+{
+    sqlite3* db = NULL;
+    if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
+
+    bool ok = Execute(db, schema_sql);
+    if (ok) {
+        ok = Execute(db,
+            "INSERT INTO loans (id, title, loan_date, type) "
+            "VALUES (1, 'Registo legado preservado', '2024-01-15 10:30', 'livro');");
+    }
+    if (ok) ok = Execute(db, "PRAGMA user_version = 0;");
+
+    const int close_rc = sqlite3_close(db);
+    return ok && close_rc == SQLITE_OK;
+}
+
+bool HasLegacyLoanTitle(const std::string& path)
+{
+    sqlite3* db = NULL;
+    if (sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
+
+    sqlite3_stmt* statement = NULL;
+    const int prepare_rc = sqlite3_prepare_v2(
+        db, "SELECT title FROM loans WHERE id = 1;", -1, &statement, NULL);
+    bool found = false;
+    if (prepare_rc == SQLITE_OK) {
+        const int step = sqlite3_step(statement);
+        if (step == SQLITE_ROW) {
+            const unsigned char* title = sqlite3_column_text(statement, 0);
+            found = title && sqlite3_stricmp(
+                reinterpret_cast<const char*>(title),
+                "Registo legado preservado") == 0;
+        }
+    }
+    if (statement) sqlite3_finalize(statement);
+    const int close_rc = sqlite3_close(db);
+    return found && close_rc == SQLITE_OK;
+}
+
 bool ReadAll(biblioled::LoanStore& store,
              std::vector<biblioled::LoanRecord>* records,
              const char* message)
@@ -374,6 +420,9 @@ int main()
         database + ".failed-ddl-migration-backups";
     const std::string unsupported_database = database + ".unsupported.sqlite";
     const std::string malformed_v1_database = database + ".malformed-v1.sqlite";
+    const std::string malformed_legacy_type_database = database + ".malformed-legacy-type.sqlite";
+    const std::string malformed_legacy_key_database = database + ".malformed-legacy-key.sqlite";
+    const std::string malformed_legacy_extra_database = database + ".malformed-legacy-extra.sqlite";
     const std::string missing_backup_directory = database + ".missing-backup-directory";
     const std::string invalid_backup = database + ".invalid-backup.sqlite";
 
@@ -977,6 +1026,40 @@ int main()
           "version 1 without its audit table should be rejected");
     malformed.Close();
 
+    // A matching set of column names is not enough: the legacy data
+    // contract requires an INTEGER primary key, TEXT NOT NULL fields, and
+    // exactly the four supported columns.
+    Check(CreateDatabaseWithSchema(
+              malformed_legacy_type_database,
+              "CREATE TABLE loans (id TEXT PRIMARY KEY, title TEXT NOT NULL, "
+              "loan_date TEXT NOT NULL, type TEXT NOT NULL);"),
+          "legacy database with an incompatible ID type should be created");
+    Check(CreateDatabaseWithSchema(
+              malformed_legacy_key_database,
+              "CREATE TABLE loans (id INTEGER, title TEXT NOT NULL, "
+              "loan_date TEXT NOT NULL, type TEXT NOT NULL);"),
+          "legacy database without an ID primary key should be created");
+    Check(CreateDatabaseWithSchema(
+              malformed_legacy_extra_database,
+              "CREATE TABLE loans (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+              "title TEXT NOT NULL, loan_date TEXT NOT NULL, type TEXT NOT NULL, "
+              "unsupported TEXT NOT NULL DEFAULT '');"),
+          "legacy database with an unsupported extra column should be created");
+
+    const std::string malformed_legacy_paths[] = {
+        malformed_legacy_type_database,
+        malformed_legacy_key_database,
+        malformed_legacy_extra_database
+    };
+    for (size_t i = 0; i < sizeof(malformed_legacy_paths) / sizeof(malformed_legacy_paths[0]); ++i) {
+        biblioled::LoanStore incompatible;
+        Check(!incompatible.Open(malformed_legacy_paths[i], ".", &error),
+              "database with a look-alike but incompatible loans schema must be rejected");
+        incompatible.Close();
+        Check(HasLegacyLoanTitle(malformed_legacy_paths[i]),
+              "schema rejection must leave the legacy record unchanged and readable");
+    }
+
     // Backup-write failure still blocks mutations on current-schema databases.
     biblioled::LoanStore blocked;
     Check(blocked.Open(blocked_database, missing_backup_directory, &error),
@@ -1189,6 +1272,9 @@ int main()
     RemoveDatabaseFiles(failed_ddl_migration_database);
     RemoveDatabaseFiles(unsupported_database);
     RemoveDatabaseFiles(malformed_v1_database);
+    RemoveDatabaseFiles(malformed_legacy_type_database);
+    RemoveDatabaseFiles(malformed_legacy_key_database);
+    RemoveDatabaseFiles(malformed_legacy_extra_database);
     RemoveDatabaseFiles(invalid_backup);
     for (size_t i = 0; i < backups.size(); ++i) {
         RemoveDatabaseFiles(backups[i]);
