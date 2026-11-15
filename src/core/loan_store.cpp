@@ -1492,16 +1492,35 @@ bool LoanStore::QuickCheck(std::string* error)
         return false;
     }
 
-    bool valid = false;
-    rc = sqlite3_step(statement);
-    if (rc == SQLITE_ROW) {
+    bool valid = true;
+    bool saw_result = false;
+    std::string check_error;
+    while ((rc = sqlite3_step(statement)) == SQLITE_ROW) {
+        saw_result = true;
         const unsigned char* result = sqlite3_column_text(statement, 0);
-        valid = result && sqlite3_stricmp(reinterpret_cast<const char*>(result), "ok") == 0;
+        if (!result || sqlite3_stricmp(
+                reinterpret_cast<const char*>(result), "ok") != 0) {
+            valid = false;
+            if (check_error.empty()) {
+                check_error = result
+                    ? reinterpret_cast<const char*>(result)
+                    : "SQLite quick_check returned an empty result.";
+            }
+        }
+    }
+    if (rc != SQLITE_DONE && check_error.empty()) {
+        check_error = sqlite3_errmsg(db_);
     }
 
-    sqlite3_finalize(statement);
-    if (!valid) {
-        SetError(error, SqliteError(db_, "Database integrity check failed"));
+    const int finalize_rc = sqlite3_finalize(statement);
+    if (finalize_rc != SQLITE_OK && check_error.empty()) {
+        check_error = sqlite3_errmsg(db_);
+    }
+    if (rc != SQLITE_DONE || finalize_rc != SQLITE_OK ||
+        !saw_result || !valid) {
+        std::string message = "Database integrity check failed";
+        if (!check_error.empty()) message += ": " + check_error;
+        SetError(error, message);
         return false;
     }
     return true;
