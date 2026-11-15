@@ -14,7 +14,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -265,39 +264,120 @@ bool ParseBoolean(const std::string& text, bool* value)
     return false;
 }
 
+bool ReadUtf8File(const std::wstring& path,
+                  std::string* contents,
+                  bool* exists,
+                  std::string* error)
+{
+    if (!contents || !exists) {
+        if (error) *error = "Invalid file-reading output argument.";
+        return false;
+    }
+
+    contents->clear();
+    *exists = false;
+    HANDLE file = CreateFileW(
+        path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
+        const DWORD code = GetLastError();
+        if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) {
+            return true;
+        }
+        if (error) {
+            std::ostringstream message;
+            message << "Não foi possível ler config/settings.ini (erro Win32 "
+                    << code << ").";
+            *error = message.str();
+        }
+        return false;
+    }
+
+    *exists = true;
+    char buffer[8192];
+    bool ok = true;
+    while (ok) {
+        DWORD received = 0;
+        if (!ReadFile(file, buffer, sizeof(buffer), &received, NULL)) {
+            ok = false;
+            break;
+        }
+        if (received == 0) break;
+        contents->append(buffer, received);
+    }
+
+    if (!CloseHandle(file)) ok = false;
+    if (!ok) {
+        contents->clear();
+        if (error) *error = "Não foi possível ler integralmente config/settings.ini.";
+    }
+    return ok;
+}
+
+bool WriteUtf8File(const std::wstring& path,
+                   const std::string& contents,
+                   bool create_new)
+{
+    HANDLE file = CreateFileW(
+        path.c_str(), GENERIC_WRITE, 0, NULL,
+        create_new ? CREATE_NEW : CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) return false;
+
+    size_t offset = 0;
+    bool ok = true;
+    while (offset < contents.size()) {
+        const size_t remaining = contents.size() - offset;
+        const DWORD requested = static_cast<DWORD>(
+            remaining > 65536 ? 65536 : remaining);
+        DWORD written = 0;
+        if (!WriteFile(file, contents.data() + offset, requested, &written, NULL) ||
+            written == 0) {
+            ok = false;
+            break;
+        }
+        offset += written;
+    }
+
+    if (ok && !FlushFileBuffers(file)) ok = false;
+    if (!CloseHandle(file)) ok = false;
+    if (!ok) DeleteFileW(path.c_str());
+    return ok;
+}
+
 bool WriteDefaultSettings(const std::wstring& path)
 {
-    const std::string utf8_path = WideToUtf8(path);
-    std::ofstream output(utf8_path.c_str(), std::ios::out | std::ios::binary);
-    if (!output) return false;
-    output << "; BiblioLED portable settings\r\n"
-              "[limits]\r\n"
-              "daily_limit=5\r\n"
-              "monthly_limit=20\r\n"
-              "monthly_window_days=30\r\n"
-              "loan_duration_days=21\r\n"
-              "\r\n"
-              "[diagnostics]\r\n"
-              "enabled=1\r\n"
-              "max_log_size_bytes=5242880\r\n"
-              "\r\n"
-              "[backups]\r\n"
-              "compression_format=gzip\r\n"
-              "compression_level=6\r\n"
-              "\r\n"
-              "[columns]\r\n"
-              "order=0,1,2,3,4\r\n"
-              "widths=320,100,130,130,55\r\n";
-    return output.good();
+    static const char contents[] =
+        "; BiblioLED portable settings\r\n"
+        "[limits]\r\n"
+        "daily_limit=5\r\n"
+        "monthly_limit=20\r\n"
+        "monthly_window_days=30\r\n"
+        "loan_duration_days=21\r\n"
+        "\r\n"
+        "[diagnostics]\r\n"
+        "enabled=1\r\n"
+        "max_log_size_bytes=5242880\r\n"
+        "\r\n"
+        "[backups]\r\n"
+        "compression_format=gzip\r\n"
+        "compression_level=6\r\n"
+        "\r\n"
+        "[columns]\r\n"
+        "order=0,1,2,3,4\r\n"
+        "widths=320,100,130,130,55\r\n";
+    return WriteUtf8File(
+        path, std::string(contents, sizeof(contents) - 1), true);
 }
 
 bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* error)
 {
     if (!settings) return false;
 
-    const std::string utf8_path = WideToUtf8(path);
-    std::ifstream input(utf8_path.c_str(), std::ios::in | std::ios::binary);
-    if (!input.good()) {
+    std::string contents;
+    bool exists = false;
+    if (!ReadUtf8File(path, &contents, &exists, error)) return false;
+    if (!exists) {
         if (!WriteDefaultSettings(path)) {
             if (error) *error = "Não foi possível criar config/settings.ini.";
             return false;
@@ -307,6 +387,7 @@ bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* 
     }
 
     AppSettings loaded;
+    std::istringstream input(contents);
     std::string line;
     int seen_limits = 0;
     bool valid = true;
@@ -379,40 +460,35 @@ bool WriteSettings(const std::wstring& path,
                    std::string* error)
 {
     const std::wstring temporary_path = path + L".tmp";
-    const std::string temporary_utf8 = WideToUtf8(temporary_path);
-    {
-        std::ofstream output(temporary_utf8.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-        if (!output) {
-            if (error) *error = "Não foi possível criar o ficheiro temporário de configurações.";
-            return false;
-        }
-        output << "; BiblioLED portable settings\r\n"
-                  "[limits]\r\n"
-               << "daily_limit=" << settings.daily_limit << "\r\n"
-               << "monthly_limit=" << settings.monthly_limit << "\r\n"
-               << "monthly_window_days=" << settings.monthly_window_days << "\r\n"
-               << "loan_duration_days=" << settings.loan_duration_days << "\r\n"
-                  "\r\n"
-                  "[diagnostics]\r\n"
-               << "enabled=" << (settings.diagnostics_enabled ? 1 : 0) << "\r\n"
-               << "max_log_size_bytes=" << settings.audit_log_max_size_bytes << "\r\n"
-                  "\r\n"
-                  "[backups]\r\n"
-               << "compression_format=" << settings.backup_compression_format << "\r\n"
-               << "compression_level=" << settings.backup_compression_level << "\r\n"
-                  "\r\n"
-                  "[columns]\r\n"
-               << "order=" << IntegerListToString(settings.column_order, kColumnCount) << "\r\n"
-               << "widths=" << IntegerListToString(settings.column_widths, kColumnCount) << "\r\n";
-        output.flush();
-        if (!output.good()) {
-            if (error) *error = "Não foi possível gravar todas as configurações.";
-            return false;
-        }
+    std::ostringstream output;
+    output << "; BiblioLED portable settings\r\n"
+              "[limits]\r\n"
+           << "daily_limit=" << settings.daily_limit << "\r\n"
+           << "monthly_limit=" << settings.monthly_limit << "\r\n"
+           << "monthly_window_days=" << settings.monthly_window_days << "\r\n"
+           << "loan_duration_days=" << settings.loan_duration_days << "\r\n"
+              "\r\n"
+              "[diagnostics]\r\n"
+           << "enabled=" << (settings.diagnostics_enabled ? 1 : 0) << "\r\n"
+           << "max_log_size_bytes=" << settings.audit_log_max_size_bytes << "\r\n"
+              "\r\n"
+              "[backups]\r\n"
+           << "compression_format=" << settings.backup_compression_format << "\r\n"
+           << "compression_level=" << settings.backup_compression_level << "\r\n"
+              "\r\n"
+              "[columns]\r\n"
+           << "order=" << IntegerListToString(settings.column_order, kColumnCount) << "\r\n"
+           << "widths=" << IntegerListToString(settings.column_widths, kColumnCount) << "\r\n";
+
+    if (!output.good() ||
+        !WriteUtf8File(temporary_path, output.str(), false)) {
+        if (error) *error = "Não foi possível gravar todas as configurações.";
+        return false;
     }
 
     if (!MoveFileExW(temporary_path.c_str(), path.c_str(),
                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(temporary_path.c_str());
         if (error) *error = "Não foi possível substituir config/settings.ini.";
         return false;
     }
