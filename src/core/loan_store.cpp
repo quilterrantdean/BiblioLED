@@ -10,13 +10,34 @@
 #include <sstream>
 #include <vector>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace biblioled {
 namespace {
 
 bool FileExists(const std::string& path)
 {
+#ifdef _WIN32
+    // LoanStore paths are UTF-8 at the public boundary. The narrow
+    // std::ifstream overload uses the active Windows code page instead.
+    const int length = MultiByteToWideChar(
+        CP_UTF8, 0, path.c_str(), -1, NULL, 0);
+    if (length <= 1) return false;
+
+    std::wstring wide_path(static_cast<size_t>(length), L'\\0');
+    if (!MultiByteToWideChar(
+            CP_UTF8, 0, path.c_str(), -1, &wide_path[0], length)) {
+        return false;
+    }
+    const DWORD attributes = GetFileAttributesW(wide_path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES &&
+           (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+#else
     std::ifstream file(path.c_str(), std::ios::in | std::ios::binary);
     return file.good();
+#endif
 }
 
 std::string JoinPath(const std::string& directory, const std::string& name)

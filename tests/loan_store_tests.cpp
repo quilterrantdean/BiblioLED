@@ -48,6 +48,62 @@ bool FileExists(const std::string& path)
     return input.good();
 }
 
+#ifdef _WIN32
+std::string WidePathToUtf8(const std::wstring& path)
+{
+    if (path.empty()) return std::string();
+    const int length = WideCharToMultiByte(
+        CP_UTF8, 0, path.c_str(), -1, NULL, 0, NULL, NULL);
+    if (length <= 1) return std::string();
+    std::string result(static_cast<size_t>(length), '\\0');
+    if (!WideCharToMultiByte(
+            CP_UTF8, 0, path.c_str(), -1, &result[0], length, NULL, NULL)) {
+        return std::string();
+    }
+    result.resize(static_cast<size_t>(length - 1));
+    return result;
+}
+
+bool TestUnicodeDatabasePath()
+{
+    wchar_t temporary_path[MAX_PATH] = {0};
+    const DWORD length = GetTempPathW(MAX_PATH, temporary_path);
+    if (length == 0 || length >= MAX_PATH) return false;
+
+    std::wstring directory(temporary_path, length);
+    if (!directory.empty() &&
+        directory[directory.size() - 1] != L'\\' &&
+        directory[directory.size() - 1] != L'/') {
+        directory += L'\\';
+    }
+    directory += L"BiblioLED_Unicode_";
+    directory += std::to_wstring(static_cast<unsigned long>(GetTickCount()));
+    directory += L"_ação";
+
+    if (!CreateDirectoryW(directory.c_str(), NULL)) return false;
+
+    std::wstring database_path = directory + L"\\biblioteca.sqlite";
+    const std::string database_utf8 = WidePathToUtf8(database_path);
+    const std::string directory_utf8 = WidePathToUtf8(directory);
+    std::string error;
+
+    bool ok = !database_utf8.empty() && !directory_utf8.empty();
+    biblioled::LoanStore first;
+    if (ok) ok = first.Open(database_utf8, directory_utf8, &error);
+    first.Close();
+
+    // Reopening is the important assertion: FileExists must recognise the
+    // existing UTF-8 path rather than treating it as a new database.
+    biblioled::LoanStore second;
+    if (ok) ok = second.Open(database_utf8, directory_utf8, &error);
+    second.Close();
+
+    const BOOL deleted = DeleteFileW(database_path.c_str());
+    const BOOL removed = RemoveDirectoryW(directory.c_str());
+    return ok && deleted && removed;
+}
+#endif
+
 bool MakeDirectory(const std::string& path)
 {
 #ifdef _WIN32
@@ -243,6 +299,11 @@ int main()
 
     std::vector<std::string> backups;
     std::string error;
+
+#ifdef _WIN32
+    Check(TestUnicodeDatabasePath(),
+          "LoanStore should reopen a database under a UTF-8 path with non-ASCII characters");
+#endif
 
     // A new database starts at schema version 1 with an empty audit table.
     biblioled::LoanStore store;
