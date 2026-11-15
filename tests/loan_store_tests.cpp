@@ -926,6 +926,7 @@ int main()
     const std::string recovery_target_database = database + ".recovery-target.sqlite";
     const std::string corrupt_target_database = database + ".recovery-corrupt.sqlite";
     const std::string recovery_backup_directory = database + ".recovery-backups";
+    const std::string locked_recovery_database = database + ".recovery-locked.sqlite";
     Check(MakeDirectory(recovery_backup_directory),
           "isolated recovery backup directory should be created");
 
@@ -1013,6 +1014,55 @@ int main()
           FileExists(corrupt_target_database + "-journal"),
           "an invalid recovery source must leave the damaged database and sidecar untouched");
 
+#ifdef _WIN32
+    // Hold a sidecar without FILE_SHARE_DELETE so preservation fails after the
+    // main file has moved. Recovery must roll that first move back and leave the
+    // expected database and all original bytes in place.
+    const std::string locked_sidecar = locked_recovery_database + "-journal";
+    {
+        std::ofstream locked_db_output(
+            locked_recovery_database.c_str(), std::ios::out | std::ios::binary);
+        locked_db_output << "original corrupt database bytes";
+    }
+    {
+        std::ofstream locked_sidecar_output(
+            locked_sidecar.c_str(), std::ios::out | std::ios::binary);
+        locked_sidecar_output << "locked original sidecar bytes";
+    }
+
+    HANDLE locked_sidecar_handle = CreateFileA(
+        locked_sidecar.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL, NULL);
+    Check(locked_sidecar_handle != INVALID_HANDLE_VALUE,
+          "recovery failure-injection sidecar should open without sharing");
+    if (locked_sidecar_handle != INVALID_HANDLE_VALUE) {
+        biblioled::LoanStore locked_recovery;
+        std::string locked_preserved;
+        Check(!locked_recovery.RecoverFromBackup(
+                  locked_recovery_database, recovery_backup,
+                  &locked_preserved, &error),
+              "recovery should fail when an original sidecar cannot be moved");
+        Check(FileExists(locked_recovery_database) && FileExists(locked_sidecar),
+              "failed sidecar preservation should roll the original database and sidecar back");
+        Check(locked_preserved.empty(),
+              "failed recovery should not report a completed preservation group");
+        CloseHandle(locked_sidecar_handle);
+    }
+    {
+        std::ifstream original_input(
+            locked_recovery_database.c_str(), std::ios::in | std::ios::binary);
+        std::string original_bytes;
+        if (original_input.good()) {
+            std::getline(original_input, original_bytes);
+        }
+        Check(original_bytes == "original corrupt database bytes",
+              "failed recovery rollback should preserve the original database bytes");
+    }
+    Check(!HasFileWithPrefix(".", locked_recovery_database + ".recovery_preserved_"),
+          "successful rollback should not leave a partially preserved original database");
+    RemoveDatabaseFiles(locked_recovery_database);
+#endif
+
     biblioled::LoanStore corrupt_recovery;
     preserved_database.clear();
     Check(corrupt_recovery.RecoverFromBackup(
@@ -1042,6 +1092,7 @@ int main()
     RemoveDatabaseFiles(recovery_target_database);
     RemoveDatabaseFiles(recovery_target_database + ".recovery_staging_0.tmp");
     RemoveDatabaseFiles(corrupt_target_database);
+    RemoveDatabaseFiles(locked_recovery_database);
     RemoveDatabaseFiles(preserved_database);
     RemoveFilesWithPrefix(recovery_backup_directory, "BiblioLED_");
 #ifdef _WIN32
