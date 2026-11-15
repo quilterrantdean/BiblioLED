@@ -68,7 +68,7 @@ The main window remains an operational overview of active loans and useful curre
 - [x] When file logging is disabled, retain internal audit events in SQLite and queue external synchronisation; when re-enabled, synchronise the backlog. If enabled logging fails, allow reads but block further database mutations until recovery; retry through **Ficheiro > Tentar sincronizar registo de auditoria...**.
 - [x] Record application startup/shutdown and successful manual backup/restore operations as internal audit events, using the existing transactional persistence and external-log synchronisation path.
 - [x] Record general/backup settings changes and CSV exports in the transactional audit log.
-- [ ] Extend audit coverage to warnings, errors, and failures.
+- [ ] Extend application audit-event coverage to warnings, errors, and failures. The external log transport now has dedicated Windows tests for active-log write denial and incomplete archived logs; the new assertions are awaiting CI validation.
 - [x] Separate audit-only writes (including startup/shutdown and settings changes) from loan-data backup triggers.
 - [x] Implement the approved automatic-backup retention policy: 7 daily, 4 weekly, and 12 monthly snapshots. Only recognised automatic backups are pruned; manual and restore/migration safety backups are preserved. Unknown filenames are preserved.
 - [x] Integrate statically linked zlib 1.4 for streaming gzip and zlib wrappers. Verify compressed round-trips and SQLite integrity; keep `.sqlite` backups compatible.
@@ -108,7 +108,7 @@ The UI refinement changes above passed Core and XP-targeted CI at `bda018b0ee592
 ### Phase 5 — Verification and delivery
 
 - [ ] Continue expanding automated coverage for power-loss/interrupted recovery, rollback-failure branches, migration, settings persistence and UI workflows. The store suite now covers recovery from missing/corrupt databases, preservation of SQLite sidecars, invalid-candidate non-interference, stale staging/decompression sidecars, invalid automatic-backup sidecar preservation, Unicode Windows database/backup paths, missing-ID update/delete without automatic backups, and a Windows failure-injection test confirming rollback after an original-sidecar move fails. All tests use synthetic/isolated data.
-- [ ] Add static analysis and dependency checks.
+- [ ] Validate the newly added Cppcheck static-analysis job and assess dependency provenance/update checks.
 - [x] Configure the initial GitHub Actions core-test workflow for pushes and pull requests to `development`.
 - [x] Add a separate w64devkit x86 XP-targeted build workflow and reproducible CMake preset.
 - [x] Confirm the w64devkit XP-targeted workflow passes and publish a downloadable test build.

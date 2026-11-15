@@ -44,3 +44,33 @@ jobs:
 
       - name: Test Win32 SQLite store
         run: ctest --test-dir build -C Release --output-on-failure
+  static-analysis:
+    name: Cppcheck (portable C++11)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: Analyse portable C++11 sources and tests
+        run: |
+          cppcheck --version
+          cppcheck \
+            --enable=warning,performance,portability \
+            --error-exitcode=1 \
+            --inline-suppr \
+            --std=c++11 \
+            --language=c++ \
+            -I include \
+            src/core \
+            src/infrastructure/backup_compression.cpp \
+            src/infrastructure/backup_retention.cpp \
+            tests/loan_csv_export_tests.cpp \
+            tests/loan_rules_tests.cpp \
+            tests/loan_statistics_tests.cpp \
+            tests/loan_store_tests.cpp \
+            tests/backup_compression_tests.cpp \
+            tests/backup_retention_tests.cpp
+

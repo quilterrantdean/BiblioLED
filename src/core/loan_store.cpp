@@ -119,7 +119,8 @@ bool HasAuditSchema(sqlite3* db)
     }
 
     bool found[11] = {false};
-    while (sqlite3_step(statement) == SQLITE_ROW) {
+    int step = SQLITE_OK;
+    while ((step = sqlite3_step(statement)) == SQLITE_ROW) {
         const unsigned char* name = sqlite3_column_text(statement, 1);
         if (!name) continue;
         for (size_t i = 0; i < sizeof(columns) / sizeof(columns[0]); ++i) {
@@ -128,7 +129,8 @@ bool HasAuditSchema(sqlite3* db)
             }
         }
     }
-    sqlite3_finalize(statement);
+    const int finalize_rc = sqlite3_finalize(statement);
+    if (step != SQLITE_DONE || finalize_rc != SQLITE_OK) return false;
 
     for (size_t i = 0; i < sizeof(columns) / sizeof(columns[0]); ++i) {
         if (!found[i]) return false;

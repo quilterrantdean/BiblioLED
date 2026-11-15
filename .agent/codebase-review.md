@@ -133,3 +133,10 @@ The latest documented validation baseline is commit `923b8d38c61f22e93055fe112db
 
 The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained the two then-current successful validation runs. Later commits and workflows create new runs normally. The user reports having tested the application manually; exact artefact, operating-system build and scenarios have not yet been recorded.
 
+
+
+
+## Latest audit and static-analysis work
+
+- The version 1 audit-schema inspector now rejects incomplete/failed `PRAGMA table_info` execution, including a non-successful statement finalisation, rather than accepting a partial scan.
+- Windows audit-log tests now cover an active log becoming read-only (pending events remain queued and synchronisation succeeds after permissions are restored) and an archived log ending with an incomplete line (synchronisation must fail without appending). The new Cppcheck workflow scans the portable C++11 core, backup infrastructure and corresponding portable tests; its first CI result is pending.
