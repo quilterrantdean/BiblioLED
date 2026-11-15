@@ -138,6 +138,7 @@ bool HasAuditSchema(sqlite3* db)
     sqlite3_stmt* statement = NULL;
     if (sqlite3_prepare_v2(db, "PRAGMA table_info(audit_events);",
                            -1, &statement, NULL) != SQLITE_OK) {
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
@@ -255,10 +256,16 @@ bool InsertAuditEvent(sqlite3* db,
     int rc = sqlite3_prepare_v2(db, sql, -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         if (error) *error = sqlite3_errmsg(db);
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
     const std::string timestamp = CurrentTimestamp();
+    if (timestamp.empty()) {
+        if (error) *error = "Unable to obtain the local timestamp for the audit event.";
+        sqlite3_finalize(statement);
+        return false;
+    }
     bool ok =
         CheckSqliteResult(db,
             sqlite3_bind_text(statement, 1, timestamp.c_str(), -1, SQLITE_TRANSIENT),
@@ -319,6 +326,7 @@ bool ReadLoanById(sqlite3* db,
     int rc = sqlite3_prepare_v2(db, sql, -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         if (error) *error = sqlite3_errmsg(db);
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
@@ -427,6 +435,7 @@ bool ValidateDatabaseFile(const std::string& path, std::string* error)
     rc = sqlite3_prepare_v2(check_db, "PRAGMA integrity_check;", -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         if (error) *error = sqlite3_errmsg(check_db);
+        if (statement) sqlite3_finalize(statement);
         sqlite3_close(check_db);
         return false;
     }
@@ -1616,6 +1625,7 @@ bool LoanStore::QuickCheck(std::string* error)
     int rc = sqlite3_prepare_v2(db_, "PRAGMA quick_check;", -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(db_, "SQLite quick_check failed"));
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
@@ -1675,6 +1685,7 @@ bool LoanStore::GetAuditEvents(std::vector<AuditEvent>* events, std::string* err
     int rc = sqlite3_prepare_v2(db_, sql, -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(db_, "Unable to prepare audit-event query"));
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
@@ -1771,6 +1782,7 @@ bool LoanStore::GetAll(std::vector<LoanRecord>* records, std::string* error)
     int rc = sqlite3_prepare_v2(db_, sql, -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(db_, "Unable to prepare loan query"));
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
@@ -1811,6 +1823,7 @@ bool LoanStore::GetById(int id, LoanRecord* record, std::string* error)
     int rc = sqlite3_prepare_v2(db_, sql, -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(db_, "Unable to prepare loan lookup"));
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
@@ -2094,6 +2107,7 @@ bool LoanStore::CountSince(const std::string& date_time, int* count, std::string
         db_, "SELECT COUNT(*) FROM loans WHERE loan_date >= ?1;", -1, &statement, NULL);
     if (rc != SQLITE_OK) {
         SetError(error, SqliteError(db_, "Unable to prepare loan count"));
+        if (statement) sqlite3_finalize(statement);
         return false;
     }
 
