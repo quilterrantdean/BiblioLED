@@ -1807,6 +1807,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     _snwprintf(mutex_name, 79, L"Local\\BiblioLED_%08lX",
                DirectoryHash(gApplicationDirectory));
 
+    SetLastError(ERROR_SUCCESS);
     gInstanceMutex = CreateMutexW(NULL, TRUE, mutex_name);
     const DWORD mutex_status = GetLastError();
     if (!gInstanceMutex) {
