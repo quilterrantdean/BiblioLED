@@ -94,7 +94,7 @@ bool ReadFirstLine(const std::wstring& path, std::string* line)
         }
         if (received == 0) break;
         for (DWORD i = 0; i < received; ++i) {
-            if (buffer[i] == '\\n') {
+            if (buffer[i] == '\n') {
                 found_line = true;
                 break;
             }
@@ -102,7 +102,7 @@ bool ReadFirstLine(const std::wstring& path, std::string* line)
         }
     }
     CloseHandle(file);
-    if (!line->empty() && line->back() == '\\r') line->pop_back();
+    if (!line->empty() && line->back() == '\r') line->pop_back();
     return found_line;
 }
 
@@ -191,7 +191,7 @@ int main()
             for (size_t i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
                 const std::string injected =
                     std::string(offsets[i], 'X') +
-                    original_line.substr(marker_position) + "\\r\\n";
+                    original_line.substr(marker_position) + "\r\n";
                 Check(WriteLogContents(boundary_path, injected),
                       "boundary test should write the synthetic long log line");
                 error.clear();
