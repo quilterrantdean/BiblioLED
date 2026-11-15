@@ -160,7 +160,7 @@ jobs:
           - Um marcador impede a criação silenciosa de uma base vazia se a base de
             dados esperada desaparecer depois da inicialização.
           - Os caminhos Windows usados pela base de dados, pelas cópias e pelo ficheiro
-            config\\settings.ini suportam nomes de pastas com caracteres Unicode.
+            config\settings.ini suportam nomes de pastas com caracteres Unicode.
           - As tentativas de alterar ou eliminar IDs inexistentes não criam cópias
             automáticas, pois não podem modificar a base de dados.
 
@@ -231,11 +231,13 @@ jobs:
               separador ;, colunas Title/LoanDate/Type, registos futuros/expirados
               e a preservação de ;, aspas e quebras de linha.
           16. Opcional: extraia o artefacto para uma pasta cujo nome tenha acentos,
-              por exemplo C:\\Temp\\BiblioLED_ação. Execute a aplicação, crie um
-              registo fictício e confirme que as definições são carregadas após
-              reiniciar e que a cópia automática comprimida surge em data\\backups.
-              Este ensaio cobre os caminhos Unicode do executável, do INI, da base
-              de dados e das cópias de segurança. Use apenas a pasta descartável.
+              por exemplo C:\Temp\BiblioLED_ação. Execute a aplicação e altere uma
+              definição geral em Opções > Definições gerais. Feche e reabra a
+              aplicação; confirme que o novo valor ficou guardado no INI. Depois
+              crie um registo fictício e confirme que a cópia automática comprimida
+              surge em data\backups. Este ensaio cobre caminhos Unicode do
+              executável, do INI, da base de dados e das cópias de segurança.
+              Use apenas a pasta descartável.
 
           Não copie aqui a base de dados real nem substitua a instalação actual.
           '@ | Set-Content -Path (Join-Path $package "LEIA-ME-TESTE.txt") -Encoding utf8
