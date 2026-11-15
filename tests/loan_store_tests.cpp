@@ -1042,11 +1042,17 @@ int main()
                   locked_recovery_database, recovery_backup,
                   &locked_preserved, &error),
               "recovery should fail when an original sidecar cannot be moved");
-        Check(FileExists(locked_recovery_database) && FileExists(locked_sidecar),
+        const DWORD locked_sidecar_attributes =
+            GetFileAttributesA(locked_sidecar.c_str());
+        Check(FileExists(locked_recovery_database) &&
+              locked_sidecar_attributes != INVALID_FILE_ATTRIBUTES &&
+              (locked_sidecar_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0,
               "failed sidecar preservation should roll the original database and sidecar back");
         Check(locked_preserved.empty(),
               "failed recovery should not report a completed preservation group");
         CloseHandle(locked_sidecar_handle);
+        Check(FileExists(locked_sidecar),
+              "the original locked sidecar should remain after the lock is released");
     }
     {
         std::ifstream original_input(
