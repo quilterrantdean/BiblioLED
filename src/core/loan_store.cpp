@@ -730,6 +730,45 @@ void LoanStore::SetError(std::string* error, const std::string& message) const
     if (error) *error = message;
 }
 
+bool LoanStore::RollbackTransaction(std::string* error)
+{
+    if (!db_) return false;
+
+    char* rollback_message = NULL;
+    const int rollback_rc = sqlite3_exec(
+        db_, "ROLLBACK;", NULL, NULL, &rollback_message);
+    if (rollback_rc == SQLITE_OK || sqlite3_get_autocommit(db_) != 0) {
+        sqlite3_free(rollback_message);
+        return true;
+    }
+
+    std::string detail = rollback_message
+        ? rollback_message : sqlite3_errmsg(db_);
+    sqlite3_free(rollback_message);
+
+    // A failed ROLLBACK must never leave this LoanStore usable with an
+    // open transaction. Closing the connection makes SQLite discard any
+    // transaction that could not be rolled back explicitly.
+    sqlite3* failed_db = db_;
+    db_ = NULL;
+    int close_rc = sqlite3_close(failed_db);
+    if (close_rc != SQLITE_OK) {
+        close_rc = sqlite3_close_v2(failed_db);
+    }
+    Close();
+
+    if (error) {
+        if (!error->empty()) *error += " ";
+        *error += "SQLite rollback failed: ";
+        *error += detail;
+        *error += ". The database connection was closed to prevent further use.";
+        if (close_rc != SQLITE_OK) {
+            *error += " SQLite could not confirm connection closure.";
+        }
+    }
+    return false;
+}
+
 bool LoanStore::Open(const std::string& database_path,
                      const std::string& backup_directory,
                      std::string* error)
@@ -1459,12 +1498,12 @@ bool LoanStore::CreateInitialSchema(std::string* error)
     if (ok) ok = QuickCheck(error);
 
     if (!ok) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
 
     if (!ExecuteSql(db_, "COMMIT;", error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     return true;
@@ -1529,16 +1568,24 @@ bool LoanStore::MigrateLegacySchema(std::string* backup_path, std::string* error
     if (ok) ok = QuickCheck(error);
 
     if (!ok) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        const bool rollback_ok = RollbackTransaction(error);
         if (error && !error->empty()) {
-            *error = "The schema migration was rolled back. The original database remains unchanged: " + *error;
+            const std::string prefix = rollback_ok
+                ? "The schema migration was rolled back. The original database remains unchanged: "
+                : "The schema migration failed and its database connection was closed after rollback could not be confirmed: ";
+            *error = prefix + *error;
         }
         return false;
     }
 
     if (!ExecuteSql(db_, "COMMIT;", error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
-        if (error && !error->empty()) *error = "Could not commit the schema migration: " + *error;
+        const bool rollback_ok = RollbackTransaction(error);
+        if (error && !error->empty()) {
+            const std::string prefix = rollback_ok
+                ? "Could not commit the schema migration; it was rolled back: "
+                : "Could not commit the schema migration; the database connection was closed after rollback could not be confirmed: ";
+            *error = prefix + *error;
+        }
         return false;
     }
 
@@ -1698,11 +1745,11 @@ bool LoanStore::RecordAuditEvent(const std::string& action,
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
     if (!InsertAuditEvent(db_, action.c_str(), 0, NULL, NULL, details, error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     if (!ExecuteSql(db_, "COMMIT;", error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     return true;
@@ -1854,11 +1901,11 @@ bool LoanStore::Insert(LoanRecord* record, std::string* error)
     if (ok) ok = InsertAuditEvent(db_, "create", new_id, NULL, record, "", error);
 
     if (!ok) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     if (!ExecuteSql(db_, "COMMIT;", error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     record->id = new_id;
@@ -1897,11 +1944,11 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
     LoanRecord before;
     bool found = false;
     if (!ReadLoanById(db_, record.id, &before, &found, error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     if (!found) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         SetError(error, "Loan record was not found.");
         return false;
     }
@@ -1946,11 +1993,11 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
 
     if (ok) ok = InsertAuditEvent(db_, "update", record.id, &before, &record, "", error);
     if (!ok) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     if (!ExecuteSql(db_, "COMMIT;", error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     return true;
@@ -1987,11 +2034,11 @@ bool LoanStore::Remove(int id, std::string* error)
     LoanRecord before;
     bool found = false;
     if (!ReadLoanById(db_, id, &before, &found, error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     if (!found) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         SetError(error, "Loan record was not found.");
         return false;
     }
@@ -2025,11 +2072,11 @@ bool LoanStore::Remove(int id, std::string* error)
 
     if (ok) ok = InsertAuditEvent(db_, "delete", id, &before, NULL, "", error);
     if (!ok) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     if (!ExecuteSql(db_, "COMMIT;", error)) {
-        sqlite3_exec(db_, "ROLLBACK;", NULL, NULL, NULL);
+        RollbackTransaction(error);
         return false;
     }
     return true;

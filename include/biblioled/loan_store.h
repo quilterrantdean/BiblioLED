@@ -82,6 +82,7 @@ private:
     bool CreateInitialSchema(std::string* error);
     bool ValidateExistingSchema(std::string* error);
     bool EnsureAutomaticBackup(std::string* error);
+    bool RollbackTransaction(std::string* error);
     bool CreateAndValidateBackup(const std::string& path, std::string* error);
     std::string MakeBackupPath(const std::string& category) const;
     void SetError(std::string* error, const std::string& message) const;
