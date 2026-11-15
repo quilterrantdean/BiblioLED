@@ -83,7 +83,7 @@ All paths are resolved from the executable directory. The existing application i
 - Version 1 adds audit_events and its indexes. New databases are created directly at this version.
 - The version 0 to 1 migration creates and validates a full backup first, then adds the audit table and indexes transactionally. It does not rewrite or discard loan records.
 - Do not silently create a fresh database when an expected database cannot be opened.
-- A small initialisation marker in `config/database.initialized` distinguishes first launch from a database that has gone missing; if the marker exists but the database does not, stop and explain rather than creating an empty database.
+- A small initialisation marker in `config/database.initialized` distinguishes first launch from a database that has gone missing. If the marker exists but the database does not, never create an empty database; offer the guided recovery flow instead.
 - If the marker exists but the database is missing, or if an existing database cannot be opened, startup offers explicit recovery from a user-selected backup. The candidate is decompressed and checked for full SQLite integrity and a supported BiblioLED schema, copied to a staging database and validated again before installation. Existing database files and any `-journal`, `-wal`, or `-shm` sidecars are renamed together and retained; the chosen backup is never consumed. An invalid candidate does not alter the destination. Staging filenames are skipped when stale SQLite sidecars from an interrupted attempt remain. Recovery is never automatic.
 - Test databases are always isolated from the user's real database.
 - Use SQLite's Online Backup API to create a consistent snapshot in a temporary file.

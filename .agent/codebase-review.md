@@ -97,13 +97,11 @@ The legacy Python/Tkinter code remains unchanged as the behavioural reference. T
 
 ### Remaining work
 
-- Broader recovery failure-injection tests (interrupted installation, failed rename/rollback) and runtime validation of the recovery dialog on Windows XP.
+- Add failure-injection tests for interrupted recovery installation, failed file moves and rollback; validate the recovery dialog on Windows XP.
 - Add later schema migration versions as product requirements evolve; the first version 0 to 1 migration is implemented.
-- Broader failure-injection, interrupted-operation, and restore-rollback tests.
-- Remaining in the C++ replacement: later schema migrations, broader audit coverage and final application workflows. The general/backup settings, history, statistics and About dialogs, plus portable loan-date/quota and statistics modules, are now implemented.
-- Broader failure-injection, interrupted-operation, and restore-rollback tests.
+- Complete broader audit coverage and the remaining application workflows.
 - Capture the user's manual target-machine test reproducibly (artefact/hash, exact Windows build and exercised scenarios). The user reports testing has occurred; those details are not yet recorded.
-- A normal portable distribution only after the safety and migration work is complete.
+- Produce a normal portable distribution only after the remaining safety and migration work is complete.
 
 ### Test and data safety
 
