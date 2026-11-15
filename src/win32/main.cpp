@@ -96,7 +96,7 @@ AppSettings gPendingGeneralSettings;
 biblioled::LoanStore gStore;
 AppSettings gSettings;
 std::vector<VisibleLoan> gVisibleLoans;
-int gMainSortColumn = 3;
+int gMainSortColumn = -1;
 bool gMainSortAscending = true;
 
 void CopyGeneralSettings(const AppSettings& source, AppSettings* destination)
@@ -792,7 +792,7 @@ bool MainLoanLess(const VisibleLoan& left, const VisibleLoan& right)
     case 2: comparison = left.loan_time < right.loan_time ? -1 : (left.loan_time > right.loan_time ? 1 : 0); break;
     case 3: comparison = left.expiry < right.expiry ? -1 : (left.expiry > right.expiry ? 1 : 0); break;
     case 4: comparison = left.days_remaining < right.days_remaining ? -1 : (left.days_remaining > right.days_remaining ? 1 : 0); break;
-    default: comparison = 0; break;
+    default: comparison = left.expiry < right.expiry ? -1 : (left.expiry > right.expiry ? 1 : 0); break;
     }
     if (comparison == 0) return left.record.id < right.record.id;
     return gMainSortAscending ? comparison < 0 : comparison > 0;
