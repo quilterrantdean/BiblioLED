@@ -1948,8 +1948,8 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
         return false;
     }
     if (!found) {
-        RollbackTransaction(error);
         SetError(error, "Loan record was not found.");
+        RollbackTransaction(error);
         return false;
     }
 
@@ -2038,8 +2038,8 @@ bool LoanStore::Remove(int id, std::string* error)
         return false;
     }
     if (!found) {
-        RollbackTransaction(error);
         SetError(error, "Loan record was not found.");
+        RollbackTransaction(error);
         return false;
     }
 
