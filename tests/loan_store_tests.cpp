@@ -538,24 +538,24 @@ bool RunInterruptedTransactionProcess(const std::string& database,
     if (!child_exit_code) return false;
     *child_exit_code = 0;
 
-    char executable_path[MAX_PATH] = {0};
+    wchar_t executable_path[MAX_PATH] = {0};
     const DWORD path_length =
-        GetModuleFileNameA(NULL, executable_path, MAX_PATH);
+        GetModuleFileNameW(NULL, executable_path, MAX_PATH);
     if (path_length == 0 || path_length >= MAX_PATH) return false;
 
-    std::string command_line = "\"";
+    std::wstring command_line = L"\"";
     command_line.append(executable_path, path_length);
-    command_line += "\" --sqlite-crash-worker \"";
-    command_line += database;
-    command_line += "\"";
+    command_line += L"\" --sqlite-crash-worker \"";
+    // The test database name is deliberately ASCII; the current directory is
+    // inherited unchanged, including when that directory itself is Unicode.
+    command_line.append(database.begin(), database.end());
+    command_line += L"\"";
 
-    STARTUPINFOA startup;
-    PROCESS_INFORMATION process;
-    std::memset(&startup, 0, sizeof(startup));
-    std::memset(&process, 0, sizeof(process));
+    STARTUPINFOW startup = {};
+    PROCESS_INFORMATION process = {};
     startup.cb = sizeof(startup);
 
-    if (!CreateProcessA(NULL, &command_line[0], NULL, NULL, FALSE,
+    if (!CreateProcessW(NULL, &command_line[0], NULL, NULL, FALSE,
                         CREATE_NO_WINDOW, NULL, NULL,
                         &startup, &process)) {
         return false;
