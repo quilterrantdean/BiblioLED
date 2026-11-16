@@ -180,12 +180,12 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated source head `0e887a1370770b8034f502702e21d8f795481fb3` on `development` passed the complete CI matrix.
+Latest validated source head `738c1d07a1a8256a80a78c5cc03135576c3c4aba` on `development` passed the complete CI matrix.
 
-- [Core tests run 43895046573](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046573): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43895046599](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including diagnostic-audit and explicit rollback-failure coverage; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- [Core tests run 43896578995](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578995): Ubuntu core/store tests, modern Windows SDK Win32 application/store tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43896578967](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including application-path, diagnostic-audit, rollback-failure and abrupt-process-recovery coverage. PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
 
-Latest CI artefact: [14238891456](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599/artifacts/14238891456), `BiblioLED-XP-PoC`, 1,554,248 bytes. ZIP SHA-256: `f389f27710f1f7d52ac15a7bccc5caa2e09f447f8e38567b7591b1d1cb484b2e`.
+Latest CI artefact: [14239447095](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967/artifacts/14239447095), `BiblioLED-XP-PoC`, 1,554,246 bytes. ZIP SHA-256: `fbfbad00d193e85449700ba9e8d1044530eac3c22344de4c1dafad4eb18735e7`.
 
 The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. This remains a disposable validation artefact, not a normal portable release. The user confirmed that the executable runs well on XP; CI compilation and isolated tests do not prove the full manual recovery/failure-path matrix.
 
@@ -218,3 +218,11 @@ Diagnostics cannot be persisted before a usable versioned database is open, whil
 The isolated `loan_store_tests` suite installs a connection-local SQLite authorizer that rejects only the `SQLITE_TRANSACTION` action for `ROLLBACK`. The test opens an isolated database, starts an explicit transaction, inserts an uncommitted loan, and invokes the same private rollback method used by the store's failure handling. It verifies that the rollback failure is reported and the `LoanStore` connection is closed.
 
 The test then reopens the database through a new `LoanStore` instance, confirms that the uncommitted row is absent, and runs `quick_check`. This verifies the close-and-reopen recovery path after an explicit rollback command is refused. It is not a power-loss or forced-process-termination test; that coverage remains outstanding.
+
+## Abrupt process termination recovery test
+
+The isolated `loan_store_tests` suite creates a committed baseline record and then starts a separate crash-worker process with an SQLite transaction open. The worker uses rollback-journal mode (`DELETE`), `synchronous=FULL`, a deliberately small page cache and cache spilling, inserts 128 synthetic uncommitted rows, and calls `sqlite3_db_cacheflush` while the transaction remains active.
+
+On Windows the parent starts the same test executable with `CreateProcessW` and the worker terminates itself with `TerminateProcess`, without calling `sqlite3_close` or committing. On POSIX the test forks a child and the child uses `_exit` with the SQLite connection still open. The parent requires the hot `-journal` file to exist, then reopens the database through `LoanStore`. Recovery must preserve the committed baseline record, discard all uncommitted child rows, remove the hot journal, and pass `quick_check`.
+
+This is a deterministic abrupt-process-death test on both platform families. It does not simulate a physical power cut, kernel crash, or loss of volatile write caches in a storage controller; those remain distinct durability scenarios.

@@ -123,15 +123,15 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `0e887a1370770b8034f502702e21d8f795481fb3`. Its validation passed:
+The latest validated product-code commit is `738c1d07a1a8256a80a78c5cc03135576c3c4aba`. Its validation passed:
 
-- [Core tests run 43895046573](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046573): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
-- [XP-targeted build run 43895046599](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599): w64devkit x86 2.10.0, all eight tests (including application-path, diagnostic-audit and rollback-failure coverage), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
+- [Core tests run 43896578995](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578995): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
+- [XP-targeted build run 43896578967](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967): w64devkit x86 2.10.0, all eight tests (including application-path, diagnostic-audit, rollback-failure and abrupt-process-recovery coverage), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
 
-The disposable artefact is [14238891456](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599/artifacts/14238891456), `BiblioLED-XP-PoC`:
+The disposable artefact is [14239447095](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967/artifacts/14239447095), `BiblioLED-XP-PoC`:
 
-- ZIP size: 1,554,248 bytes
-- ZIP SHA-256: `f389f27710f1f7d52ac15a7bccc5caa2e09f447f8e38567b7591b1d1cb484b2e`
+- ZIP size: 1,554,246 bytes
+- ZIP SHA-256: `fbfbad00d193e85449700ba9e8d1044530eac3c22344de4c1dafad4eb18735e7`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
@@ -256,3 +256,9 @@ Diagnostic rows can still be queued in SQLite while the external log is unhealth
 The XP-targeted and modern Win32 test builds execute a deterministic rollback-failure case in `loan_store_tests`. An SQLite authorizer rejects the explicit `ROLLBACK` statement while a transaction contains an uncommitted row. The store must report the failure and close its connection; reopening the same isolated test database must discard the uncommitted row and pass `quick_check`.
 
 This does not simulate sudden power loss or termination of the process. Those tests remain in the development plan.
+
+## Abrupt process termination recovery test
+
+The XP-targeted and modern Win32 test builds run a process-interruption recovery scenario in `loan_store_tests`. A child process inserts 128 synthetic rows inside an uncommitted SQLite DELETE-journal transaction, forces cache spilling and calls `sqlite3_db_cacheflush`, then terminates without closing SQLite. The parent verifies that the hot journal is present, reopens the database, confirms that the committed baseline record is retained and the uncommitted rows are discarded, and checks that the journal is removed and `quick_check` succeeds.
+
+Windows uses `CreateProcessW`/`TerminateProcess`; POSIX uses `fork`/`_exit`. This tests abrupt process termination, not physical power loss or failure of volatile storage-device caches.
