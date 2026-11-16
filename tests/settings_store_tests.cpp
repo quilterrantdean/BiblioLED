@@ -482,8 +482,11 @@ void TestOversizedFilePreserved(const std::string& dir)
     const std::string original(64U * 1024U + 1U, 'X');
     Check(WriteRawFile(path, original), "oversized INI fixture should be written");
     biblioled::AppSettings settings; std::string error;
-    Check(!biblioled::LoadSettingsFile(path, &settings, &error),
+    biblioled::SettingsLoadStatus status = biblioled::kSettingsLoadError;
+    Check(!biblioled::LoadSettingsFile(path, &settings, &error, &status),
           "settings files larger than 64 KiB should be rejected");
+    Check(status == biblioled::kSettingsLoadInvalidFile,
+          "an oversized settings file should be classified as invalid content");
     CheckDefaults(settings);
     std::string after;
     Check(ReadRawFile(path, &after) && after == original,

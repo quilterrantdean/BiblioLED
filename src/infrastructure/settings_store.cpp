@@ -687,6 +687,7 @@ bool ArchiveInvalidSettingsFile(const std::string& utf8_path,
     }
 #endif
 
+    if (error) error->clear();
     *archived_utf8_path = archived_path;
     return true;
 }

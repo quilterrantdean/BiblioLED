@@ -1712,23 +1712,23 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
 
                 if (settings_recreated) {
                     std::wstring archived_message =
-                        L"O ficheiro inválido foi preservado em:\\n\\n";
+                        L"O ficheiro inválido foi preservado em:\n\n";
                     archived_message += Utf8ToWide(archived_settings_path);
                     archived_message +=
-                        L"\\n\\nFoi criado um novo config/settings.ini com valores predefinidos.";
+                        L"\n\nFoi criado um novo config/settings.ini com valores predefinidos.";
                     MessageBoxW(NULL, archived_message.c_str(), L"Definições recriadas",
                                 MB_OK | MB_ICONINFORMATION);
                 } else {
                     std::wstring recreate_error =
                         L"O ficheiro original foi arquivado, mas não foi possível criar "
-                        L"o novo config/settings.ini:\\n\\n";
+                        L"o novo config/settings.ini:\n\n";
                     recreate_error += Utf8ToWide(settings_error);
                     MessageBoxW(NULL, recreate_error.c_str(), L"Recuperação de definições",
                                 MB_OK | MB_ICONERROR);
                 }
             } else {
                 std::wstring archive_failure =
-                    L"Não foi possível arquivar o ficheiro inválido. O original foi preservado.\\n\\n";
+                    L"Não foi possível arquivar o ficheiro inválido. O original foi preservado.\n\n";
                 archive_failure += Utf8ToWide(archive_error);
                 MessageBoxW(NULL, archive_failure.c_str(), L"Recuperação de definições",
                             MB_OK | MB_ICONERROR);
