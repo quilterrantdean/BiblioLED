@@ -180,14 +180,14 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated source head `8596e02467edb08698e064c9d5412390007b147e` on `development` passed the complete CI matrix.
+Latest validated source head `ba7edd00fabd97dc76f6b5d2dce5c5b53aa32cc4` on `development` passed the complete CI matrix.
 
-- [Core tests run 43892060495](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060495): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43892060511](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including the new application-path suite; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- [Core tests run 43894232059](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232059): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43894232042](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including the extended diagnostic audit checks; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
 
-Latest CI artefact: [14236418548](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511/artifacts/14236418548), `BiblioLED-XP-PoC`, 1,551,656 bytes. ZIP SHA-256: `c9078baf524e321cefe9da307788fd03e4c49f41f0340170aff646746875f0bd`.
+Latest CI artefact: [14239215992](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042/artifacts/14239215992), `BiblioLED-XP-PoC`, 1,554,248 bytes. ZIP SHA-256: `25cbca3907390157010868024b4f193a438c13745e8d40e18f32332dd091f8a4`.
 
-The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. This remains a disposable validation artefact, not a normal portable release. The user has confirmed that the executable runs well on XP; this manual confirmation does not replace a recorded full recovery/failure-path test matrix.
+The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. This remains a disposable validation artefact, not a normal portable release. The user confirmed that the executable runs well on XP; CI compilation and isolated tests do not prove the full manual recovery/failure-path matrix.
 
 ## CI action provenance
 
@@ -204,3 +204,11 @@ The core and XP workflows pin JavaScript actions to immutable upstream release c
 These hashes are integrity pins, not a substitute for reviewing release notes and compatibility whenever a dependency is deliberately upgraded.
 
 The modern Windows CI run 43763428212 failed during CMake configuration because six consecutive downloads from `zlib.net/fossils/zlib-1.4.tar.gz` returned six differing SHA-256 values, none matching the official release digest. The build source was switched to the upstream GitHub Release asset while retaining the official expected SHA-256. The failure was external to compilation and did not affect the XP-targeted build, which succeeded.
+
+## Diagnostic audit coverage
+
+The Win32 shell records user-visible validation warnings and operation failures in the internal SQLite audit table. The history and statistics windows also queue read and calculation failures. The store maps the restricted diagnostic severities `warning`, `error`, and `failure` to the audit actions `application_warning`, `application_error`, and `application_failure`, with a context identifier and diagnostic details.
+
+Diagnostic writes are audit-only and do not trigger automatic backups. They may bypass only the external-log health gate, so an event explaining an external logging failure can still be queued in SQLite. This does not modify the external-log health flag, restore file logging, or enable loan-data mutations. Normal audit events and loan mutations remain blocked while enabled external logging is unhealthy. The diagnostic writer does not attempt immediate external synchronisation, avoiding recursive error reporting; queued rows are included by the normal synchronisation lifecycle.
+
+Diagnostics cannot be persisted before a usable versioned database is open, while a legacy database awaits migration, or after a database failure that prevents writes. Startup settings-file warnings are queued only after the database has opened successfully.

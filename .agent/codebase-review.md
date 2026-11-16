@@ -128,13 +128,15 @@ The user confirmed on 2026-11-16 that the executable runs well on Windows XP. Th
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest validated product-code and CI head is `8596e02467edb08698e064c9d5412390007b147e` on `development`.
+The latest validated product-code and CI head is `ba7edd00fabd97dc76f6b5d2dce5c5b53aa32cc4` on `development`.
 
-- [Core tests run 43892060495](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060495) succeeded: Ubuntu tests, modern Windows SDK Win32 build/store tests, and Cppcheck 2.19.0 all passed.
-- [XP-targeted Win32 build run 43892060511](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511) succeeded using pinned w64devkit x86 2.10.0. All 8 CTest tests passed, including `application_paths_tests`; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
-- Artefact [14236418548](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511/artifacts/14236418548), `BiblioLED-XP-PoC`: 1,551,656 bytes; ZIP SHA-256 `c9078baf524e321cefe9da307788fd03e4c49f41f0340170aff646746875f0bd`.
+- [Core tests run 43894232059](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232059) succeeded: Ubuntu tests, modern Windows SDK Win32 build/store tests, and Cppcheck 2.19.0 all passed.
+- [XP-targeted Win32 build run 43894232042](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042) succeeded using pinned w64devkit x86 2.10.0. All 8 CTest tests passed, including the diagnostic-audit additions; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- Artefact [14239215992](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042/artifacts/14239215992), `BiblioLED-XP-PoC`: 1,554,248 bytes; ZIP SHA-256 `25cbca3907390157010868024b4f193a438c13745e8d40e18f32332dd091f8a4`.
 
-The sorting implementation and central executable-relative path model are included in this validated source head. The user confirmed on 2026-11-16 that the executable runs well on Windows XP; secondary-window Portuguese text encoding was confirmed corrected on 2026-11-15. The exact manually tested executable hash and scenario list remain unrecorded.
+The sorting implementation, central executable-relative path model and application diagnostic coverage are included in this validated source head. The user confirmed on 2026-11-16 that the executable runs well on Windows XP; secondary-window Portuguese text encoding was confirmed corrected on 2026-11-15. The exact manually tested executable hash and scenario list remain unrecorded.
+
+
 
 The explicit `ROLLBACK` statement failure path itself and abrupt process/power-loss interruption remain untested; the existing tests cover successful rollback after a forced DDL failure and rollback of file-preservation moves.
 
@@ -158,3 +160,9 @@ The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained th
 
 - The CMake zlib 1.4 source URL now uses the official `madler/zlib` v1.4 GitHub Release asset rather than the zlib.net fossils endpoint. The expected SHA-256 is unchanged and matches the release asset digest reported by the upstream GitHub Releases API. This addresses repeated inconsistent responses from the zlib.net endpoint without relaxing integrity verification. The official-release URL passed both the modern-Windows and w64devkit XP CI jobs at the latest head.
 - `backup_compression.cpp` now calls `fflush` followed by `FlushFileBuffers` on Windows or `fsync` on POSIX before closing both compressed and decompressed output. A failed flush prevents subsequent validation/installation and removes the temporary output. The Windows final rename is write-through; POSIX parent-directory metadata is not separately synchronised after `rename`, so this change flushes file data but does not claim full directory-entry durability across power loss. The latest Windows/XP CI passed.
+
+## Application diagnostic auditing
+
+The Win32 shell records validation warnings and operation failures as `application_warning` and `application_failure` events. History/statistics read and calculation failures are also queued. The store accepts only `warning`, `error`, and `failure` diagnostic severities, mapped to `application_warning`, `application_error`, and `application_failure`.
+
+Diagnostic writes may bypass only the external-log health gate so the events explaining an external logging failure can remain queued in SQLite. They do not alter the health flag or enable loan mutations. Ordinary audit events and loan mutations remain blocked while enabled external logging is unhealthy. Diagnostics cannot be recorded before a usable versioned database is open or while a legacy database awaits migration.
