@@ -1816,9 +1816,10 @@ bool LoanStore::GetAuditEvents(std::vector<AuditEvent>* events, std::string* err
         db_, statement, "Unable to finalise audit-event query", error);
 }
 
-bool LoanStore::RecordAuditEvent(const std::string& action,
-                                const std::string& details,
-                                std::string* error)
+bool LoanStore::RecordAuditEventInternal(const std::string& action,
+                                        const std::string& details,
+                                        bool allow_external_log_block,
+                                        std::string* error)
 {
     if (!db_ || action.empty()) {
         SetError(error, "An open database and a non-empty audit action are required.");
@@ -1828,10 +1829,11 @@ bool LoanStore::RecordAuditEvent(const std::string& action,
         SetError(error, "The legacy database must be migrated before audit events can be recorded.");
         return false;
     }
-    if (ExternalAuditLogBlocked()) {
+    if (!allow_external_log_block && ExternalAuditLogBlocked()) {
         SetError(error, "The external audit log is unavailable. Database changes are blocked until logging is working again.");
         return false;
     }
+
     // Audit-only writes do not change loan data and must not trigger backups.
     if (!ExecuteSql(db_, "BEGIN IMMEDIATE;", error)) return false;
 
@@ -1844,6 +1846,27 @@ bool LoanStore::RecordAuditEvent(const std::string& action,
         return false;
     }
     return true;
+}
+
+bool LoanStore::RecordAuditEvent(const std::string& action,
+                                 const std::string& details,
+                                 std::string* error)
+{
+    return RecordAuditEventInternal(action, details, false, error);
+}
+
+bool LoanStore::RecordDiagnosticEvent(const std::string& severity,
+                                      const std::string& details,
+                                      std::string* error)
+{
+    if (severity != "warning" && severity != "error" &&
+        severity != "failure") {
+        SetError(error, "Diagnostic severity must be warning, error, or failure.");
+        return false;
+    }
+
+    return RecordAuditEventInternal(
+        "application_" + severity, details, true, error);
 }
 
 bool LoanStore::GetAll(std::vector<LoanRecord>* records, std::string* error)

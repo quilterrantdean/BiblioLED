@@ -111,6 +111,9 @@ void CopyGeneralSettings(const AppSettings& source, AppSettings* destination)
 }
 
 void UpdateWriteAccess(HWND window);
+void RecordApplicationDiagnostic(const char* severity,
+                                 const std::string& context,
+                                 const std::string& details);
 
 enum {
     kToolbarHeight = 34,
@@ -170,6 +173,20 @@ std::wstring Utf8ToWide(const std::string& value)
     MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, &result[0], length);
     result.resize(static_cast<size_t>(length - 1));
     return result;
+}
+
+void RecordApplicationDiagnostic(const char* severity,
+                                 const std::string& context,
+                                 const std::string& details)
+{
+    // Queue internally only. The regular audit lifecycle will synchronise the
+    // event later; this helper must never recurse through error reporting.
+    if (!gStore.IsOpen() || gStore.MigrationRequired()) return;
+
+    const std::string audit_details =
+        "context=" + context + ";message=" + details;
+    std::string ignored;
+    gStore.RecordDiagnosticEvent(severity, audit_details, &ignored);
 }
 
 bool EnsureDirectory(const std::wstring& path)
@@ -578,11 +595,15 @@ INT_PTR CALLBACK LoanDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM
             SendDlgItemMessageW(dialog, IDC_LOAN_TYPE, CB_GETCURSEL, 0, 0);
 
         if (title.empty()) {
+            RecordApplicationDiagnostic(
+                "warning", "loan_dialog", "reason=missing_title");
             MessageBoxW(dialog, L"O título é obrigatório.", L"BiblioLED", MB_OK | MB_ICONWARNING);
             SetFocus(GetDlgItem(dialog, IDC_LOAN_TITLE));
             return TRUE;
         }
         if (type_index == CB_ERR) {
+            RecordApplicationDiagnostic(
+                "warning", "loan_dialog", "reason=missing_loan_type");
             MessageBoxW(dialog, L"Seleccione o tipo de empréstimo.", L"BiblioLED",
                         MB_OK | MB_ICONWARNING);
             SetFocus(GetDlgItem(dialog, IDC_LOAN_TYPE));
@@ -591,6 +612,8 @@ INT_PTR CALLBACK LoanDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM
 
         const std::string loan_date = WideToUtf8(date) + " " + WideToUtf8(time);
         if (biblioled::ParseLoanDateTime(loan_date) == static_cast<std::time_t>(-1)) {
+            RecordApplicationDiagnostic(
+                "warning", "loan_dialog", "reason=invalid_loan_date_time");
             MessageBoxW(dialog,
                 L"Data ou hora inválida. Utilize AAAA-MM-DD e HH:MM.",
                 L"BiblioLED", MB_OK | MB_ICONWARNING);
@@ -645,6 +668,8 @@ int SelectedRecordId()
 
 void ShowStoreError(const wchar_t* operation, const std::string& error)
 {
+    RecordApplicationDiagnostic(
+        "failure", WideToUtf8(std::wstring(operation)), error);
     std::wstring message = operation;
     message += L"\n\n";
     message += Utf8ToWide(error);
@@ -753,6 +778,8 @@ bool SaveColumnLayout()
     std::string error;
     if (!WriteSettings(gApplicationPaths.settings_file, persisted, &error)) {
         if (!gColumnSettingsWarningShown) {
+            RecordApplicationDiagnostic(
+                "failure", "save_column_layout", error);
             MessageBoxW(gMainWindow, Utf8ToWide(error).c_str(), L"BiblioLED",
                         MB_OK | MB_ICONWARNING);
             gColumnSettingsWarningShown = true;
@@ -1028,6 +1055,8 @@ void ExportLoansToCsv()
     if(gStore.MigrationRequired()||!gStore.RecordAuditEvent("records_exported",details.str(),&error)){
         std::wstring warning=L"O ficheiro foi exportado, mas a operação não pôde ser registada na auditoria.\n\n";
         warning+=filename;
+        RecordApplicationDiagnostic(
+            "failure", "csv_export_audit", error);
         MessageBoxW(gMainWindow,warning.c_str(),L"Exportação concluída com aviso",MB_OK|MB_ICONWARNING);
         return;
     }
@@ -1526,6 +1555,8 @@ INT_PTR CALLBACK GeneralSettingsDialogProc(HWND dialog, UINT message,
                                  64, 1048576, &log_size_kb);
 
         if (!valid) {
+            RecordApplicationDiagnostic(
+                "warning", "general_settings", "reason=invalid_input_values");
             MessageBoxW(dialog,
                 L"Verifique os valores introduzidos.\n\n"
                 L"Limite diário: 1–1000; limite mensal: 1–10000; "
@@ -1558,6 +1589,8 @@ INT_PTR CALLBACK GeneralSettingsDialogProc(HWND dialog, UINT message,
 void ShowGeneralSettings()
 {
     if (!gSettingsFileValid) {
+        RecordApplicationDiagnostic(
+            "warning", "settings", "reason=settings_file_invalid");
         MessageBoxW(gMainWindow,
             L"O ficheiro config/settings.ini é inválido e foi preservado. "
             L"As definições não podem ser gravadas até o ficheiro ser corrigido.",
@@ -1630,6 +1663,8 @@ void ShowGeneralSettings()
 void ShowBackupSettings()
 {
     if (!gSettingsFileValid) {
+        RecordApplicationDiagnostic(
+            "warning", "settings", "reason=settings_file_invalid");
         MessageBoxW(gMainWindow,
             L"O ficheiro config/settings.ini é inválido e foi preservado. "
             L"As definições não podem ser gravadas até o ficheiro ser corrigido.",
@@ -1637,6 +1672,8 @@ void ShowBackupSettings()
         return;
     }
     if (gStore.ExternalAuditLogBlocked()) {
+        RecordApplicationDiagnostic(
+            "warning", "backup_settings", "reason=external_audit_log_unavailable");
         MessageBoxW(gMainWindow,
             L"O registo de auditoria externo está indisponível. "
             L"Recupere primeiro a escrita do log antes de alterar definições.",
@@ -1843,6 +1880,9 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
                     std::string("application_version=") + BIBLIOLED_VERSION,
                     &shutdown_error)) {
                 SynchronizeExternalAuditLog(false);
+            } else {
+                RecordApplicationDiagnostic(
+                    "failure", "application_shutdown", shutdown_error);
             }
         }
         gStore.Close();
@@ -2007,6 +2047,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     if (!database_marker_exists) {
         std::wstring marker_error;
         if (!CreateDatabaseMarker(database_marker, &marker_error)) {
+            RecordApplicationDiagnostic(
+                "failure", "create_database_marker", WideToUtf8(marker_error));
             MessageBoxW(NULL, marker_error.c_str(), L"BiblioLED",
                         MB_OK | MB_ICONERROR);
             gStore.Close();
@@ -2016,6 +2058,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     OfferLegacyMigration(NULL);
+    if (!gSettingsFileValid && !settings_error.empty() &&
+        !gStore.MigrationRequired()) {
+        RecordApplicationDiagnostic(
+            "warning", "startup_settings", settings_error);
+    }
     if (recovery_performed) {
         std::wstring recovered_message =
             L"A base de dados foi recuperada e validada a partir da cópia seleccionada.\n\n";
@@ -2068,6 +2115,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     window_class.hIconSm = window_class.hIcon;
 
     if (!RegisterClassExW(&window_class)) {
+        RecordApplicationDiagnostic(
+            "failure", "register_main_window_class",
+            "RegisterClassExW returned failure.");
         MessageBoxW(NULL, L"Não foi possível registar a janela principal.",
                     L"BiblioLED", MB_OK | MB_ICONERROR);
         gStore.Close();
@@ -2085,6 +2135,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         NULL, CreateApplicationMenu(), gInstance, NULL);
 
     if (!gMainWindow) {
+        RecordApplicationDiagnostic(
+            "failure", "create_main_window",
+            "CreateWindowExW returned a null window handle.");
         MessageBoxW(NULL, L"Não foi possível criar a janela principal.",
                     L"BiblioLED", MB_OK | MB_ICONERROR);
         gStore.Close();

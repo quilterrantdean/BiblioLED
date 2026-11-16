@@ -836,9 +836,48 @@ int main()
     Check(reopened.GetAll(&records, &error) && records.size() == 2,
           "blocked mutation should leave loans unchanged");
 
+    Check(reopened.GetAuditEvents(&events, &error),
+          "internal diagnostics should remain readable while external logging is blocked");
+    const size_t diagnostic_count_before = events.size();
+    Check(reopened.RecordDiagnosticEvent(
+              "warning", "context=loan_dialog;message=missing_title", &error),
+          "a warning should be queued internally while external logging is blocked");
+    Check(reopened.RecordDiagnosticEvent(
+              "error", "context=statistics;message=calculation_failed", &error),
+          "an error should be queued internally while external logging is blocked");
+    Check(reopened.RecordDiagnosticEvent(
+              "failure", "context=backup;message=creation_failed", &error),
+          "a failure should be queued internally while external logging is blocked");
+    Check(!reopened.RecordDiagnosticEvent(
+              "debug", "unsupported severity", &error),
+          "unsupported diagnostic severities should be rejected");
+    Check(reopened.ExternalAuditLogBlocked(),
+          "queuing diagnostics must not clear the external-log blocked state");
+    Check(!reopened.RecordAuditEvent(
+              "settings_changed", "ordinary event remains blocked", &error),
+          "ordinary audit events must remain blocked while external logging is unhealthy");
+    Check(reopened.GetAuditEvents(&events, &error) &&
+              events.size() == diagnostic_count_before + 3,
+          "three valid diagnostic events should append exactly three rows");
+    if (events.size() == diagnostic_count_before + 3) {
+        Check(events[diagnostic_count_before].action == "application_warning" &&
+                  events[diagnostic_count_before].details ==
+                      "context=loan_dialog;message=missing_title",
+              "warning diagnostic should retain its severity and context");
+        Check(events[diagnostic_count_before + 1].action == "application_error" &&
+                  events[diagnostic_count_before + 1].details ==
+                      "context=statistics;message=calculation_failed",
+              "error diagnostic should retain its severity and context");
+        Check(events[diagnostic_count_before + 2].action == "application_failure" &&
+                  events[diagnostic_count_before + 2].details ==
+                      "context=backup;message=creation_failed",
+              "failure diagnostic should retain its severity and context");
+    }
+
     reopened.SetExternalAuditLogStatus(false, false);
     Check(!reopened.ExternalAuditLogBlocked(),
           "deliberately disabled external logging should not block mutations");
+    const size_t events_before_disabled_insert = events.size();
     biblioled::LoanRecord logging_disabled;
     logging_disabled.title = "Registo com log externo desactivado";
     logging_disabled.loan_date = "2099-02-03 10:00";
@@ -847,7 +886,8 @@ int main()
           "mutations should remain available while external logging is disabled");
     Check(reopened.GetAll(&records, &error) && records.size() == 3,
           "disabled external logging should still persist the loan");
-    Check(reopened.GetAuditEvents(&events, &error) && events.size() == 4,
+    Check(reopened.GetAuditEvents(&events, &error) &&
+              events.size() == events_before_disabled_insert + 1,
           "disabled external logging should still persist internal audit events");
     reopened.SetExternalAuditLogStatus(true, true);
 

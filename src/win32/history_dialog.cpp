@@ -36,6 +36,20 @@ std::wstring Utf8ToWide(const std::string& value)
     result.resize(static_cast<size_t>(length - 1));
     return result;
 }
+void RecordHistoryFailure(HistoryContext* context,
+                          const char* operation,
+                          const std::string& error)
+{
+    if (!context || !context->store || !context->store->IsOpen() ||
+        context->store->MigrationRequired()) {
+        return;
+    }
+
+    const std::string details =
+        std::string("context=") + operation + ";message=" + error;
+    std::string ignored;
+    context->store->RecordDiagnosticEvent("failure", details, &ignored);
+}
 std::wstring Lowercase(std::wstring value)
 {
     if (!value.empty()) CharLowerBuffW(&value[0], static_cast<DWORD>(value.size()));
@@ -211,6 +225,7 @@ void Reload(HWND dialog,HistoryContext* context)
 {
     std::string error;
     if(!LoadRows(context,&error)) {
+        RecordHistoryFailure(context, "history_refresh", error);
         MessageBoxW(dialog,(L"Não foi possível actualizar o histórico.\n\n"+
             Utf8ToWide(error)).c_str(),L"BiblioLED",MB_OK|MB_ICONERROR);
         return;
@@ -374,6 +389,7 @@ INT_PTR CALLBACK HistoryProc(HWND dialog,UINT message,WPARAM wParam,LPARAM lPara
         }
         std::string error;
         if(!LoadRows(context,&error)) {
+            RecordHistoryFailure(context, "history_initial_load", error);
             MessageBoxW(dialog,(L"Não foi possível ler o histórico.\n\n"+
                 Utf8ToWide(error)).c_str(),L"BiblioLED",MB_OK|MB_ICONERROR);
             EndDialog(dialog,IDCANCEL);

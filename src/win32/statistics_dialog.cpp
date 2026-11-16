@@ -30,6 +30,21 @@ std::wstring Utf8ToWide(const std::string& value)
     result.resize(static_cast<size_t>(length-1));
     return result;
 }
+void RecordStatisticsDiagnostic(StatisticsContext* context,
+                                const char* severity,
+                                const char* operation,
+                                const std::string& details)
+{
+    if (!context || !context->store || !context->store->IsOpen() ||
+        context->store->MigrationRequired()) {
+        return;
+    }
+
+    const std::string audit_details =
+        std::string("context=") + operation + ";message=" + details;
+    std::string ignored;
+    context->store->RecordDiagnosticEvent(severity, audit_details, &ignored);
+}
 std::wstring Number(int value)
 {
     wchar_t buffer[32]={0};
@@ -142,6 +157,9 @@ void UpdateStatistics(HWND dialog,StatisticsContext* context,int year)
 {
     if(!context) return;
     if(!biblioled::CalculateLoanStatistics(context->records,year,&context->statistics)) {
+        RecordStatisticsDiagnostic(
+            context, "error", "statistics_calculation",
+            "CalculateLoanStatistics returned false.");
         MessageBoxW(dialog,L"Não foi possível calcular as estatísticas.",L"Estatísticas",MB_OK|MB_ICONERROR);
         return;
     }
@@ -210,13 +228,20 @@ bool Reload(HWND dialog,StatisticsContext* context)
     if(!context || !context->store) return false;
     std::string error;
     if(!context->store->GetAll(&context->records,&error)) {
+        RecordStatisticsDiagnostic(
+            context, "failure", "statistics_load", error);
         std::wstring message=L"Não foi possível ler os empréstimos.\n\n";
         message+=Utf8ToWide(error);
         MessageBoxW(dialog,message.c_str(),L"Estatísticas",MB_OK|MB_ICONERROR);
         return false;
     }
     biblioled::LoanStatistics initial;
-    if(!biblioled::CalculateLoanStatistics(context->records,0,&initial)) return false;
+    if(!biblioled::CalculateLoanStatistics(context->records,0,&initial)) {
+        RecordStatisticsDiagnostic(
+            context, "error", "statistics_initial_calculation",
+            "CalculateLoanStatistics returned false for the initial year.");
+        return false;
+    }
     PopulateYears(dialog,initial);
     UpdateStatistics(dialog,context,SelectedYear(dialog));
     return true;

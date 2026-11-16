@@ -70,6 +70,11 @@ public:
     bool RecordAuditEvent(const std::string& action,
                           const std::string& details,
                           std::string* error);
+    // Queue warnings/errors/failures in SQLite even when the external log is
+    // unhealthy. This does not restore the log or unblock loan mutations.
+    bool RecordDiagnosticEvent(const std::string& severity,
+                               const std::string& details,
+                               std::string* error);
     void SetExternalAuditLogStatus(bool enabled, bool healthy);
     bool ExternalAuditLogBlocked() const;
     bool Insert(LoanRecord* record, std::string* error);
@@ -83,6 +88,10 @@ private:
     bool ValidateExistingSchema(std::string* error);
     bool EnsureAutomaticBackup(std::string* error);
     bool RollbackTransaction(std::string* error);
+    bool RecordAuditEventInternal(const std::string& action,
+                                  const std::string& details,
+                                  bool allow_external_log_block,
+                                  std::string* error);
     bool CreateAndValidateBackup(const std::string& path, std::string* error);
     std::string MakeBackupPath(const std::string& category) const;
     void SetError(std::string* error, const std::string& message) const;
