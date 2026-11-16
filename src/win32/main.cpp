@@ -1678,9 +1678,64 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     std::string settings_error;
+    const std::string settings_path_utf8 =
+        WideToUtf8(gApplicationPaths.settings_file);
+    biblioled::SettingsLoadStatus settings_status = biblioled::kSettingsLoadError;
     gSettingsFileValid = biblioled::LoadSettingsFile(
-        WideToUtf8(gApplicationPaths.settings_file), &gSettings, &settings_error);
-    if (!gSettingsFileValid && !settings_error.empty()) {
+        settings_path_utf8, &gSettings, &settings_error, &settings_status);
+
+    bool settings_recreated = false;
+    std::string archived_settings_path;
+    if (settings_status == biblioled::kSettingsLoadInvalidFile) {
+        std::wstring prompt =
+            L"O ficheiro config/settings.ini é inválido e foi preservado.\n\n";
+        prompt += Utf8ToWide(settings_error);
+        prompt +=
+            L"\n\nNesta sessão serão usados valores predefinidos. "
+            L"Pretende arquivar o original com o sufixo .invalid e criar "
+            L"um novo ficheiro com as definições predefinidas?";
+        const int answer = MessageBoxW(
+            NULL, prompt.c_str(), L"Recuperar definições",
+            MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+
+        if (answer == IDYES) {
+            std::string archive_error;
+            if (biblioled::ArchiveInvalidSettingsFile(
+                    settings_path_utf8, &archived_settings_path, &archive_error)) {
+                settings_error.clear();
+                settings_status = biblioled::kSettingsLoadError;
+                gSettingsFileValid = biblioled::LoadSettingsFile(
+                    settings_path_utf8, &gSettings, &settings_error,
+                    &settings_status);
+                settings_recreated = gSettingsFileValid &&
+                    settings_status == biblioled::kSettingsLoadCreatedDefaults;
+
+                if (settings_recreated) {
+                    std::wstring archived_message =
+                        L"O ficheiro inválido foi preservado em:\\n\\n";
+                    archived_message += Utf8ToWide(archived_settings_path);
+                    archived_message +=
+                        L"\\n\\nFoi criado um novo config/settings.ini com valores predefinidos.";
+                    MessageBoxW(NULL, archived_message.c_str(), L"Definições recriadas",
+                                MB_OK | MB_ICONINFORMATION);
+                } else {
+                    std::wstring recreate_error =
+                        L"O ficheiro original foi arquivado, mas não foi possível criar "
+                        L"o novo config/settings.ini:\\n\\n";
+                    recreate_error += Utf8ToWide(settings_error);
+                    MessageBoxW(NULL, recreate_error.c_str(), L"Recuperação de definições",
+                                MB_OK | MB_ICONERROR);
+                }
+            } else {
+                std::wstring archive_failure =
+                    L"Não foi possível arquivar o ficheiro inválido. O original foi preservado.\\n\\n";
+                archive_failure += Utf8ToWide(archive_error);
+                MessageBoxW(NULL, archive_failure.c_str(), L"Recuperação de definições",
+                            MB_OK | MB_ICONERROR);
+                settings_error = archive_error;
+            }
+        }
+    } else if (!gSettingsFileValid && !settings_error.empty()) {
         MessageBoxW(NULL, Utf8ToWide(settings_error).c_str(), L"BiblioLED",
                     MB_OK | MB_ICONWARNING);
     }
@@ -1761,6 +1816,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
         !gStore.MigrationRequired()) {
         RecordApplicationDiagnostic(
             "warning", "startup_settings", settings_error);
+    }
+    if (settings_recreated && !gStore.MigrationRequired()) {
+        std::string settings_audit_error;
+        if (gStore.RecordAuditEvent(
+                "settings_recreated",
+                "archived=" + archived_settings_path,
+                &settings_audit_error)) {
+            SynchronizeExternalAuditLog(false);
+        } else {
+            RecordApplicationDiagnostic(
+                "failure", "settings_recreated_audit", settings_audit_error);
+        }
     }
     if (recovery_performed) {
         std::wstring recovered_message =

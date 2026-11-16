@@ -35,14 +35,31 @@ struct AppSettings {
     }
 };
 
+enum SettingsLoadStatus {
+    kSettingsLoadError = 0,
+    kSettingsLoadLoaded,
+    kSettingsLoadCreatedDefaults,
+    kSettingsLoadInvalidFile
+};
+
 // File paths are UTF-8; Win32 file access is performed using UTF-16.
 // Missing files are created atomically with defaults. Invalid files are preserved.
+bool LoadSettingsFile(const std::string& utf8_path,
+                      AppSettings* settings,
+                      std::string* error,
+                      SettingsLoadStatus* status);
 bool LoadSettingsFile(const std::string& utf8_path,
                       AppSettings* settings,
                       std::string* error);
 bool SaveSettingsFile(const std::string& utf8_path,
                       const AppSettings& settings,
                       std::string* error);
+
+// Archive an invalid settings file as "<path>.invalid" without overwriting an
+// existing archive. The original remains in place if the archive operation fails.
+bool ArchiveInvalidSettingsFile(const std::string& utf8_path,
+                                std::string* archived_utf8_path,
+                                std::string* error);
 
 } // namespace biblioled
 

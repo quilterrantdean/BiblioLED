@@ -187,16 +187,21 @@ void TestMissingFileCreatesDefaults(const std::string& dir)
     const std::string path = Join(dir, "missing.ini");
     biblioled::AppSettings settings; settings.daily_limit = 99;
     std::string error;
-    Check(biblioled::LoadSettingsFile(path, &settings, &error),
+    biblioled::SettingsLoadStatus status = biblioled::kSettingsLoadError;
+    Check(biblioled::LoadSettingsFile(path, &settings, &error, &status),
           "a missing INI should be created atomically with defaults");
+    Check(status == biblioled::kSettingsLoadCreatedDefaults,
+          "missing-file creation should report the defaults-created load status");
     CheckDefaults(settings);
     std::string bytes;
     Check(ReadRawFile(path, &bytes) &&
           bytes.find("daily_limit=5\r\n") != std::string::npos,
           "the new defaults file should contain the standard CRLF form");
     biblioled::AppSettings reopened;
-    Check(biblioled::LoadSettingsFile(path, &reopened, &error),
+    Check(biblioled::LoadSettingsFile(path, &reopened, &error, &status),
           "the newly created defaults file should load normally");
+    Check(status == biblioled::kSettingsLoadLoaded,
+          "a valid existing INI should report the loaded status");
     CheckDefaults(reopened);
 }
 
@@ -256,8 +261,11 @@ void TestInvalidFileIsPreserved(const std::string& dir)
     Check(WriteRawFile(path, original), "invalid INI fixture should be written");
     biblioled::AppSettings settings; settings.daily_limit = 999;
     std::string error;
-    Check(!biblioled::LoadSettingsFile(path, &settings, &error),
+    biblioled::SettingsLoadStatus status = biblioled::kSettingsLoadError;
+    Check(!biblioled::LoadSettingsFile(path, &settings, &error, &status),
           "an out-of-range setting should be rejected");
+    Check(status == biblioled::kSettingsLoadInvalidFile,
+          "malformed settings content should report the invalid-file status");
     CheckDefaults(settings);
     std::string after;
     Check(ReadRawFile(path, &after) && after == original,
@@ -287,6 +295,121 @@ void TestDuplicateKeyAndBom(const std::string& dir)
     std::string after;
     Check(ReadRawFile(path, &after) && after == original,
           "duplicate-key INI should remain unchanged");
+}
+
+
+void TestArchiveInvalidSettingsFile(const std::string& dir)
+{
+    const std::string path = Join(dir, "archive.ini");
+    const std::string archived = path + ".invalid";
+    const std::string original =
+        "; preserve and archive this invalid file\r\n[limits]\r\n"
+        "daily_limit=0\r\nmonthly_limit=20\r\n"
+        "monthly_window_days=30\r\nloan_duration_days=21\r\n";
+
+    Check(WriteRawFile(path, original),
+          "invalid settings file for archive test should be written");
+    std::string archived_path;
+    std::string error;
+    Check(biblioled::ArchiveInvalidSettingsFile(path, &archived_path, &error),
+          "user-confirmed archive of an invalid settings file should succeed");
+    Check(archived_path == archived,
+          "archive operation should report the exact .invalid path");
+    Check(!FileExists(path) && FileExists(archived),
+          "successful archive should move the invalid source to the .invalid name");
+
+    std::string archived_bytes;
+    Check(ReadRawFile(archived, &archived_bytes) && archived_bytes == original,
+          "archived invalid settings must remain byte-for-byte identical");
+
+    biblioled::AppSettings defaults;
+    biblioled::SettingsLoadStatus status = biblioled::kSettingsLoadError;
+    error.clear();
+    Check(biblioled::LoadSettingsFile(path, &defaults, &error, &status),
+          "loading after archiving should create a fresh defaults INI");
+    Check(status == biblioled::kSettingsLoadCreatedDefaults,
+          "recreated settings should report defaults-created status");
+    CheckDefaults(defaults);
+    Check(FileExists(path),
+          "a fresh config/settings.ini should exist after recreation");
+    Check(ReadRawFile(archived, &archived_bytes) && archived_bytes == original,
+          "creating defaults must not change the archived invalid file");
+
+    RemoveFile(path);
+    RemoveFile(archived);
+}
+
+void TestArchiveCollisionPreservesBothFiles(const std::string& dir)
+{
+    const std::string path = Join(dir, "archive-collision.ini");
+    const std::string archived = path + ".invalid";
+    const std::string original = "[limits]\r\ndaily_limit=0\r\n";
+    const std::string existing_archive = "previous invalid settings archive";
+    Check(WriteRawFile(path, original),
+          "invalid source for archive-collision test should be written");
+    Check(WriteRawFile(archived, existing_archive),
+          "existing .invalid archive sentinel should be written");
+
+    std::string archived_path;
+    std::string error;
+    Check(!biblioled::ArchiveInvalidSettingsFile(path, &archived_path, &error),
+          "archive collision must be rejected instead of overwriting an older .invalid file");
+    Check(!error.empty(), "archive collision should explain the failure");
+    std::string bytes;
+    Check(ReadRawFile(path, &bytes) && bytes == original,
+          "archive collision must preserve the current invalid source");
+    Check(ReadRawFile(archived, &bytes) && bytes == existing_archive,
+          "archive collision must preserve the earlier .invalid archive");
+
+    RemoveFile(path);
+    RemoveFile(archived);
+}
+
+void TestArchiveRefusesValidSettings(const std::string& dir)
+{
+    const std::string path = Join(dir, "valid-archive.ini");
+    biblioled::AppSettings defaults;
+    std::string error;
+    Check(biblioled::SaveSettingsFile(path, defaults, &error),
+          "valid source for archive-refusal test should be created");
+
+    std::string before;
+    Check(ReadRawFile(path, &before),
+          "valid settings bytes should be readable before archive attempt");
+    std::string archived_path;
+    error.clear();
+    Check(!biblioled::ArchiveInvalidSettingsFile(path, &archived_path, &error),
+          "valid settings must not be archived by the invalid-file operation");
+    Check(!error.empty(), "refusing a valid settings file should explain why");
+
+    std::string after;
+    Check(ReadRawFile(path, &after) && after == before,
+          "refusing to archive valid settings must preserve the file unchanged");
+    Check(!FileExists(path + ".invalid"),
+          "refusing valid settings must not create an .invalid archive");
+
+    RemoveFile(path);
+}
+
+void TestOversizedSettingsCanBeArchived(const std::string& dir)
+{
+    const std::string path = Join(dir, "oversized-archive.ini");
+    const std::string archived = path + ".invalid";
+    const std::string original(64U * 1024U + 1U, 'X');
+    Check(WriteRawFile(path, original),
+          "oversized settings source for archive test should be written");
+
+    std::string archived_path;
+    std::string error;
+    Check(biblioled::ArchiveInvalidSettingsFile(path, &archived_path, &error),
+          "oversized settings files should be eligible for explicit archival");
+    Check(!FileExists(path) && FileExists(archived),
+          "oversized settings source should move to its .invalid suffix");
+    std::string after;
+    Check(ReadRawFile(archived, &after) && after == original,
+          "oversized settings archive must preserve all original bytes");
+
+    RemoveFile(archived);
 }
 
 void TestInvalidSavePreservesOriginal(const std::string& dir)
@@ -379,6 +502,10 @@ int main()
     TestMissingFileCreatesDefaults(directory);
     TestRoundTrip(directory);
     TestInvalidFileIsPreserved(directory);
+    TestArchiveInvalidSettingsFile(directory);
+    TestArchiveCollisionPreservesBothFiles(directory);
+    TestArchiveRefusesValidSettings(directory);
+    TestOversizedSettingsCanBeArchived(directory);
     TestDuplicateKeyAndBom(directory);
     TestInvalidSavePreservesOriginal(directory);
     TestTemporaryCollision(directory);
@@ -387,7 +514,10 @@ int main()
     TestOversizedFilePreserved(directory);
 
     const char* names[] = {
-        "missing.ini", "roundtrip.ini", "invalid.ini", "duplicate.ini",
+        "missing.ini", "roundtrip.ini", "invalid.ini", "invalid.ini.invalid",
+        "archive.ini", "archive.ini.invalid", "archive-collision.ini",
+        "archive-collision.ini.invalid", "valid-archive.ini",
+        "oversized-archive.ini.invalid", "duplicate.ini",
         "invalid-save.ini", "collision.ini", "oversized.ini"
     };
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {

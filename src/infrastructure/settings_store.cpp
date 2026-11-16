@@ -267,8 +267,9 @@ bool Utf8PathToWide(const std::string& path, std::wstring* result, std::string* 
 }
 
 bool ReadSettingsBytes(const std::wstring& path, std::string* contents,
-                       bool* exists, std::string* error)
+                       bool* exists, bool* invalid_file, std::string* error)
 {
+    if (invalid_file) *invalid_file = false;
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                               NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (file == INVALID_HANDLE_VALUE) {
@@ -287,11 +288,15 @@ bool ReadSettingsBytes(const std::wstring& path, std::string* contents,
 
     *exists = true;
     LARGE_INTEGER size;
-    bool ok = GetFileSizeEx(file, &size) != 0 && size.QuadPart >= 0 &&
-        static_cast<unsigned long long>(size.QuadPart) <= kMaximumSettingsBytes;
-    if (!ok) {
+    if (!GetFileSizeEx(file, &size) || size.QuadPart < 0) {
         CloseHandle(file);
-        SetError(error, "Não foi possível obter o tamanho válido de config/settings.ini.");
+        SetError(error, "Não foi possível obter o tamanho de config/settings.ini.");
+        return false;
+    }
+    if (static_cast<unsigned long long>(size.QuadPart) > kMaximumSettingsBytes) {
+        CloseHandle(file);
+        if (invalid_file) *invalid_file = true;
+        SetError(error, "config/settings.ini excede o limite de 64 KiB.");
         return false;
     }
 
@@ -385,8 +390,9 @@ bool WriteSettingsBytesAtomically(const std::wstring& path,
 #else
 
 bool ReadSettingsBytes(const std::string& path, std::string* contents,
-                       bool* exists, std::string* error)
+                       bool* exists, bool* invalid_file, std::string* error)
 {
+    if (invalid_file) *invalid_file = false;
     const int file = open(path.c_str(), O_RDONLY);
     if (file < 0) {
         if (errno == ENOENT) {
@@ -400,11 +406,20 @@ bool ReadSettingsBytes(const std::string& path, std::string* contents,
 
     *exists = true;
     struct stat status;
-    if (fstat(file, &status) != 0 || !S_ISREG(status.st_mode) ||
-        status.st_size < 0 ||
-        static_cast<unsigned long long>(status.st_size) > kMaximumSettingsBytes) {
+    if (fstat(file, &status) != 0) {
         close(file);
-        SetError(error, "config/settings.ini não é um ficheiro regular ou excede o tamanho permitido.");
+        SetError(error, "Não foi possível obter os metadados de config/settings.ini.");
+        return false;
+    }
+    if (!S_ISREG(status.st_mode) || status.st_size < 0) {
+        close(file);
+        SetError(error, "config/settings.ini não é um ficheiro regular.");
+        return false;
+    }
+    if (static_cast<unsigned long long>(status.st_size) > kMaximumSettingsBytes) {
+        close(file);
+        if (invalid_file) *invalid_file = true;
+        SetError(error, "config/settings.ini excede o limite de 64 KiB.");
         return false;
     }
 
@@ -500,8 +515,10 @@ bool WriteSettingsBytesAtomically(const std::string& path,
 
 bool LoadSettingsFile(const std::string& utf8_path,
                       AppSettings* settings,
-                      std::string* error)
+                      std::string* error,
+                      SettingsLoadStatus* status)
 {
+    if (status) *status = kSettingsLoadError;
     if (error) error->clear();
     if (!settings) {
         SetError(error, "O destino das definições não foi indicado.");
@@ -515,13 +532,19 @@ bool LoadSettingsFile(const std::string& utf8_path,
 
     std::string contents;
     bool exists = false;
+    bool invalid_file = false;
 #ifdef _WIN32
     std::wstring path;
     if (!Utf8PathToWide(utf8_path, &path, error) ||
-        !ReadSettingsBytes(path, &contents, &exists, error)) return false;
+        !ReadSettingsBytes(path, &contents, &exists, &invalid_file, error)) {
 #else
-    if (!ReadSettingsBytes(utf8_path, &contents, &exists, error)) return false;
+    if (!ReadSettingsBytes(utf8_path, &contents, &exists, &invalid_file, error)) {
 #endif
+        if (invalid_file) {
+            if (status) *status = kSettingsLoadInvalidFile;
+        }
+        return false;
+    }
 
     if (!exists) {
         const AppSettings defaults;
@@ -532,9 +555,24 @@ bool LoadSettingsFile(const std::string& utf8_path,
         if (!WriteSettingsBytesAtomically(utf8_path, text, false, error)) return false;
 #endif
         *settings = defaults;
+        if (status) *status = kSettingsLoadCreatedDefaults;
         return true;
     }
-    return ParseSettingsText(contents, settings, error);
+
+    if (!ParseSettingsText(contents, settings, error)) {
+        if (status) *status = kSettingsLoadInvalidFile;
+        return false;
+    }
+
+    if (status) *status = kSettingsLoadLoaded;
+    return true;
+}
+
+bool LoadSettingsFile(const std::string& utf8_path,
+                      AppSettings* settings,
+                      std::string* error)
+{
+    return LoadSettingsFile(utf8_path, settings, error, NULL);
 }
 
 bool SaveSettingsFile(const std::string& utf8_path,
@@ -556,11 +594,11 @@ bool SaveSettingsFile(const std::string& utf8_path,
 #ifdef _WIN32
     std::wstring path;
     if (!Utf8PathToWide(utf8_path, &path, error) ||
-        !ReadSettingsBytes(path, &current_contents, &exists, error)) {
+        !ReadSettingsBytes(path, &current_contents, &exists, NULL, error)) {
         return false;
     }
 #else
-    if (!ReadSettingsBytes(utf8_path, &current_contents, &exists, error)) {
+    if (!ReadSettingsBytes(utf8_path, &current_contents, &exists, NULL, error)) {
         return false;
     }
 #endif
@@ -578,6 +616,79 @@ bool SaveSettingsFile(const std::string& utf8_path,
 #else
     return WriteSettingsBytesAtomically(utf8_path, text, exists, error);
 #endif
+}
+
+bool ArchiveInvalidSettingsFile(const std::string& utf8_path,
+                                std::string* archived_utf8_path,
+                                std::string* error)
+{
+    if (error) error->clear();
+    if (archived_utf8_path) archived_utf8_path->clear();
+    if (!archived_utf8_path || utf8_path.empty()) {
+        SetError(error, "O caminho ou o destino do arquivo de definições é inválido.");
+        return false;
+    }
+
+    std::string contents;
+    bool exists = false;
+    bool invalid_file = false;
+#ifdef _WIN32
+    std::wstring source_path;
+    if (!Utf8PathToWide(utf8_path, &source_path, error)) return false;
+    if (!ReadSettingsBytes(source_path, &contents, &exists,
+                           &invalid_file, error) && !invalid_file) {
+        return false;
+    }
+#else
+    if (!ReadSettingsBytes(utf8_path, &contents, &exists,
+                           &invalid_file, error) && !invalid_file) {
+        return false;
+    }
+#endif
+
+    if (!exists) {
+        SetError(error, "O ficheiro de definições não existe.");
+        return false;
+    }
+
+    if (!invalid_file) {
+        AppSettings parsed;
+        if (ParseSettingsText(contents, &parsed, NULL)) {
+            SetError(error, "O ficheiro de definições é válido e não precisa de ser arquivado.");
+            return false;
+        }
+        invalid_file = true;
+    }
+
+    const std::string archived_path = utf8_path + ".invalid";
+#ifdef _WIN32
+    std::wstring destination_path = source_path + L".invalid";
+    if (!MoveFileExW(source_path.c_str(), destination_path.c_str(),
+                     MOVEFILE_WRITE_THROUGH)) {
+        const DWORD code = GetLastError();
+        std::ostringstream message;
+        message << "Não foi possível arquivar o ficheiro inválido como .invalid (erro Win32 "
+                << code << "). O original foi preservado; confirme se o arquivo já existe.";
+        SetError(error, message.str());
+        return false;
+    }
+#else
+    // link() creates the destination exclusively. If it already exists, the
+    // original is untouched. If unlink fails, both copies remain available.
+    if (link(utf8_path.c_str(), archived_path.c_str()) != 0) {
+        SetError(error,
+            "Não foi possível criar o arquivo .invalid. O original foi preservado; confirme se o arquivo já existe.");
+        return false;
+    }
+    if (unlink(utf8_path.c_str()) != 0) {
+        SetError(error,
+            "O arquivo .invalid foi criado, mas não foi possível remover o nome original. Ambas as cópias foram preservadas.");
+        return false;
+    }
+#endif
+
+    *archived_utf8_path = archived_path;
+    return true;
 }
 
 } // namespace biblioled
