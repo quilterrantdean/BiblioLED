@@ -231,7 +231,7 @@ bool ParsePositiveInteger(const std::string& text,
     if (!value || text.empty()) return false;
     char* end = NULL;
     const long parsed = std::strtol(text.c_str(), &end, 10);
-    if (!end || end == text.c_str() || *end != '\\0' ||
+    if (!end || end == text.c_str() || *end != '\0' ||
         parsed < minimum || parsed > maximum) {
         return false;
     }
