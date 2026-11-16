@@ -180,12 +180,12 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated product-code head `482e42d1389b4a907abd9b24afa153c1d257de2f` on `development` passed the complete CI matrix.
+Latest validated product-code head `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5` on `development` passed the complete CI matrix.
 
-- [Core tests run 43901422428](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422428): Ubuntu core/store tests (8/8), modern Windows SDK Win32 application/store tests (9/9), and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43901422497](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497): pinned w64devkit x86 2.10.0 built the application and tests; all 9 CTest tests passed, including the settings-store suite; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- [Core tests run 43902568016](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902568016): Ubuntu core/store tests (8/8), modern Windows SDK Win32 application/store tests (9/9), and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911): pinned w64devkit x86 2.10.0 built the application and tests; all 9 CTest tests passed, including the future-schema preservation assertion; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
 
-Latest CI artefact: [14240119311](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497/artifacts/14240119311), `BiblioLED-XP-PoC`, 1,568,598 bytes. ZIP SHA-256: `d6f6ddbcca4195609f93059d6745826ca011bdc1f35baee47b22185d9ea4c251`.
+Latest CI artefact: [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`, 1,568,598 bytes. ZIP SHA-256: `94932edf2c39095ba2ddb5c1b88cc01df224c69be3726c018fec31c76b7b7e20`.
 
 The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. This remains a disposable validation artefact, not a normal portable release. The user confirmed that the executable runs well on XP; CI compilation and isolated tests do not prove the full manual recovery/failure-path matrix.
 
@@ -236,3 +236,9 @@ The reader limits the file to 64 KiB, accepts an optional UTF-8 BOM, validates r
 Before saving, the service validates the in-memory values and rereads an existing target. It refuses to replace a target that is invalid or unreadable, even if a caller bypasses the Win32 UI guard. A missing target is installed with no-replace semantics to avoid overwriting a file created concurrently. Existing valid settings are written to an exclusive, uniquely named temporary file; the full file is written and flushed before atomic installation. Windows uses `FlushFileBuffers` and `MoveFileExW(MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)`; POSIX uses `fsync` on the file and `rename`. POSIX parent-directory metadata is not separately fsynced, so the implementation does not claim full filename durability across sudden power loss.
 
 The dedicated `settings_store_tests` executable covers defaults creation, full save/load round-trip, successful replacement of an existing file, invalid-file byte preservation (including refusing a valid update over it), duplicate keys/BOM, invalid in-memory values, stale temporary-name collision, replacement failure, directory-as-file and oversized-file handling. These tests use isolated temporary directories with Unicode names; they never open the user's real settings.
+
+## Future SQLite schema-version rejection
+
+`LoanStore::Open` rejects database versions outside the currently supported range (0–1), after checking the database's SQLite integrity and the supported legacy loan-table contract. On rejection it reports that the database has not been modified and closes the connection; it does not attempt to downgrade or migrate a future schema.
+
+The isolated regression test creates a synthetic schema-version-7 database containing a legacy-shaped `loans` table and one known record. It verifies that `Open` fails and leaves `LoanStore` closed, checks the explanatory error, then opens the file independently in SQLite read-only mode. The test confirms that `PRAGMA user_version` remains 7 and that the original row's title, date and type are unchanged. This is forward-version refusal coverage, not an implementation of a future schema migration; later migrations remain deliberately undefined.

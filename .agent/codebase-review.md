@@ -128,11 +128,11 @@ The user confirmed on 2026-11-16 that the executable runs well on Windows XP. Th
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest validated product-code and CI head is `482e42d1389b4a907abd9b24afa153c1d257de2f` on `development`.
+The latest validated product-code and CI head is `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5` on `development`.
 
-- [Core tests run 43901422428](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422428) succeeded: Ubuntu tests (8/8), modern Windows SDK Win32 build/store tests (9/9), and Cppcheck 2.19.0 all passed.
-- [XP-targeted Win32 build run 43901422497](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497) succeeded using pinned w64devkit x86 2.10.0. All 9 CTest tests passed, including settings-store persistence and invalid-target protection; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
-- Artefact [14240119311](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497/artifacts/14240119311), `BiblioLED-XP-PoC`: 1,568,598 bytes; ZIP SHA-256 `d6f6ddbcca4195609f93059d6745826ca011bdc1f35baee47b22185d9ea4c251`.
+- [Core tests run 43902568016](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902568016) succeeded: Ubuntu tests (8/8), modern Windows SDK Win32 build/store tests (9/9), and Cppcheck 2.19.0 all passed.
+- [XP-targeted Win32 build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911) succeeded using pinned w64devkit x86 2.10.0. All 9 CTest tests passed, including settings-store persistence and forward-schema rejection; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- Artefact [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`: 1,568,598 bytes; ZIP SHA-256 `94932edf2c39095ba2ddb5c1b88cc01df224c69be3726c018fec31c76b7b7e20`.
 
 
 
@@ -188,3 +188,7 @@ This verifies recovery after abrupt process death; it does not claim to simulate
 Saving validates the in-memory settings and rereads an existing destination before replacement. A malformed or unreadable existing INI cannot be overwritten through the storage API, not merely through the current UI guard. Temporary files are created exclusively using a PID/attempt suffix, written fully and flushed before the atomic replacement. Windows uses wide-character APIs, `FlushFileBuffers` and write-through `MoveFileExW`; POSIX uses `fsync` followed by `rename`. POSIX parent-directory metadata is not fsynced, so the operation does not claim full directory-entry persistence through hardware power loss.
 
 The nine settings-store cases cover defaults, round-trip and existing-file replacement, invalid/duplicate file preservation, invalid in-memory values, temporary-name collision, replacement failure, directory paths and oversized input. All use disposable Unicode-named test directories.
+
+## Future SQLite schema rejection
+
+The existing version-range guard now has an explicit non-modification regression test. A synthetic database with `user_version=7` and one existing loan is rejected by `LoanStore::Open`; the store remains closed and reports that the file was not modified. A separate read-only SQLite connection verifies that version 7 and the exact loan fields remain unchanged. This proves safe refusal of an unsupported schema, not an implementation of version-2-or-later migrations.

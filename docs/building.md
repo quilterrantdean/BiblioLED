@@ -124,15 +124,15 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `482e42d1389b4a907abd9b24afa153c1d257de2f`. Its validation passed:
+The latest validated product-code commit is `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5`. Its validation passed:
 
-- [Core tests run 43901422428](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422428): Ubuntu (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0 passed.
-- [XP-targeted build run 43901422497](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497): w64devkit x86 2.10.0, all nine tests (including application-path, diagnostic-audit, rollback-failure, abrupt-process-recovery and settings-store coverage), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
+- [Core tests run 43902568016](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902568016): Ubuntu (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0 passed.
+- [XP-targeted build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911): w64devkit x86 2.10.0, all nine tests (including application-path, settings persistence, SQLite rollback/process recovery and future-schema rejection), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
 
-The disposable artefact is [14240119311](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497/artifacts/14240119311), `BiblioLED-XP-PoC`:
+The disposable artefact is [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`:
 
 - ZIP size: 1,568,598 bytes
-- ZIP SHA-256: `d6f6ddbcca4195609f93059d6745826ca011bdc1f35baee47b22185d9ea4c251`
+- ZIP SHA-256: `94932edf2c39095ba2ddb5c1b88cc01df224c69be3726c018fec31c76b7b7e20`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
@@ -274,3 +274,8 @@ The XP-targeted and modern Win32 test builds run a process-interruption recovery
 
 Windows uses `CreateProcessW`/`TerminateProcess`; POSIX uses `fork`/`_exit`. This tests abrupt process termination, not physical power loss or failure of volatile storage-device caches.
 
+## Future SQLite schema versions
+
+The application currently supports schema versions 0 and 1. If `PRAGMA user_version` reports a higher or negative version, `LoanStore::Open` refuses the database, returns an explanatory error and closes the connection. It does not attempt to downgrade a database created by a newer build.
+
+The automated regression test uses an isolated database at schema version 7 with a known loan row. After the application rejects it, the test opens the file read-only and confirms that both the version and the row are unchanged. This covers safe refusal; migrations for future schema versions will require a separately reviewed design and backup strategy.
