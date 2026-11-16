@@ -352,6 +352,67 @@ bool CreateLegacyDatabase(const std::string& path, int version)
     return ok && close_rc == SQLITE_OK;
 }
 
+bool VerifyFutureVersionDatabaseUnchanged(const std::string& path)
+{
+    sqlite3* db = NULL;
+    if (sqlite3_open_v2(path.c_str(), &db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return false;
+    }
+
+    bool ok = true;
+    int version = -1;
+    sqlite3_stmt* statement = NULL;
+    int rc = sqlite3_prepare_v2(db, "PRAGMA user_version;", -1,
+                                &statement, NULL);
+    if (rc == SQLITE_OK) {
+        rc = sqlite3_step(statement);
+        if (rc == SQLITE_ROW) {
+            version = sqlite3_column_int(statement, 0);
+        } else {
+            ok = false;
+        }
+    } else {
+        ok = false;
+    }
+    if (statement && sqlite3_finalize(statement) != SQLITE_OK) ok = false;
+    statement = NULL;
+
+    std::string title;
+    std::string loan_date;
+    std::string type;
+    rc = sqlite3_prepare_v2(
+        db, "SELECT title, loan_date, type FROM loans WHERE id = 1;",
+        -1, &statement, NULL);
+    if (rc == SQLITE_OK) {
+        rc = sqlite3_step(statement);
+        if (rc == SQLITE_ROW) {
+            const unsigned char* title_text = sqlite3_column_text(statement, 0);
+            const unsigned char* date_text = sqlite3_column_text(statement, 1);
+            const unsigned char* type_text = sqlite3_column_text(statement, 2);
+            if (title_text && date_text && type_text) {
+                title = reinterpret_cast<const char*>(title_text);
+                loan_date = reinterpret_cast<const char*>(date_text);
+                type = reinterpret_cast<const char*>(type_text);
+            } else {
+                ok = false;
+            }
+        } else {
+            ok = false;
+        }
+    } else {
+        ok = false;
+    }
+    if (statement && sqlite3_finalize(statement) != SQLITE_OK) ok = false;
+
+    const int close_result = sqlite3_close(db);
+    return ok && version == 7 &&
+           title == "Registo legado" &&
+           loan_date == "2024-01-15 10:30" &&
+           type == "livro" &&
+           close_result == SQLITE_OK;
+}
+
 bool CreateDatabaseWithSchema(const std::string& path, const char* schema_sql)
 {
     sqlite3* db = NULL;
@@ -1431,8 +1492,16 @@ int main(int argc, char** argv)
     Check(CreateLegacyDatabase(unsupported_database, 7),
           "unsupported-version database should be created");
     biblioled::LoanStore unsupported;
+    error.clear();
     Check(!unsupported.Open(unsupported_database, ".", &error),
           "application should reject a database schema newer than it supports");
+    Check(!unsupported.IsOpen(),
+          "a database with a future schema version must not remain open");
+    Check(error.find("not supported") != std::string::npos &&
+              error.find("not been modified") != std::string::npos,
+          "future-schema rejection should explain that the database was not modified");
+    Check(VerifyFutureVersionDatabaseUnchanged(unsupported_database),
+          "future-schema rejection must preserve user_version and the existing loan row");
     unsupported.Close();
 
     Check(CreateLegacyDatabase(malformed_v1_database, 1),
