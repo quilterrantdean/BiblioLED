@@ -180,3 +180,4 @@ This is deterministic rollback-command failure coverage, not yet a simulation of
 The new test terminates a separate child process while a SQLite DELETE-journal transaction is open after cache spilling and `sqlite3_db_cacheflush`. The parent confirms a hot journal remains, reopens the database, verifies that the committed baseline survives and all uncommitted rows are discarded, then checks journal removal and `quick_check`. It uses `TerminateProcess` on Windows and `_exit` on POSIX.
 
 This verifies recovery after abrupt process death; it does not claim to simulate a physical power failure or loss of storage-device write caches.
+

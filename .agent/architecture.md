@@ -183,7 +183,7 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 Latest validated source head `738c1d07a1a8256a80a78c5cc03135576c3c4aba` on `development` passed the complete CI matrix.
 
 - [Core tests run 43896578995](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578995): Ubuntu core/store tests, modern Windows SDK Win32 application/store tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43896578967](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including application-path, diagnostic-audit, rollback-failure and abrupt-process-recovery coverage. PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- [XP-targeted build run 43896578967](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including application-path, diagnostic-audit, rollback-failure and abrupt-process-recovery coverage; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
 
 Latest CI artefact: [14239447095](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967/artifacts/14239447095), `BiblioLED-XP-PoC`, 1,554,246 bytes. ZIP SHA-256: `fbfbad00d193e85449700ba9e8d1044530eac3c22344de4c1dafad4eb18735e7`.
 
@@ -221,8 +221,9 @@ The test then reopens the database through a new `LoanStore` instance, confirms 
 
 ## Abrupt process termination recovery test
 
-The isolated `loan_store_tests` suite creates a committed baseline record and then starts a separate crash-worker process with an SQLite transaction open. The worker uses rollback-journal mode (`DELETE`), `synchronous=FULL`, a deliberately small page cache and cache spilling, inserts 128 synthetic uncommitted rows, and calls `sqlite3_db_cacheflush` while the transaction remains active.
+The isolated `loan_store_tests` suite creates a committed baseline record and starts a separate crash-worker process with an SQLite transaction open. The worker uses rollback-journal mode (`DELETE`), `synchronous=FULL`, a deliberately small page cache and cache spilling, inserts 128 synthetic uncommitted rows, and calls `sqlite3_db_cacheflush` while the transaction remains active.
 
 On Windows the parent starts the same test executable with `CreateProcessW` and the worker terminates itself with `TerminateProcess`, without calling `sqlite3_close` or committing. On POSIX the test forks a child and the child uses `_exit` with the SQLite connection still open. The parent requires the hot `-journal` file to exist, then reopens the database through `LoanStore`. Recovery must preserve the committed baseline record, discard all uncommitted child rows, remove the hot journal, and pass `quick_check`.
 
 This is a deterministic abrupt-process-death test on both platform families. It does not simulate a physical power cut, kernel crash, or loss of volatile write caches in a storage controller; those remain distinct durability scenarios.
+

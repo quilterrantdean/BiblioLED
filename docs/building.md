@@ -262,3 +262,4 @@ This does not simulate sudden power loss or termination of the process. Those te
 The XP-targeted and modern Win32 test builds run a process-interruption recovery scenario in `loan_store_tests`. A child process inserts 128 synthetic rows inside an uncommitted SQLite DELETE-journal transaction, forces cache spilling and calls `sqlite3_db_cacheflush`, then terminates without closing SQLite. The parent verifies that the hot journal is present, reopens the database, confirms that the committed baseline record is retained and the uncommitted rows are discarded, and checks that the journal is removed and `quick_check` succeeds.
 
 Windows uses `CreateProcessW`/`TerminateProcess`; POSIX uses `fork`/`_exit`. This tests abrupt process termination, not physical power loss or failure of volatile storage-device caches.
+
