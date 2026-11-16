@@ -19,6 +19,21 @@
 #include <unistd.h>
 #endif
 
+namespace biblioled {
+class LoanStoreTestAccess {
+public:
+    static sqlite3* Database(LoanStore& store)
+    {
+        return store.db_;
+    }
+
+    static bool RollbackTransaction(LoanStore& store, std::string* error)
+    {
+        return store.RollbackTransaction(error);
+    }
+};
+} // namespace biblioled
+
 namespace {
 
 int failures = 0;
@@ -40,6 +55,21 @@ bool Execute(sqlite3* db, const char* sql)
     }
     sqlite3_free(message);
     return rc == SQLITE_OK;
+}
+
+int DenyRollbackAuthorizer(void*,
+                           int action,
+                           const char* first_argument,
+                           const char*,
+                           const char*,
+                           const char*)
+{
+    if (action == SQLITE_TRANSACTION &&
+        first_argument &&
+        std::string(first_argument) == "ROLLBACK") {
+        return SQLITE_DENY;
+    }
+    return SQLITE_OK;
 }
 
 bool FileExists(const std::string& path)
@@ -434,6 +464,79 @@ bool MakeReadableBackup(const std::string& path, std::string* decoded_path)
 
 } // namespace
 
+void TestRollbackFailureClosesStore(const std::string& database,
+                                   const std::string& backup_directory)
+{
+    Check(MakeDirectory(backup_directory),
+          "rollback-failure backup directory should be created");
+
+    biblioled::LoanStore store;
+    std::string error;
+    Check(store.Open(database, backup_directory, &error),
+          "isolated database for rollback-failure injection should open");
+    if (!store.IsOpen()) return;
+
+    sqlite3* raw = biblioled::LoanStoreTestAccess::Database(store);
+    Check(raw != NULL, "test adapter should expose the active SQLite handle");
+    if (!raw) {
+        store.Close();
+        return;
+    }
+
+    Check(Execute(raw, "BEGIN IMMEDIATE;"),
+          "rollback-failure test should start an explicit transaction");
+    Check(Execute(raw,
+        "INSERT INTO loans (title, loan_date, type) "
+        "VALUES ('Registo não confirmado', '2099-04-01 10:00', 'livro');"),
+        "rollback-failure test should create an uncommitted loan row");
+    Check(sqlite3_get_autocommit(raw) == 0,
+          "the injected transaction should remain active before rollback");
+
+    const int authorizer_result =
+        sqlite3_set_authorizer(raw, DenyRollbackAuthorizer, NULL);
+    Check(authorizer_result == SQLITE_OK,
+          "SQLite should accept the rollback-denying authorizer");
+
+    if (authorizer_result == SQLITE_OK) {
+        error.clear();
+        Check(!biblioled::LoanStoreTestAccess::RollbackTransaction(store, &error),
+              "a denied ROLLBACK statement should be reported as a rollback failure");
+        Check(!store.IsOpen(),
+              "LoanStore should close itself after an unsuccessful ROLLBACK");
+        Check(error.find("SQLite rollback failed") != std::string::npos,
+              "rollback failure should be included in the returned diagnostic");
+    } else {
+        store.Close();
+    }
+
+    if (store.IsOpen()) store.Close();
+
+    // Reopening forces SQLite to recover any journal left by the deliberately
+    // interrupted transaction. The uncommitted row must never become visible.
+    biblioled::LoanStore reopened;
+    error.clear();
+    Check(reopened.Open(database, backup_directory, &error),
+          "database should reopen after the failed rollback closed its connection");
+    if (reopened.IsOpen()) {
+        std::vector<biblioled::LoanRecord> records;
+        Check(reopened.GetAll(&records, &error),
+              "recovered database should remain readable after failed rollback");
+        Check(records.empty(),
+              "SQLite recovery should discard the uncommitted row");
+        Check(reopened.QuickCheck(&error),
+              "recovered database should pass SQLite quick_check");
+        reopened.Close();
+    }
+
+    RemoveDatabaseFiles(database);
+    RemoveFilesWithPrefix(backup_directory, "BiblioLED_");
+#ifdef _WIN32
+    RemoveDirectoryA(backup_directory.c_str());
+#else
+    rmdir(backup_directory.c_str());
+#endif
+}
+
 int main()
 {
     const std::string database =
@@ -457,6 +560,10 @@ int main()
     const std::string malformed_legacy_extra_database = database + ".malformed-legacy-extra.sqlite";
     const std::string missing_backup_directory = database + ".missing-backup-directory";
     const std::string invalid_backup = database + ".invalid-backup.sqlite";
+    const std::string rollback_failure_database =
+        database + ".rollback-failure.sqlite";
+    const std::string rollback_failure_backup_directory =
+        database + ".rollback-failure-backups";
 
     std::vector<std::string> backups;
     std::string error;
@@ -465,6 +572,9 @@ int main()
     Check(TestUnicodeDatabasePath(),
           "LoanStore should reopen a database under a UTF-8 path with non-ASCII characters");
 #endif
+
+    TestRollbackFailureClosesStore(
+        rollback_failure_database, rollback_failure_backup_directory);
 
     // A new database starts at schema version 1 with an empty audit table.
     biblioled::LoanStore store;

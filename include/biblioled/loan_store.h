@@ -84,6 +84,10 @@ public:
     bool QuickCheck(std::string* error);
 
 private:
+    // Narrow test access permits deterministic injection of an SQLite ROLLBACK
+    // authorizer failure; no runtime test hook or public database handle exists.
+    friend class LoanStoreTestAccess;
+
     bool CreateInitialSchema(std::string* error);
     bool ValidateExistingSchema(std::string* error);
     bool EnsureAutomaticBackup(std::string* error);
