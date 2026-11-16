@@ -10,6 +10,11 @@ The repository-root `AGENTS.md` is the agent instruction entry point. It directs
 - `decisions.md` — user-approved product, technical, and workflow decisions.
 - `architecture.md` — proposed component boundaries and portable directory layout.
 - `codebase-review.md` — factual review of the existing implementation and known issues.
+- `handoff.md` — current-session state, verified CI status, and next steps for a new session.
+
+## Current handoff
+
+Before resuming work in a new session, read `.agent/handoff.md` after the project plan and decisions. It is a dated snapshot; verify the live branch head and workflow runs before making changes.
 
 ## Working rules
 

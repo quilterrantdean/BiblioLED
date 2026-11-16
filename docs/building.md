@@ -124,10 +124,10 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5`. Its validation passed:
+Current development head: `95fb0be479a06f455e019065cb1295af3ce9a691`.
 
-- [Core tests run 43902568016](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902568016): Ubuntu (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0 passed.
-- [XP-targeted build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911): w64devkit x86 2.10.0, all nine tests (including application-path, settings persistence, SQLite rollback/process recovery and future-schema rejection), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
+- [Core tests run 43921021534](https://github.com/quilterrantdean/BiblioLED/actions/runs/43921021534) passed on this head: Ubuntu (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0.
+- The latest successful [XP-targeted build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911) is from the older source revision `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5`. Its w64devkit x86 2.10.0 build, all nine tests (including application-path, settings persistence, SQLite rollback/process recovery and future-schema rejection), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed. The current head includes later settings-recovery changes and has not yet been rebuilt with the XP toolchain.
 
 The disposable artefact is [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`:
 
@@ -286,4 +286,4 @@ The automated regression test uses an isolated database at schema version 7 with
 
 `XP-targeted Win32 build (manual)` is configured with `workflow_dispatch` only. It performs the pinned w64devkit x86 build, XP-targeted CTest suite, PE32/XP subsystem/API checks and disposable ZIP packaging; it is intentionally not run for every commit.
 
-**Current repository limitation:** the default branch is `main`, and the workflow files are maintained on `development`. GitHub requires a manual-dispatch workflow definition to exist on the default branch before **Actions → Run workflow** is available. The user must resolve this repository-level choice before the manual XP control appears. The `main` Python reference has deliberately not been modified.
+The repository default branch is now `development` (changed by the user on 2026-11-16), and the manual XP workflow definition is present on that branch. Start the current XP build from **Actions → XP-targeted Win32 build (manual) → Run workflow**, selecting `development`. The workflow remains manual-only; do not add `push` or `pull_request` triggers. The `main` Python reference remains unchanged.

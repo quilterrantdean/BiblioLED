@@ -180,10 +180,10 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated product-code head `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5` on `development` passed the complete CI matrix.
+Current development head `95fb0be479a06f455e019065cb1295af3ce9a691` passed the Core workflow, but the XP-specific workflow has not yet been rerun on this head.
 
-- [Core tests run 43902568016](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902568016): Ubuntu core/store tests (8/8), modern Windows SDK Win32 application/store tests (9/9), and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911): pinned w64devkit x86 2.10.0 built the application and tests; all 9 CTest tests passed, including the future-schema preservation assertion; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- [Core tests run 43921021534](https://github.com/quilterrantdean/BiblioLED/actions/runs/43921021534): Ubuntu core/store tests (8/8), modern Windows SDK Win32 application/store tests (9/9), and Cppcheck 2.19.0 all succeeded. This includes the modern-Windows compile/test check for the recent `settings_store` fix.
+- The latest successful [XP-targeted build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911) is at the older source head `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5`: pinned w64devkit x86 2.10.0, all 9 CTest tests, PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed. It predates the latest invalid-settings recovery changes and must not be treated as validation of the current head.
 
 Latest CI artefact: [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`, 1,568,598 bytes. ZIP SHA-256: `94932edf2c39095ba2ddb5c1b88cc01df224c69be3726c018fec31c76b7b7e20`.
 
@@ -247,4 +247,4 @@ The isolated regression test creates a synthetic schema-version-7 database conta
 
 `Core tests` runs automatically for pushes and pull requests to `development` only when build manifests, configuration, headers, source, tests or workflow definitions change. Its filters exclude documentation-only changes. The separate `XP-targeted Win32 build (manual)` has only the `workflow_dispatch` trigger; its relatively expensive pinned w64devkit build, XP tests, PE/import inspection and artifact packaging run only on explicit manual dispatch.
 
-GitHub's Actions UI requires a `workflow_dispatch` workflow file to be present on the repository's default branch. The current default is `main`; the workflow files are maintained on `development`, while `main` remains the untouched Python reference. Consequently, the manual **Run workflow** button is not yet available until the user explicitly resolves that repository-level constraint (for example, by changing the default branch or authorising the workflow definition to be present there). Do not alter `main` or repository default-branch settings autonomously.
+The repository default branch was changed to `development` by the user on 2026-11-16. Both workflow files are present on that branch, so the manual **Actions → XP-targeted Win32 build (manual) → Run workflow** control is now available. Select `development` when dispatching. Keep `main` unchanged as the Python reference and do not add development workflow files or commits there.

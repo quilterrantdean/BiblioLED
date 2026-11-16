@@ -128,13 +128,12 @@ The user confirmed on 2026-11-16 that the executable runs well on Windows XP. Th
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest validated product-code and CI head is `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5` on `development`.
+Current development head: `95fb0be479a06f455e019065cb1295af3ce9a691`.
 
-- [Core tests run 43902568016](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902568016) succeeded: Ubuntu tests (8/8), modern Windows SDK Win32 build/store tests (9/9), and Cppcheck 2.19.0 all passed.
-- [XP-targeted Win32 build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911) succeeded using pinned w64devkit x86 2.10.0. All 9 CTest tests passed, including settings-store persistence and forward-schema rejection; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
-- Artefact [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`: 1,568,598 bytes; ZIP SHA-256 `94932edf2c39095ba2ddb5c1b88cc01df224c69be3726c018fec31c76b7b7e20`.
-
-
+- [Core tests run 43921021534](https://github.com/quilterrantdean/BiblioLED/actions/runs/43921021534) succeeded on this head: Ubuntu tests (8/8), modern Windows Win32 build/store tests (9/9), and Cppcheck 2.19.0 all passed.
+- The latest successful [XP-targeted Win32 build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911) is from the older source head `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5`. All 9 tests, PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed on that older revision; it does not validate the recent settings recovery code.
+- Previous Win32 CI failed at `4836aa82bf66d44d8f37a2b7b285fce0eb25db1a` because `ReadSettingsBytes` used `ok` without initialising it. Commit `95fb0be` adds `bool ok = true;`; Core CI has now passed. The current head still needs the manual XP-targeted build.
+- The last successful XP artefact remains [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`: 1,568,598 bytes; ZIP SHA-256 `94932edf2c39095ba2ddb5c1b88cc01df224c69be3726c018fec31c76b7b7e20`.
 
 The sorting implementation, central executable-relative path model and application diagnostic coverage are included in this validated source head. The user confirmed on 2026-11-16 that the executable runs well on Windows XP; secondary-window Portuguese text encoding was confirmed corrected on 2026-11-15. The exact manually tested executable hash and scenario list remain unrecorded.
 
@@ -197,6 +196,6 @@ The existing version-range guard now has an explicit non-modification regression
 
 The Core workflow is now path-filtered: it runs automatically for build/config/source/test/workflow changes on `development`, not for documentation-only commits. The XP-targeted w64devkit build is manual-only through `workflow_dispatch`; do not reintroduce `push` or `pull_request` triggers.
 
-The repository default branch remains `main`, which contains no workflow files. GitHub only exposes the Actions UI **Run workflow** control when the `workflow_dispatch` workflow definition is present on the default branch. The workflow definitions remain on `development` to preserve the untouched Python reference branch. A user-approved repository-level decision is required before manual dispatch can be exposed in the website UI.
+The repository default branch is now `development` (user-confirmed on 2026-11-16), and the workflow definitions are present there. The Actions website can now dispatch `XP-targeted Win32 build (manual)` through **Actions → Run workflow**. Select `development`; do not reintroduce `push` or `pull_request` triggers on the XP workflow. The Core workflow remains path-filtered and excludes documentation-only changes.
 
-The latest pre-policy XP/Core runs at commit `4836aa82bf66d44d8f37a2b7b285fce0eb25db1a` failed because the Windows implementation of `ReadSettingsBytes` used `ok` without initialising it. The portable/POSIX path did initialise it. The current policy-change commit restores `bool ok = true;`; the automatic Core run is expected to validate the fix. The XP workflow is deliberately not auto-triggered.
+The Windows compile failure at commit `4836aa82bf66d44d8f37a2b7b285fce0eb25db1a` was fixed in `95fb0be` by initialising `bool ok = true;`. The Core run on `95fb0be` succeeded. The XP-specific workflow has not yet been rerun on the corrected current head and is the immediate validation task.
