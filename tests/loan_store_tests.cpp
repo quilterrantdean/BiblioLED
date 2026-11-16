@@ -626,23 +626,17 @@ void TestAbruptProcessInterruptionRecovery(const std::string& database,
           "a known committed record should be written before child termination");
     initial.Close();
 
-    DWORD windows_exit_code = 0;
-    int child_exit_code = 0;
 #ifdef _WIN32
-    const bool child_started_and_exited =
-        RunInterruptedTransactionProcess(database, &windows_exit_code);
-    Check(child_started_and_exited,
-          "the SQLite crash-worker process should start and terminate");
-    Check(windows_exit_code == 86,
-          "the crash-worker should be terminated from inside its open transaction");
+    DWORD child_exit_code = 0;
 #else
+    int child_exit_code = 0;
+#endif
     const bool child_started_and_exited =
         RunInterruptedTransactionProcess(database, &child_exit_code);
     Check(child_started_and_exited,
-          "the SQLite crash-worker child process should fork and terminate");
+          "the SQLite crash-worker process should start and terminate");
     Check(child_exit_code == 86,
-          "the child should exit abruptly from inside its open transaction");
-#endif
+          "the crash-worker should terminate abruptly from inside its open transaction");
 
     // A hot rollback journal must survive process termination and be consumed
     // by SQLite when the parent opens the database again.
