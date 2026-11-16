@@ -8,7 +8,7 @@ The current application is a proof of concept, not a supported release. It alrea
 
 **Do not use the current proof of concept with the real BiblioLED database.** Automated tests create isolated synthetic databases. The downloadable XP artefact contains no database.
 
-The user confirmed on 2026-11-15 that the executable runs well on Windows XP and that the secondary-window Portuguese text encoding is corrected. The exact executable hash, XP build and exercised scenarios have not been recorded. The recovery wizard, backup/restore failure paths and a reproducible full target-system test record remain outstanding.
+The user confirmed on 2026-11-16 that the executable runs well on Windows XP. Secondary-window Portuguese text encoding was confirmed corrected on 2026-11-15. The exact executable hash, XP build and exercised scenarios have not been recorded. The recovery wizard, backup/restore failure paths and a reproducible full target-system test record remain outstanding.
 
 ## Toolchains and dependencies
 
@@ -123,19 +123,19 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `5f5c9b5f0e49b3e430167c0ec144a3cde2c0e1d3`. Its validation passed:
+The latest validated product-code commit is `8596e02467edb08698e064c9d5412390007b147e`. Its validation passed:
 
-- [Core tests run 43772056948](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056948): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
-- [XP-targeted build run 43772056931](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931): w64devkit x86 2.10.0, all seven tests, PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
+- [Core tests run 43892060495](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060495): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
+- [XP-targeted build run 43892060511](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511): w64devkit x86 2.10.0, all eight tests (including `application_paths_tests`), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
 
-The disposable artefact is [14185170648](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931), `BiblioLED-XP-PoC`:
+The disposable artefact is [14236418548](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511/artifacts/14236418548), `BiblioLED-XP-PoC`:
 
-- ZIP size: 1,548,901 bytes
-- ZIP SHA-256: `72de8853d9f61dfe52484de43b6a883f56dbe1cd7f5f3d11f72ededee20ae138`
+- ZIP size: 1,551,656 bytes
+- ZIP SHA-256: `c9078baf524e321cefe9da307788fd03e4c49f41f0340170aff646746875f0bd`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
-This ZIP is a disposable CI test artefact, not a normal portable distribution or release. The user also confirmed that the executable runs well on Windows XP and that secondary-window Portuguese text encoding is corrected; the exact manual test artefact and scenarios have not been recorded.
+This ZIP is a disposable CI test artefact, not a normal portable distribution or release. The user confirmed that the executable runs well on Windows XP; the exact manually tested executable hash and scenario list remain unrecorded.
 
 ## Portable directory layout and settings
 

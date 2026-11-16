@@ -149,7 +149,7 @@ These UI refinements are implemented:
 - The resource script declares code page 65001, and MSVC C++ source compilation explicitly uses UTF-8. Statistics error strings now convert from UTF-8 correctly.
 - F5 is not used for main-window refresh or audit retry. Audit-log recovery remains available from the explicit Ficheiro command.
 - Clicking a header in the main loans list or history list sorts by that column; a repeated click reverses direction. Titles and types use case-insensitive locale-aware alphabetical comparison, IDs and remaining days use numeric comparison, and loan/expiry dates use chronological comparison.
-- The user reconfirmed on 2026-11-16 that the executable runs well on Windows XP; the earlier 2026-11-15 confirmation also covered the corrected secondary-window text encoding and that secondary-window Portuguese text encoding is corrected. The exact executable hash, XP build and exercised test scenarios remain undocumented; recovery and failure-path validation still need a reproducible record.
+- The user confirmed on 2026-11-16 that the executable runs well on Windows XP. The 2026-11-15 confirmation also covered the correction of secondary-window Portuguese text encoding. The exact executable hash, XP build and exercised test scenarios remain undocumented; recovery and failure-path validation still need a reproducible record.
 
 ## Initial proof-of-concept implementation
 
@@ -180,14 +180,14 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated source head `5f5c9b5f0e49b3e430167c0ec144a3cde2c0e1d3` on `development` passed the complete CI matrix.
+Latest validated source head `8596e02467edb08698e064c9d5412390007b147e` on `development` passed the complete CI matrix.
 
-- [Core tests run 43772056948](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056948): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43772056931](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931): pinned w64devkit x86 2.10.0 built the application and tests; all 7 CTest tests passed; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- [Core tests run 43892060495](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060495): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43892060511](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including the new application-path suite; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
 
-Latest CI artefact: [14185170648](https://github.com/quilterrantdean/BiblioLED/actions/runs/43772056931), `BiblioLED-XP-PoC`, 1,548,901 bytes. ZIP SHA-256: `72de8853d9f61dfe52484de43b6a883f56dbe1cd7f5f3d11f72ededee20ae138`.
+Latest CI artefact: [14236418548](https://github.com/quilterrantdean/BiblioLED/actions/runs/43892060511/artifacts/14236418548), `BiblioLED-XP-PoC`, 1,551,656 bytes. ZIP SHA-256: `c9078baf524e321cefe9da307788fd03e4c49f41f0340170aff646746875f0bd`.
 
-The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. This remains a disposable validation artefact, not a normal portable release. The user has confirmed that the executable runs well on XP and that secondary-window Portuguese text encoding is corrected; this manual confirmation does not replace a recorded full recovery/failure-path test matrix.
+The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. This remains a disposable validation artefact, not a normal portable release. The user has confirmed that the executable runs well on XP; this manual confirmation does not replace a recorded full recovery/failure-path test matrix.
 
 ## CI action provenance
 
