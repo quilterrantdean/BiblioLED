@@ -262,6 +262,15 @@ void TestInvalidFileIsPreserved(const std::string& dir)
     std::string after;
     Check(ReadRawFile(path, &after) && after == original,
           "loading an invalid INI must preserve the original bytes");
+
+    biblioled::AppSettings valid_update;
+    valid_update.daily_limit = 12;
+    error.clear();
+    Check(!biblioled::SaveSettingsFile(path, valid_update, &error),
+          "the storage service must refuse to save over an existing invalid INI");
+    Check(!error.empty(), "refusing to replace an invalid INI should explain why");
+    Check(ReadRawFile(path, &after) && after == original,
+          "even a valid in-memory update must not replace an invalid existing INI");
 }
 
 void TestDuplicateKeyAndBom(const std::string& dir)

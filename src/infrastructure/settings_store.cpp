@@ -547,13 +547,36 @@ bool SaveSettingsFile(const std::string& utf8_path,
         return false;
     }
     if (!ValidateSettings(settings, error)) return false;
-    const std::string text = SerializeSettings(settings);
+
+    // Enforce the invalid-file preservation rule at the storage boundary,
+    // not only in the current Win32 callers. Also detect concurrent creation
+    // rather than replacing a file that appeared after this existence check.
+    std::string current_contents;
+    bool exists = false;
 #ifdef _WIN32
     std::wstring path;
-    if (!Utf8PathToWide(utf8_path, &path, error)) return false;
-    return WriteSettingsBytesAtomically(path, text, true, error);
+    if (!Utf8PathToWide(utf8_path, &path, error) ||
+        !ReadSettingsBytes(path, &current_contents, &exists, error)) {
+        return false;
+    }
 #else
-    return WriteSettingsBytesAtomically(utf8_path, text, true, error);
+    if (!ReadSettingsBytes(utf8_path, &current_contents, &exists, error)) {
+        return false;
+    }
+#endif
+
+    if (exists) {
+        AppSettings current_settings;
+        if (!ParseSettingsText(current_contents, &current_settings, error)) {
+            return false;
+        }
+    }
+
+    const std::string text = SerializeSettings(settings);
+#ifdef _WIN32
+    return WriteSettingsBytesAtomically(path, text, exists, error);
+#else
+    return WriteSettingsBytesAtomically(utf8_path, text, exists, error);
 #endif
 }
 
