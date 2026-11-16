@@ -39,7 +39,7 @@ The current database schema is the compatibility baseline: `loans(id, title, loa
 ### 4. Infrastructure
 
 Responsibilities:
-- Portable path resolution based on the executable location, not the process working directory.
+- Portable path resolution based on the executable location, not the process working directory. `BuildApplicationPaths` centralises the layout in a pure C++11 model; startup rejects a failed/truncated executable path and never substitutes `.` or the current working directory.
 - Settings file loading, validation, and saving.
 - Diagnostic log writing and archival.
 - Single-instance coordination uses a named Win32 mutex derived from the executable directory. If Windows cannot create the mutex, startup fails closed rather than opening the database without the single-instance guarantee.
@@ -74,6 +74,14 @@ BiblioLED/
 ```
 
 All paths are resolved from the executable directory. The existing application icon is compiled into BiblioLED.exe as a Win32 resource; the portable distribution does not need a separate icon file. Keep port.ico in the source repository as the resource input. The loan table supports header drag-and-drop; its display order and per-column widths are persisted in config/settings.ini. Program updates must not overwrite user data, settings, backups, exports, or logs.
+
+## Application path model
+
+`include/biblioled/application_paths.h` and `src/core/application_paths.cpp` define a filesystem-independent C++11 path model. It receives the absolute executable filename and produces the application root, config/data/backup/export/log directories, settings file, database file, and initialisation marker in one value object. Drive-root and UNC paths are supported; forward slashes are normalised to Win32 backslashes, and Unicode is retained in wide strings.
+
+The Win32 entry point obtains the executable filename with `GetModuleFileNameW`. An API failure, a truncated result at the Windows `MAX_PATH` boundary, or a non-absolute path stops startup before the mutex, settings, or database are opened. There is deliberately no fallback to `.` or the process working directory, which could otherwise cause a second database to be created or opened when the application is launched from a shortcut or another shell directory.
+
+The path builder is independent of Win32 and is covered by isolated tests for ordinary paths, drive roots, UNC shares, Unicode names, slash normalisation, and invalid/relative inputs. Win32 filesystem calls continue to use wide paths; the SQLite store boundary receives UTF-8 paths as before.
 
 ## Database safety model
 
@@ -141,7 +149,7 @@ These UI refinements are implemented:
 - The resource script declares code page 65001, and MSVC C++ source compilation explicitly uses UTF-8. Statistics error strings now convert from UTF-8 correctly.
 - F5 is not used for main-window refresh or audit retry. Audit-log recovery remains available from the explicit Ficheiro command.
 - Clicking a header in the main loans list or history list sorts by that column; a repeated click reverses direction. Titles and types use case-insensitive locale-aware alphabetical comparison, IDs and remaining days use numeric comparison, and loan/expiry dates use chronological comparison.
-- The user confirmed on 2026-11-15 that the executable runs well on Windows XP and that secondary-window Portuguese text encoding is corrected. The exact executable hash, XP build and exercised test scenarios remain undocumented; recovery and failure-path validation still need a reproducible record.
+- The user reconfirmed on 2026-11-16 that the executable runs well on Windows XP; the earlier 2026-11-15 confirmation also covered the corrected secondary-window text encoding and that secondary-window Portuguese text encoding is corrected. The exact executable hash, XP build and exercised test scenarios remain undocumented; recovery and failure-path validation still need a reproducible record.
 
 ## Initial proof-of-concept implementation
 

@@ -6,6 +6,7 @@
 #include "biblioled/loan_rules.h"
 #include "biblioled/csv_export.h"
 #include "biblioled/audit_log.h"
+#include "biblioled/application_paths.h"
 #include "resource.h"
 #include "history_dialog.h"
 #include "statistics_dialog.h"
@@ -87,8 +88,7 @@ HWND gStatusLabel = NULL;
 HANDLE gInstanceMutex = NULL;
 HICON gApplicationIcon = NULL;
 HACCEL gMainAccelerators = NULL;
-std::wstring gApplicationDirectory;
-std::wstring gSettingsPath;
+biblioled::ApplicationPaths gApplicationPaths;
 bool gSettingsFileValid = false;
 bool gColumnSettingsWarningShown = false;
 bool gGeneralSettingsPending = false;
@@ -118,24 +118,33 @@ enum {
     kStatusHeight = 23
 };
 
-std::wstring JoinPath(const std::wstring& left, const std::wstring& right)
+bool ResolveApplicationPaths(biblioled::ApplicationPaths* paths,
+                            std::wstring* error)
 {
-    if (left.empty()) return right;
-    const wchar_t last = left[left.size() - 1];
-    if (last == L'\\' || last == L'/') return left + right;
-    return left + L"\\" + right;
-}
+    wchar_t executable_path[MAX_PATH] = {0};
+    SetLastError(ERROR_SUCCESS);
+    const DWORD length =
+        GetModuleFileNameW(NULL, executable_path, MAX_PATH);
 
-std::wstring GetApplicationDirectory()
-{
-    wchar_t path[MAX_PATH] = {0};
-    const DWORD length = GetModuleFileNameW(NULL, path, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) return L".";
+    if (length == 0) {
+        const DWORD code = GetLastError();
+        std::wostringstream message;
+        message << L"Não foi possível determinar o caminho do executável "
+                << L"(erro Win32 " << code << L").";
+        if (error) *error = message.str();
+        return false;
+    }
 
-    std::wstring full(path, length);
-    const std::wstring::size_type separator = full.find_last_of(L"\\/");
-    if (separator == std::wstring::npos) return L".";
-    return full.substr(0, separator);
+    if (length >= MAX_PATH) {
+        if (error) {
+            *error = L"O caminho completo do executável excede o limite "
+                     L"suportado pelo Windows XP.";
+        }
+        return false;
+    }
+
+    return biblioled::BuildApplicationPaths(
+        std::wstring(executable_path, length), paths, error);
 }
 
 std::string WideToUtf8(const std::wstring& value)
@@ -665,7 +674,7 @@ bool SynchronizeExternalAuditLog(bool show_error)
 
     if (ok) {
         const std::wstring log_directory =
-            JoinPath(gApplicationDirectory, L"logs");
+            gApplicationPaths.log_directory;
         ok = biblioled::SynchronizeAuditLog(
             log_directory, events, gSettings.audit_log_max_size_bytes,
             &written, &error);
@@ -742,7 +751,7 @@ bool SaveColumnLayout()
     }
 
     std::string error;
-    if (!WriteSettings(gSettingsPath, persisted, &error)) {
+    if (!WriteSettings(gApplicationPaths.settings_file, persisted, &error)) {
         if (!gColumnSettingsWarningShown) {
             MessageBoxW(gMainWindow, Utf8ToWide(error).c_str(), L"BiblioLED",
                         MB_OK | MB_ICONWARNING);
@@ -985,7 +994,7 @@ void ExportLoansToCsv()
     if(!gStore.GetAll(&records,&error)){
         ShowStoreError(L"Não foi possível preparar a exportação.",error); return;
     }
-    const std::wstring export_directory=JoinPath(gApplicationDirectory,L"exports");
+    const std::wstring export_directory=gApplicationPaths.export_directory;
     if(!EnsureDirectory(export_directory)){
         ShowStoreError(L"Não foi possível preparar a pasta de exportação.","Unable to create exports directory."); return;
     }
@@ -1134,7 +1143,7 @@ void RestoreDatabaseFromBackup()
 {
     wchar_t filename[MAX_PATH] = {0};
     const std::wstring backup_directory =
-        JoinPath(gApplicationDirectory, L"data\\backups");
+        gApplicationPaths.backup_directory;
 
     static const wchar_t filter[] =
         L"Cópias SQLite (*.sqlite;*.sqlite.gz;*.sqlite.zlib)\0*.sqlite;*.sqlite.gz;*.sqlite.zlib\0"
@@ -1581,7 +1590,7 @@ void ShowGeneralSettings()
     CopyGeneralSettings(edited, &persisted);
 
     std::string error;
-    if (!WriteSettings(gSettingsPath, persisted, &error)) {
+    if (!WriteSettings(gApplicationPaths.settings_file, persisted, &error)) {
         ShowStoreError(L"Não foi possível guardar as definições gerais.", error);
         return;
     }
@@ -1655,7 +1664,7 @@ void ShowBackupSettings()
     }
 
     std::string error;
-    if (!WriteSettings(gSettingsPath, persisted, &error)) {
+    if (!WriteSettings(gApplicationPaths.settings_file, persisted, &error)) {
         ShowStoreError(L"Não foi possível guardar as definições de cópias de segurança.", error);
         return;
     }
@@ -1864,11 +1873,16 @@ unsigned long DirectoryHash(const std::wstring& value)
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
 {
     gInstance = instance;
-    gApplicationDirectory = GetApplicationDirectory();
+    std::wstring path_error;
+    if (!ResolveApplicationPaths(&gApplicationPaths, &path_error)) {
+        MessageBoxW(NULL, path_error.c_str(), L"BiblioLED",
+                    MB_OK | MB_ICONERROR);
+        return 1;
+    }
 
     wchar_t mutex_name[80] = {0};
     _snwprintf(mutex_name, 79, L"Local\\BiblioLED_%08lX",
-               DirectoryHash(gApplicationDirectory));
+               DirectoryHash(gApplicationPaths.application_directory));
 
     SetLastError(ERROR_SUCCESS);
     gInstanceMutex = CreateMutexW(NULL, TRUE, mutex_name);
@@ -1898,11 +1912,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     const std::wstring required_directories[] = {
-        JoinPath(gApplicationDirectory, L"config"),
-        JoinPath(gApplicationDirectory, L"data"),
-        JoinPath(gApplicationDirectory, L"data\\backups"),
-        JoinPath(gApplicationDirectory, L"exports"),
-        JoinPath(gApplicationDirectory, L"logs")
+        gApplicationPaths.config_directory,
+        gApplicationPaths.data_directory,
+        gApplicationPaths.backup_directory,
+        gApplicationPaths.export_directory,
+        gApplicationPaths.log_directory
     };
     for (size_t i = 0;
          i < sizeof(required_directories) / sizeof(required_directories[0]); ++i) {
@@ -1925,24 +1939,23 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     std::string settings_error;
-    gSettingsPath = JoinPath(gApplicationDirectory, L"config\\settings.ini");
-    gSettingsFileValid = LoadSettings(gSettingsPath, &gSettings, &settings_error);
+    gSettingsFileValid = LoadSettings(
+        gApplicationPaths.settings_file, &gSettings, &settings_error);
     if (!gSettingsFileValid && !settings_error.empty()) {
         MessageBoxW(NULL, Utf8ToWide(settings_error).c_str(), L"BiblioLED",
                     MB_OK | MB_ICONWARNING);
     }
 
-    const std::wstring database_path =
-        JoinPath(gApplicationDirectory, L"data\\biblioteca.sqlite");
-    const std::wstring database_marker =
-        JoinPath(gApplicationDirectory, L"config\\database.initialized");
+    const std::wstring& database_path = gApplicationPaths.database_file;
+    const std::wstring& database_marker =
+        gApplicationPaths.database_marker_file;
     const bool database_exists = FileExistsW(database_path);
     const bool database_marker_exists = FileExistsW(database_marker);
 
     const std::string database_utf8 = WideToUtf8(database_path);
     std::string database_error;
     const std::wstring backup_directory =
-        JoinPath(gApplicationDirectory, L"data\\backups");
+        gApplicationPaths.backup_directory;
     const std::string backup_directory_utf8 = WideToUtf8(backup_directory);
     std::string recovery_backup_path;
     std::string recovery_preserved_path;

@@ -108,17 +108,18 @@ The `Core tests` workflow has three jobs:
 - Modern Windows: Win32 compilation plus SQLite-store and Windows audit-log tests.
 - Cppcheck: version-gated Cppcheck 2.19.0 analysis of selected portable C++11 sources and tests.
 
-The separate `XP-targeted Win32 build` workflow uses pinned w64devkit x86 2.10.0, builds the application and tests, runs the seven XP-targeted tests, inspects the PE executable/imports, and uploads the disposable package.
+The separate `XP-targeted Win32 build` workflow uses pinned w64devkit x86 2.10.0, builds the application and tests, runs the eight XP-targeted tests, inspects the PE executable/imports, and uploads the disposable package.
 
 The Windows/XP test set comprises:
 
-1. `loan_csv_export_tests`
-2. `loan_rules_tests`
-3. `loan_statistics_tests`
-4. `loan_store_tests`
-5. `backup_compression_tests`
-6. `backup_retention_tests`
-7. `audit_log_tests` (Windows only)
+1. `application_paths_tests`
+2. `loan_csv_export_tests`
+3. `loan_rules_tests`
+4. `loan_statistics_tests`
+5. `loan_store_tests`
+6. `backup_compression_tests`
+7. `backup_retention_tests`
+8. `audit_log_tests` (Windows only)
 
 ### Latest validated build
 
@@ -159,7 +160,11 @@ BiblioLED/
 
 The general settings dialog persists loan limits, loan duration, diagnostics, and audit-log size. General settings take effect on the next launch. The separate backup-settings dialog applies compression format and level immediately to the open store.
 
-On Windows, application/store paths are passed as UTF-8 and converted to UTF-16 for file-system operations. The INI file is read/written using wide-character Win32 APIs. Required directories are validated on startup; if a required path is a file rather than a directory, startup stops before opening the database.
+On Windows, the entry point obtains the executable filename with `GetModuleFileNameW` and passes it to the pure C++11 `BuildApplicationPaths` model. The model derives the complete application root, config/data/backup/export/log directories, settings file, database file, and initialisation marker. Drive-root and UNC installations are supported; Unicode is retained in wide strings. The INI file and other Win32 filesystem operations use wide-character APIs, while paths passed to the SQLite store are converted to UTF-8.
+
+The executable path must be absolute and must fit the Windows `MAX_PATH` buffer used by the XP-compatible entry point. Failure or truncation stops startup before the mutex, settings, or database are opened. The application no longer falls back to `.` or the process working directory, preventing the launch location from silently selecting a different database. Required directories are validated on startup; if a required path is a file rather than a directory, startup stops before opening the database.
+
+The path model is covered by isolated tests for normal paths, drive roots, UNC shares, Unicode folder names, slash normalisation, and rejection of relative/incomplete paths.
 
 ## SQLite schema, migration, and recovery
 
