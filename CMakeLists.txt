@@ -59,6 +59,7 @@ add_library(biblioled_core
     src/core/loan_rules.cpp
     src/core/loan_statistics.cpp
     src/core/loan_store.cpp
+    src/infrastructure/settings_store.cpp
     src/infrastructure/backup_compression.cpp
     src/infrastructure/backup_retention.cpp
 )
@@ -137,6 +138,10 @@ if(BUILD_TESTING)
     add_executable(application_paths_tests tests/application_paths_tests.cpp)
     target_link_libraries(application_paths_tests PRIVATE biblioled_core)
     add_test(NAME application_paths_tests COMMAND application_paths_tests)
+
+    add_executable(settings_store_tests tests/settings_store_tests.cpp)
+    target_link_libraries(settings_store_tests PRIVATE biblioled_core)
+    add_test(NAME settings_store_tests COMMAND settings_store_tests)
 
     add_executable(loan_csv_export_tests tests/loan_csv_export_tests.cpp)
     target_link_libraries(loan_csv_export_tests PRIVATE biblioled_core)

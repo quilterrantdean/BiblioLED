@@ -7,6 +7,7 @@
 #include "biblioled/csv_export.h"
 #include "biblioled/audit_log.h"
 #include "biblioled/application_paths.h"
+#include "biblioled/settings_store.h"
 #include "resource.h"
 #include "history_dialog.h"
 #include "statistics_dialog.h"
@@ -28,34 +29,8 @@ namespace {
 const wchar_t* kWindowClass = L"BiblioLEDMainWindow";
 const UINT kActivateMessage = WM_APP + 10;
 const UINT kPersistColumnsMessage = WM_APP + 11;
-const int kColumnCount = 5;
-
-struct AppSettings {
-    int daily_limit;
-    int monthly_limit;
-    int monthly_window_days;
-    int loan_duration_days;
-    bool diagnostics_enabled;
-    unsigned long audit_log_max_size_bytes;
-    std::string backup_compression_format;
-    int backup_compression_level;
-    int column_order[kColumnCount];
-    int column_widths[kColumnCount];
-
-    AppSettings()
-        : daily_limit(5), monthly_limit(20),
-          monthly_window_days(30), loan_duration_days(21),
-          diagnostics_enabled(true), audit_log_max_size_bytes(5UL * 1024UL * 1024UL),
-          backup_compression_format("gzip"), backup_compression_level(6)
-    {
-        for (int i = 0; i < kColumnCount; ++i) column_order[i] = i;
-        column_widths[0] = 320;
-        column_widths[1] = 100;
-        column_widths[2] = 130;
-        column_widths[3] = 130;
-        column_widths[4] = 55;
-    }
-};
+using biblioled::AppSettings;
+const int kColumnCount = biblioled::kSettingsColumnCount;
 
 struct RecordDialogContext {
     biblioled::LoanRecord record;
@@ -236,298 +211,6 @@ bool CreateDatabaseMarker(const std::wstring& path, std::wstring* error)
             *error = L"Não foi possível gravar o marcador de segurança da base de dados. "
                      L"A aplicação não permitirá alterações nesta sessão.";
         }
-        return false;
-    }
-    return true;
-}
-
-std::string Trim(const std::string& value)
-{
-    const std::string::size_type first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) return std::string();
-    const std::string::size_type last = value.find_last_not_of(" \t\r\n");
-    return value.substr(first, last - first + 1);
-}
-
-bool ParsePositiveInteger(const std::string& text, int minimum, int maximum, int* value)
-{
-    if (!value) return false;
-    char* end = NULL;
-    const long parsed = std::strtol(text.c_str(), &end, 10);
-    if (text.empty() || !end || *end != '\0' || parsed < minimum || parsed > maximum) {
-        return false;
-    }
-    *value = static_cast<int>(parsed);
-    return true;
-}
-
-bool ParseIntegerList(const std::string& text, int minimum, int maximum,
-                      int* values, int count, bool require_unique)
-{
-    if (!values || count <= 0) return false;
-    std::string::size_type start = 0;
-    for (int i = 0; i < count; ++i) {
-        const std::string::size_type comma = text.find(',', start);
-        if ((i < count - 1 && comma == std::string::npos) ||
-            (i == count - 1 && comma != std::string::npos)) return false;
-        const std::string token = Trim(text.substr(
-            start, comma == std::string::npos ? std::string::npos : comma - start));
-        if (!ParsePositiveInteger(token, minimum, maximum, &values[i])) return false;
-        if (require_unique) {
-            for (int j = 0; j < i; ++j) {
-                if (values[j] == values[i]) return false;
-            }
-        }
-        if (comma == std::string::npos) break;
-        start = comma + 1;
-    }
-    return true;
-}
-
-std::string IntegerListToString(const int* values, int count)
-{
-    std::ostringstream output;
-    for (int i = 0; i < count; ++i) {
-        if (i) output << ',';
-        output << values[i];
-    }
-    return output.str();
-}
-
-bool ParseBoolean(const std::string& text, bool* value)
-{
-    if (!value) return false;
-    if (text == "0") { *value = false; return true; }
-    if (text == "1") { *value = true; return true; }
-    return false;
-}
-
-bool ReadUtf8File(const std::wstring& path,
-                  std::string* contents,
-                  bool* exists,
-                  std::string* error)
-{
-    if (!contents || !exists) {
-        if (error) *error = "Invalid file-reading output argument.";
-        return false;
-    }
-
-    contents->clear();
-    *exists = false;
-    HANDLE file = CreateFileW(
-        path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file == INVALID_HANDLE_VALUE) {
-        const DWORD code = GetLastError();
-        if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) {
-            return true;
-        }
-        if (error) {
-            std::ostringstream message;
-            message << "Não foi possível ler config/settings.ini (erro Win32 "
-                    << code << ").";
-            *error = message.str();
-        }
-        return false;
-    }
-
-    *exists = true;
-    char buffer[8192];
-    bool ok = true;
-    while (ok) {
-        DWORD received = 0;
-        if (!ReadFile(file, buffer, sizeof(buffer), &received, NULL)) {
-            ok = false;
-            break;
-        }
-        if (received == 0) break;
-        contents->append(buffer, received);
-    }
-
-    if (!CloseHandle(file)) ok = false;
-    if (!ok) {
-        contents->clear();
-        if (error) *error = "Não foi possível ler integralmente config/settings.ini.";
-    }
-    return ok;
-}
-
-bool WriteUtf8File(const std::wstring& path,
-                   const std::string& contents,
-                   bool create_new)
-{
-    HANDLE file = CreateFileW(
-        path.c_str(), GENERIC_WRITE, 0, NULL,
-        create_new ? CREATE_NEW : CREATE_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file == INVALID_HANDLE_VALUE) return false;
-
-    size_t offset = 0;
-    bool ok = true;
-    while (offset < contents.size()) {
-        const size_t remaining = contents.size() - offset;
-        const DWORD requested = static_cast<DWORD>(
-            remaining > 65536 ? 65536 : remaining);
-        DWORD written = 0;
-        if (!WriteFile(file, contents.data() + offset, requested, &written, NULL) ||
-            written == 0) {
-            ok = false;
-            break;
-        }
-        offset += written;
-    }
-
-    if (ok && !FlushFileBuffers(file)) ok = false;
-    if (!CloseHandle(file)) ok = false;
-    if (!ok) DeleteFileW(path.c_str());
-    return ok;
-}
-
-bool WriteDefaultSettings(const std::wstring& path)
-{
-    static const char contents[] =
-        "; BiblioLED portable settings\r\n"
-        "[limits]\r\n"
-        "daily_limit=5\r\n"
-        "monthly_limit=20\r\n"
-        "monthly_window_days=30\r\n"
-        "loan_duration_days=21\r\n"
-        "\r\n"
-        "[diagnostics]\r\n"
-        "enabled=1\r\n"
-        "max_log_size_bytes=5242880\r\n"
-        "\r\n"
-        "[backups]\r\n"
-        "compression_format=gzip\r\n"
-        "compression_level=6\r\n"
-        "\r\n"
-        "[columns]\r\n"
-        "order=0,1,2,3,4\r\n"
-        "widths=320,100,130,130,55\r\n";
-    return WriteUtf8File(
-        path, std::string(contents, sizeof(contents) - 1), true);
-}
-
-bool LoadSettings(const std::wstring& path, AppSettings* settings, std::string* error)
-{
-    if (!settings) return false;
-
-    std::string contents;
-    bool exists = false;
-    if (!ReadUtf8File(path, &contents, &exists, error)) return false;
-    if (!exists) {
-        if (!WriteDefaultSettings(path)) {
-            if (error) *error = "Não foi possível criar config/settings.ini.";
-            return false;
-        }
-        *settings = AppSettings();
-        return true;
-    }
-
-    AppSettings loaded;
-    std::istringstream input(contents);
-    std::string line;
-    int seen_limits = 0;
-    bool valid = true;
-
-    while (std::getline(input, line)) {
-        line = Trim(line);
-        if (line.empty() || line[0] == ';' || line[0] == '#' || line[0] == '[') continue;
-
-        const std::string::size_type equals = line.find('=');
-        if (equals == std::string::npos) { valid = false; break; }
-
-        const std::string key = Trim(line.substr(0, equals));
-        const std::string value = Trim(line.substr(equals + 1));
-        int parsed = 0;
-
-        if (key == "daily_limit") {
-            valid = ParsePositiveInteger(value, 1, 1000, &parsed);
-            if (valid) loaded.daily_limit = parsed;
-            ++seen_limits;
-        } else if (key == "monthly_limit") {
-            valid = ParsePositiveInteger(value, 1, 10000, &parsed);
-            if (valid) loaded.monthly_limit = parsed;
-            ++seen_limits;
-        } else if (key == "monthly_window_days") {
-            valid = ParsePositiveInteger(value, 1, 3660, &parsed);
-            if (valid) loaded.monthly_window_days = parsed;
-            ++seen_limits;
-        } else if (key == "loan_duration_days") {
-            valid = ParsePositiveInteger(value, 1, 3660, &parsed);
-            if (valid) loaded.loan_duration_days = parsed;
-            ++seen_limits;
-        } else if (key == "enabled") {
-            valid = ParseBoolean(value, &loaded.diagnostics_enabled);
-        } else if (key == "max_log_size_bytes") {
-            int log_size = 0;
-            valid = ParsePositiveInteger(value, 65536, 1073741824, &log_size);
-            if (valid) loaded.audit_log_max_size_bytes = static_cast<unsigned long>(log_size);
-        } else if (key == "compression_format") {
-            valid = value == "gzip" || value == "zlib";
-            if (valid) loaded.backup_compression_format = value;
-        } else if (key == "compression_level") {
-            valid = ParsePositiveInteger(value, 0, 9, &parsed);
-            if (valid) loaded.backup_compression_level = parsed;
-        } else if (key == "order") {
-            valid = ParseIntegerList(value, 0, kColumnCount - 1,
-                                     loaded.column_order, kColumnCount, true);
-        } else if (key == "widths") {
-            valid = ParseIntegerList(value, 30, 2000,
-                                     loaded.column_widths, kColumnCount, false);
-        }
-
-        if (!valid) break;
-    }
-
-    if (!valid || seen_limits != 4) {
-        if (error) {
-            *error = "As configurações são inválidas. O ficheiro original foi preservado; "
-                     "serão usados valores predefinidos nesta sessão.";
-        }
-        *settings = AppSettings();
-        return false;
-    }
-
-    *settings = loaded;
-    return true;
-}
-
-bool WriteSettings(const std::wstring& path,
-                   const AppSettings& settings,
-                   std::string* error)
-{
-    const std::wstring temporary_path = path + L".tmp";
-    std::ostringstream output;
-    output << "; BiblioLED portable settings\r\n"
-              "[limits]\r\n"
-           << "daily_limit=" << settings.daily_limit << "\r\n"
-           << "monthly_limit=" << settings.monthly_limit << "\r\n"
-           << "monthly_window_days=" << settings.monthly_window_days << "\r\n"
-           << "loan_duration_days=" << settings.loan_duration_days << "\r\n"
-              "\r\n"
-              "[diagnostics]\r\n"
-           << "enabled=" << (settings.diagnostics_enabled ? 1 : 0) << "\r\n"
-           << "max_log_size_bytes=" << settings.audit_log_max_size_bytes << "\r\n"
-              "\r\n"
-              "[backups]\r\n"
-           << "compression_format=" << settings.backup_compression_format << "\r\n"
-           << "compression_level=" << settings.backup_compression_level << "\r\n"
-              "\r\n"
-              "[columns]\r\n"
-           << "order=" << IntegerListToString(settings.column_order, kColumnCount) << "\r\n"
-           << "widths=" << IntegerListToString(settings.column_widths, kColumnCount) << "\r\n";
-
-    if (!output.good() ||
-        !WriteUtf8File(temporary_path, output.str(), false)) {
-        if (error) *error = "Não foi possível gravar todas as configurações.";
-        return false;
-    }
-
-    if (!MoveFileExW(temporary_path.c_str(), path.c_str(),
-                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        DeleteFileW(temporary_path.c_str());
-        if (error) *error = "Não foi possível substituir config/settings.ini.";
         return false;
     }
     return true;
@@ -776,7 +459,7 @@ bool SaveColumnLayout()
     }
 
     std::string error;
-    if (!WriteSettings(gApplicationPaths.settings_file, persisted, &error)) {
+    if (!biblioled::SaveSettingsFile(WideToUtf8(gApplicationPaths.settings_file), persisted, &error)) {
         if (!gColumnSettingsWarningShown) {
             RecordApplicationDiagnostic(
                 "failure", "save_column_layout", error);
@@ -1623,7 +1306,7 @@ void ShowGeneralSettings()
     CopyGeneralSettings(edited, &persisted);
 
     std::string error;
-    if (!WriteSettings(gApplicationPaths.settings_file, persisted, &error)) {
+    if (!biblioled::SaveSettingsFile(WideToUtf8(gApplicationPaths.settings_file), persisted, &error)) {
         ShowStoreError(L"Não foi possível guardar as definições gerais.", error);
         return;
     }
@@ -1701,7 +1384,7 @@ void ShowBackupSettings()
     }
 
     std::string error;
-    if (!WriteSettings(gApplicationPaths.settings_file, persisted, &error)) {
+    if (!biblioled::SaveSettingsFile(WideToUtf8(gApplicationPaths.settings_file), persisted, &error)) {
         ShowStoreError(L"Não foi possível guardar as definições de cópias de segurança.", error);
         return;
     }
@@ -1979,8 +1662,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     }
 
     std::string settings_error;
-    gSettingsFileValid = LoadSettings(
-        gApplicationPaths.settings_file, &gSettings, &settings_error);
+    gSettingsFileValid = biblioled::LoadSettingsFile(
+        WideToUtf8(gApplicationPaths.settings_file), &gSettings, &settings_error);
     if (!gSettingsFileValid && !settings_error.empty()) {
         MessageBoxW(NULL, Utf8ToWide(settings_error).c_str(), L"BiblioLED",
                     MB_OK | MB_ICONWARNING);
