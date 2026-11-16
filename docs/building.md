@@ -123,15 +123,15 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-The latest validated product-code commit is `ba7edd00fabd97dc76f6b5d2dce5c5b53aa32cc4`. Its validation passed:
+The latest validated product-code commit is `0e887a1370770b8034f502702e21d8f795481fb3`. Its validation passed:
 
-- [Core tests run 43894232059](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232059): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
-- [XP-targeted build run 43894232042](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042): w64devkit x86 2.10.0, all eight tests (including application-path and diagnostic-audit coverage), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
+- [Core tests run 43895046573](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046573): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
+- [XP-targeted build run 43895046599](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599): w64devkit x86 2.10.0, all eight tests (including application-path, diagnostic-audit and rollback-failure coverage), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
 
-The disposable artefact is [14239215992](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042/artifacts/14239215992), `BiblioLED-XP-PoC`:
+The disposable artefact is [14238891456](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599/artifacts/14238891456), `BiblioLED-XP-PoC`:
 
 - ZIP size: 1,554,248 bytes
-- ZIP SHA-256: `25cbca3907390157010868024b4f193a438c13745e8d40e18f32332dd091f8a4`
+- ZIP SHA-256: `f389f27710f1f7d52ac15a7bccc5caa2e09f447f8e38567b7591b1d1cb484b2e`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
@@ -250,3 +250,9 @@ Do not use this proof of concept with the user's real application data.
 The application records user-visible validation warnings and operation failures internally as `application_warning`, `application_error`, and `application_failure` audit events. The main window covers loan-dialog validation, general-settings validation, invalid settings files, and operational failures. The history and statistics windows queue their data-read and calculation failures. Entries include a context identifier and diagnostic details; they do not copy full user-entered form contents.
 
 Diagnostic rows can still be queued in SQLite while the external log is unhealthy. This does not mark the external log healthy or permit loan-data changes: the existing read-only safety gate remains active. The queued diagnostic events are included by the normal synchronisation lifecycle when logging becomes available again. Errors before database opening, during legacy migration, or when SQLite cannot accept a write cannot be recorded internally.
+
+## Explicit ROLLBACK failure test
+
+The XP-targeted and modern Win32 test builds execute a deterministic rollback-failure case in `loan_store_tests`. An SQLite authorizer rejects the explicit `ROLLBACK` statement while a transaction contains an uncommitted row. The store must report the failure and close its connection; reopening the same isolated test database must discard the uncommitted row and pass `quick_check`.
+
+This does not simulate sudden power loss or termination of the process. Those tests remain in the development plan.

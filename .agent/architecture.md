@@ -180,12 +180,12 @@ SQLite 3.53.4 is fetched as an amalgamation and statically linked for Windows bu
 
 ## Latest CI evidence
 
-Latest validated source head `ba7edd00fabd97dc76f6b5d2dce5c5b53aa32cc4` on `development` passed the complete CI matrix.
+Latest validated source head `0e887a1370770b8034f502702e21d8f795481fb3` on `development` passed the complete CI matrix.
 
-- [Core tests run 43894232059](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232059): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
-- [XP-targeted build run 43894232042](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including the extended diagnostic audit checks; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- [Core tests run 43895046573](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046573): Ubuntu core tests, modern Windows SDK Win32 compile/store tests, and Cppcheck 2.19.0 all succeeded.
+- [XP-targeted build run 43895046599](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599): pinned w64devkit x86 2.10.0 built the application and tests; all 8 CTest tests passed, including diagnostic-audit and explicit rollback-failure coverage; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
 
-Latest CI artefact: [14239215992](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042/artifacts/14239215992), `BiblioLED-XP-PoC`, 1,554,248 bytes. ZIP SHA-256: `25cbca3907390157010868024b4f193a438c13745e8d40e18f32332dd091f8a4`.
+Latest CI artefact: [14238891456](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599/artifacts/14238891456), `BiblioLED-XP-PoC`, 1,554,248 bytes. ZIP SHA-256: `f389f27710f1f7d52ac15a7bccc5caa2e09f447f8e38567b7591b1d1cb484b2e`.
 
 The ZIP contains only the executable, example INI, XP test guide and PE inspection report; it has no SQLite/database file. This remains a disposable validation artefact, not a normal portable release. The user confirmed that the executable runs well on XP; CI compilation and isolated tests do not prove the full manual recovery/failure-path matrix.
 
@@ -212,3 +212,9 @@ The Win32 shell records user-visible validation warnings and operation failures 
 Diagnostic writes are audit-only and do not trigger automatic backups. They may bypass only the external-log health gate, so an event explaining an external logging failure can still be queued in SQLite. This does not modify the external-log health flag, restore file logging, or enable loan-data mutations. Normal audit events and loan mutations remain blocked while enabled external logging is unhealthy. The diagnostic writer does not attempt immediate external synchronisation, avoiding recursive error reporting; queued rows are included by the normal synchronisation lifecycle.
 
 Diagnostics cannot be persisted before a usable versioned database is open, while a legacy database awaits migration, or after a database failure that prevents writes. Startup settings-file warnings are queued only after the database has opened successfully.
+
+## Explicit ROLLBACK failure test
+
+The isolated `loan_store_tests` suite installs a connection-local SQLite authorizer that rejects only the `SQLITE_TRANSACTION` action for `ROLLBACK`. The test opens an isolated database, starts an explicit transaction, inserts an uncommitted loan, and invokes the same private rollback method used by the store's failure handling. It verifies that the rollback failure is reported and the `LoanStore` connection is closed.
+
+The test then reopens the database through a new `LoanStore` instance, confirms that the uncommitted row is absent, and runs `quick_check`. This verifies the close-and-reopen recovery path after an explicit rollback command is refused. It is not a power-loss or forced-process-termination test; that coverage remains outstanding.

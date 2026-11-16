@@ -128,11 +128,13 @@ The user confirmed on 2026-11-16 that the executable runs well on Windows XP. Th
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest validated product-code and CI head is `ba7edd00fabd97dc76f6b5d2dce5c5b53aa32cc4` on `development`.
+The latest validated product-code and CI head is `0e887a1370770b8034f502702e21d8f795481fb3` on `development`.
 
-- [Core tests run 43894232059](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232059) succeeded: Ubuntu tests, modern Windows SDK Win32 build/store tests, and Cppcheck 2.19.0 all passed.
-- [XP-targeted Win32 build run 43894232042](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042) succeeded using pinned w64devkit x86 2.10.0. All 8 CTest tests passed, including the diagnostic-audit additions; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
-- Artefact [14239215992](https://github.com/quilterrantdean/BiblioLED/actions/runs/43894232042/artifacts/14239215992), `BiblioLED-XP-PoC`: 1,554,248 bytes; ZIP SHA-256 `25cbca3907390157010868024b4f193a438c13745e8d40e18f32332dd091f8a4`.
+- [Core tests run 43895046573](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046573) succeeded: Ubuntu tests, modern Windows SDK Win32 build/store tests, and Cppcheck 2.19.0 all passed.
+- [XP-targeted Win32 build run 43895046599](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599) succeeded using pinned w64devkit x86 2.10.0. All 8 CTest tests passed, including diagnostic-audit and explicit rollback-failure coverage; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- Artefact [14238891456](https://github.com/quilterrantdean/BiblioLED/actions/runs/43895046599/artifacts/14238891456), `BiblioLED-XP-PoC`: 1,554,248 bytes; ZIP SHA-256 `f389f27710f1f7d52ac15a7bccc5caa2e09f447f8e38567b7591b1d1cb484b2e`.
+
+
 
 The sorting implementation, central executable-relative path model and application diagnostic coverage are included in this validated source head. The user confirmed on 2026-11-16 that the executable runs well on Windows XP; secondary-window Portuguese text encoding was confirmed corrected on 2026-11-15. The exact manually tested executable hash and scenario list remain unrecorded.
 
@@ -166,3 +168,9 @@ The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained th
 The Win32 shell records validation warnings and operation failures as `application_warning` and `application_failure` events. History/statistics read and calculation failures are also queued. The store accepts only `warning`, `error`, and `failure` diagnostic severities, mapped to `application_warning`, `application_error`, and `application_failure`.
 
 Diagnostic writes may bypass only the external-log health gate so the events explaining an external logging failure can remain queued in SQLite. They do not alter the health flag or enable loan mutations. Ordinary audit events and loan mutations remain blocked while enabled external logging is unhealthy. Diagnostics cannot be recorded before a usable versioned database is open or while a legacy database awaits migration.
+
+## Explicit ROLLBACK failure test
+
+The store test suite forces the explicit `ROLLBACK` statement to be rejected through SQLite's authorizer callback on the isolated test connection. It verifies that the store reports the failure, drops the connection, and that reopening the database discards the uncommitted row and passes `quick_check`. The test-only friend adapter does not add a public handle or runtime hook.
+
+This is deterministic rollback-command failure coverage, not yet a simulation of power loss or forced process termination. The latter remains an open test task.
