@@ -223,6 +223,22 @@ std::wstring GetControlText(HWND dialog, int control_id)
     return buffer;
 }
 
+bool ParsePositiveInteger(const std::string& text,
+                          int minimum,
+                          int maximum,
+                          int* value)
+{
+    if (!value || text.empty()) return false;
+    char* end = NULL;
+    const long parsed = std::strtol(text.c_str(), &end, 10);
+    if (!end || end == text.c_str() || *end != '\\0' ||
+        parsed < minimum || parsed > maximum) {
+        return false;
+    }
+    *value = static_cast<int>(parsed);
+    return true;
+}
+
 INT_PTR CALLBACK LoanDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam)
 {
     RecordDialogContext* context =
