@@ -128,11 +128,11 @@ The user confirmed on 2026-11-16 that the executable runs well on Windows XP. Th
 
 The official w64devkit x86 release is used for the XP-targeted build. The upstream release states that the x86 package supports Windows XP and requires SSE2, matching the Pentium 4 target. CI pins release 2.10.0 by SHA-256. The executable is checked as PE32/i386 with Windows GUI subsystem 5.01; selected post-XP APIs and API-set DLL imports are rejected.
 
-The latest validated product-code and CI head is `738c1d07a1a8256a80a78c5cc03135576c3c4aba` on `development`.
+The latest validated product-code and CI head is `482e42d1389b4a907abd9b24afa153c1d257de2f` on `development`.
 
-- [Core tests run 43896578995](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578995) succeeded: Ubuntu tests, modern Windows SDK Win32 build/store tests, and Cppcheck 2.19.0 all passed.
-- [XP-targeted Win32 build run 43896578967](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967) succeeded using pinned w64devkit x86 2.10.0. All 8 CTest tests passed, including process-interruption recovery; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
-- Artefact [14239447095](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967/artifacts/14239447095), `BiblioLED-XP-PoC`: 1,554,246 bytes; ZIP SHA-256 `fbfbad00d193e85449700ba9e8d1044530eac3c22344de4c1dafad4eb18735e7`.
+- [Core tests run 43901422428](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422428) succeeded: Ubuntu tests (8/8), modern Windows SDK Win32 build/store tests (9/9), and Cppcheck 2.19.0 all passed.
+- [XP-targeted Win32 build run 43901422497](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497) succeeded using pinned w64devkit x86 2.10.0. All 9 CTest tests passed, including settings-store persistence and invalid-target protection; PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed.
+- Artefact [14240119311](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497/artifacts/14240119311), `BiblioLED-XP-PoC`: 1,568,598 bytes; ZIP SHA-256 `d6f6ddbcca4195609f93059d6745826ca011bdc1f35baee47b22185d9ea4c251`.
 
 
 
@@ -140,7 +140,7 @@ The sorting implementation, central executable-relative path model and applicati
 
 
 
-The explicit `ROLLBACK` statement failure path itself and abrupt process/power-loss interruption remain untested; the existing tests cover successful rollback after a forced DDL failure and rollback of file-preservation moves.
+The explicit `ROLLBACK` failure path and abrupt process termination are now covered by isolated tests. Physical power loss, later schema migrations and complete UI failure workflows remain outside the automated test matrix.
 
 The Actions-history cleanup on 2026-11-14 removed 223 older runs and retained the two then-current successful validation runs. Later commits and workflows create new runs normally. The user reports having tested the application manually; exact artefact, operating-system build and scenarios have not yet been recorded.
 
@@ -181,3 +181,10 @@ The new test terminates a separate child process while a SQLite DELETE-journal t
 
 This verifies recovery after abrupt process death; it does not claim to simulate a physical power failure or loss of storage-device write caches.
 
+## Portable INI settings persistence
+
+`AppSettings`, INI parsing, validation and filesystem persistence are isolated in `settings_store.*`; the Win32 entry point now delegates load/save to this service. The reader preserves the existing INI format/defaults, limits input to 64 KiB, accepts UTF-8 BOM, rejects invalid values and duplicate known keys, and leaves missing-file defaults or invalid-file fallback behaviour unchanged.
+
+Saving validates the in-memory settings and rereads an existing destination before replacement. A malformed or unreadable existing INI cannot be overwritten through the storage API, not merely through the current UI guard. Temporary files are created exclusively using a PID/attempt suffix, written fully and flushed before the atomic replacement. Windows uses wide-character APIs, `FlushFileBuffers` and write-through `MoveFileExW`; POSIX uses `fsync` followed by `rename`. POSIX parent-directory metadata is not fsynced, so the operation does not claim full directory-entry persistence through hardware power loss.
+
+The nine settings-store cases cover defaults, round-trip and existing-file replacement, invalid/duplicate file preservation, invalid in-memory values, temporary-name collision, replacement failure, directory paths and oversized input. All use disposable Unicode-named test directories.

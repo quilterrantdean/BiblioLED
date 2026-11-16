@@ -108,30 +108,31 @@ The `Core tests` workflow has three jobs:
 - Modern Windows: Win32 compilation plus SQLite-store and Windows audit-log tests.
 - Cppcheck: version-gated Cppcheck 2.19.0 analysis of selected portable C++11 sources and tests.
 
-The separate `XP-targeted Win32 build` workflow uses pinned w64devkit x86 2.10.0, builds the application and tests, runs the eight XP-targeted tests, inspects the PE executable/imports, and uploads the disposable package.
+The separate `XP-targeted Win32 build` workflow uses pinned w64devkit x86 2.10.0, builds the application and tests, runs all nine XP-targeted tests, inspects the PE executable/imports, and uploads the disposable package.
 
 The Windows/XP test set comprises:
 
 1. `application_paths_tests`
-2. `loan_csv_export_tests`
-3. `loan_rules_tests`
-4. `loan_statistics_tests`
-5. `loan_store_tests`
-6. `backup_compression_tests`
-7. `backup_retention_tests`
-8. `audit_log_tests` (Windows only)
+2. `settings_store_tests`
+3. `loan_csv_export_tests`
+4. `loan_rules_tests`
+5. `loan_statistics_tests`
+6. `loan_store_tests`
+7. `backup_compression_tests`
+8. `backup_retention_tests`
+9. `audit_log_tests` (Windows only)
 
 ### Latest validated build
 
-The latest validated product-code commit is `738c1d07a1a8256a80a78c5cc03135576c3c4aba`. Its validation passed:
+The latest validated product-code commit is `482e42d1389b4a907abd9b24afa153c1d257de2f`. Its validation passed:
 
-- [Core tests run 43896578995](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578995): Ubuntu, modern Win32 build/tests, and Cppcheck 2.19.0 passed.
-- [XP-targeted build run 43896578967](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967): w64devkit x86 2.10.0, all eight tests (including application-path, diagnostic-audit, rollback-failure and abrupt-process-recovery coverage), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
+- [Core tests run 43901422428](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422428): Ubuntu (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0 passed.
+- [XP-targeted build run 43901422497](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497): w64devkit x86 2.10.0, all nine tests (including application-path, diagnostic-audit, rollback-failure, abrupt-process-recovery and settings-store coverage), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed.
 
-The disposable artefact is [14239447095](https://github.com/quilterrantdean/BiblioLED/actions/runs/43896578967/artifacts/14239447095), `BiblioLED-XP-PoC`:
+The disposable artefact is [14240119311](https://github.com/quilterrantdean/BiblioLED/actions/runs/43901422497/artifacts/14240119311), `BiblioLED-XP-PoC`:
 
-- ZIP size: 1,554,246 bytes
-- ZIP SHA-256: `fbfbad00d193e85449700ba9e8d1044530eac3c22344de4c1dafad4eb18735e7`
+- ZIP size: 1,568,598 bytes
+- ZIP SHA-256: `d6f6ddbcca4195609f93059d6745826ca011bdc1f35baee47b22185d9ea4c251`
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
@@ -159,6 +160,16 @@ BiblioLED/
 `config/settings.ini` is supplied as an example. The icon is embedded in `BiblioLED.exe`; `port.ico` remains in the source repository as the resource input.
 
 The general settings dialog persists loan limits, loan duration, diagnostics, and audit-log size. General settings take effect on the next launch. The separate backup-settings dialog applies compression format and level immediately to the open store.
+
+### INI settings persistence
+
+The portable C++11 `settings_store` service owns the `AppSettings` model, INI parser, value validation, serialization, and file I/O. The existing `config/settings.ini` field names, defaults and CRLF representation are retained. Paths enter the service as UTF-8; Windows XP file operations use wide-character Win32 APIs.
+
+The reader accepts an optional UTF-8 BOM and caps the file at 64 KiB. It rejects malformed values, duplicate recognised keys, embedded NUL bytes, oversized files and read errors. If the file is missing, defaults are created atomically. If it is invalid or unreadable, defaults are used only in memory and the original file is preserved.
+
+Saving validates the new values before writing, then rereads and validates an existing target. The service refuses to overwrite an invalid or unreadable INI even if a future caller bypasses the current UI guard. It uses an exclusive temporary filename containing the process ID and an attempt number, writes the complete contents and flushes them before atomic installation. Windows uses `FlushFileBuffers` plus write-through `MoveFileExW`; POSIX uses `fsync` on the temporary file and `rename`. The POSIX parent directory is not separately fsynced, so this does not claim full directory-entry persistence after physical power loss.
+
+`settings_store_tests` runs in the Linux, modern-Windows and XP-targeted suites. Its cases cover defaults creation, save/load round-trip, replacement of an existing INI, byte-for-byte preservation of invalid files, refusal to overwrite an invalid destination, duplicate keys/BOM, invalid values in memory, temporary-name collision, replacement failure, directory-as-file and oversized files. All paths are created in isolated temporary directories, including Unicode names; no real user settings are opened or modified.
 
 On Windows, the entry point obtains the executable filename with `GetModuleFileNameW` and passes it to the pure C++11 `BuildApplicationPaths` model. The model derives the complete application root, config/data/backup/export/log directories, settings file, database file, and initialisation marker. Drive-root and UNC installations are supported; Unicode is retained in wide strings. The INI file and other Win32 filesystem operations use wide-character APIs, while paths passed to the SQLite store are converted to UTF-8.
 
