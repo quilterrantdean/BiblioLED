@@ -279,3 +279,11 @@ Windows uses `CreateProcessW`/`TerminateProcess`; POSIX uses `fork`/`_exit`. Thi
 The application currently supports schema versions 0 and 1. If `PRAGMA user_version` reports a higher or negative version, `LoanStore::Open` refuses the database, returns an explanatory error and closes the connection. It does not attempt to downgrade a database created by a newer build.
 
 The automated regression test uses an isolated database at schema version 7 with a known loan row. After the application rejects it, the test opens the file read-only and confirms that both the version and the row are unchanged. This covers safe refusal; migrations for future schema versions will require a separately reviewed design and backup strategy.
+
+### Workflow triggers
+
+`Core tests` runs automatically on changes to build manifests, configuration, headers, C++ source, tests and workflow definitions on `development`. Changes confined to documentation or agent notes do not start CI.
+
+`XP-targeted Win32 build (manual)` is configured with `workflow_dispatch` only. It performs the pinned w64devkit x86 build, XP-targeted CTest suite, PE32/XP subsystem/API checks and disposable ZIP packaging; it is intentionally not run for every commit.
+
+**Current repository limitation:** the default branch is `main`, and the workflow files are maintained on `development`. GitHub requires a manual-dispatch workflow definition to exist on the default branch before **Actions → Run workflow** is available. The user must resolve this repository-level choice before the manual XP control appears. The `main` Python reference has deliberately not been modified.

@@ -4,9 +4,25 @@ on:
   push:
     branches:
       - development
+    paths:
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'config/**'
+      - 'include/**'
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - development
+    paths:
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'config/**'
+      - 'include/**'
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
@@ -44,6 +60,7 @@ jobs:
 
       - name: Test Win32 SQLite store
         run: ctest --test-dir build -C Release --output-on-failure
+
   static-analysis:
     name: Cppcheck (portable C++11)
     runs-on: ubuntu-latest
@@ -80,4 +97,3 @@ jobs:
             tests/loan_store_tests.cpp \
             tests/backup_compression_tests.cpp \
             tests/backup_retention_tests.cpp
-

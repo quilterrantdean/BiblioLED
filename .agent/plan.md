@@ -11,7 +11,7 @@ The current SQL hardening also releases any partially prepared SQLite statement 
 
 The UI implementation includes the top-level **Opções** menu, explicit audit-log retry command, event-driven refresh without polling, removal of redundant refresh UI, Ctrl+N/Ctrl+H accelerators, a resizable/reorderable/context-menu history window, statistics from a per-open snapshot, and UTF-8 resource/source handling. History controls are laid out in dialog units so they remain aligned when the window is resized.
 
-On 2026-11-14, Actions history cleanup removed 223 older workflow runs and preserved the then-latest successful Core and XP-targeted runs (225 total before, 2 afterwards). Later pushes created new runs normally. `main` remains the unchanged Python reference; all implementation and documentation commits remain on `development`.
+On 2026-11-14, Actions history cleanup removed 223 older workflow runs and preserved the then-latest successful Core and XP-targeted runs (225 total before, 2 afterwards). On 2026-11-16, CI was narrowed: Core runs automatically only when build/config/source/test/workflow files change; the full w64devkit XP build is manual-only (`workflow_dispatch`). Documentation- and agent-note-only commits no longer run either workflow. `main` remains the unchanged Python reference; all implementation and documentation commits remain on `development`.
 
 The user reconfirmed on 2026-11-16 that the executable runs well on Windows XP. The 2026-11-15 confirmation also covered the correction of secondary-window Portuguese text encoding. The exact tested artefact/hash, XP build and exercised scenarios have not been recorded, so this is a user-confirmed runtime smoke check rather than a reproducible full validation record. CI PE/build checks are not a substitute for broader target-machine testing.
 
@@ -140,3 +140,10 @@ The UI refinements, strict schema validation, SQL/transaction hardening, backup 
 Resolve these during implementation unless they materially change stored data or the agreed user experience. The UI refinements above are already user-approved; do not ask the user to repeat those decisions. Preserve the audit-log recovery capability when changing the F5 interaction.
 
 Do not implement speculative answers to these questions where they could change stored data or user-visible behaviour. For low-impact implementation details, choose a conventional, simple, and safe default.
+
+## GitHub Actions trigger policy
+
+- `Core tests`: automatic on `push` and `pull_request` to `development` only when `CMakeLists.txt`, `CMakePresets.json`, `config/**`, `include/**`, `src/**`, `tests/**` or `.github/workflows/**` changes. It also declares `workflow_dispatch` for an optional manual Core run.
+- `XP-targeted Win32 build (manual)`: `workflow_dispatch` only. It must not run automatically for normal commits or pull requests.
+- Changes confined to `docs/**`, `.agent/**`, `README.md` or `AGENTS.md` do not run CI.
+- The repository's default branch is currently `main`, and the workflow files exist only on `development`. GitHub requires a `workflow_dispatch` workflow file to exist on the default branch before the Actions UI exposes **Run workflow**. Do not modify `main` or change the default branch without explicit user approval. Until the default-branch constraint is resolved, manual dispatch from the website is not yet available; the automatic Core workflow remains available for relevant source changes.

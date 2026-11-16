@@ -192,3 +192,11 @@ The nine settings-store cases cover defaults, round-trip and existing-file repla
 ## Future SQLite schema rejection
 
 The existing version-range guard now has an explicit non-modification regression test. A synthetic database with `user_version=7` and one existing loan is rejected by `LoanStore::Open`; the store remains closed and reports that the file was not modified. A separate read-only SQLite connection verifies that version 7 and the exact loan fields remain unchanged. This proves safe refusal of an unsupported schema, not an implementation of version-2-or-later migrations.
+
+## CI trigger policy and current validation
+
+The Core workflow is now path-filtered: it runs automatically for build/config/source/test/workflow changes on `development`, not for documentation-only commits. The XP-targeted w64devkit build is manual-only through `workflow_dispatch`; do not reintroduce `push` or `pull_request` triggers.
+
+The repository default branch remains `main`, which contains no workflow files. GitHub only exposes the Actions UI **Run workflow** control when the `workflow_dispatch` workflow definition is present on the default branch. The workflow definitions remain on `development` to preserve the untouched Python reference branch. A user-approved repository-level decision is required before manual dispatch can be exposed in the website UI.
+
+The latest pre-policy XP/Core runs at commit `4836aa82bf66d44d8f37a2b7b285fce0eb25db1a` failed because the Windows implementation of `ReadSettingsBytes` used `ok` without initialising it. The portable/POSIX path did initialise it. The current policy-change commit restores `bool ok = true;`; the automatic Core run is expected to validate the fix. The XP workflow is deliberately not auto-triggered.

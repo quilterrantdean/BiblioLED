@@ -300,6 +300,7 @@ bool ReadSettingsBytes(const std::wstring& path, std::string* contents,
         return false;
     }
 
+    bool ok = true;
     char buffer[8192];
     while (ok) {
         DWORD received = 0;

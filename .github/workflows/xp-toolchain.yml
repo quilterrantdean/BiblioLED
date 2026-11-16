@@ -1,12 +1,6 @@
-name: XP-targeted Win32 build
+name: XP-targeted Win32 build (manual)
 
 on:
-  push:
-    branches:
-      - development
-  pull_request:
-    branches:
-      - development
   workflow_dispatch:
 
 jobs:
