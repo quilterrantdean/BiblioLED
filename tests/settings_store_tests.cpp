@@ -219,6 +219,12 @@ void TestRoundTrip(const std::string& dir)
     std::string error;
     Check(biblioled::SaveSettingsFile(path, expected, &error),
           "valid settings should be saved with atomic replacement");
+
+    // A second save exercises the replace-existing path used by later UI edits.
+    expected.daily_limit = 13;
+    expected.backup_compression_level = 8;
+    Check(biblioled::SaveSettingsFile(path, expected, &error),
+          "a second valid save should atomically replace the existing INI");
     biblioled::AppSettings actual;
     Check(biblioled::LoadSettingsFile(path, &actual, &error),
           "saved settings should parse on reload");
