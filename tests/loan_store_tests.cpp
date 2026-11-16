@@ -3,6 +3,7 @@
 
 #include <sqlite3.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -16,6 +17,7 @@
 #else
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 
@@ -462,6 +464,222 @@ bool MakeReadableBackup(const std::string& path, std::string* decoded_path)
     return true;
 }
 
+
+int PrepareInterruptedTransaction(const std::string& database,
+                                   sqlite3** database_handle)
+{
+    if (!database_handle) return 70;
+    *database_handle = NULL;
+
+    sqlite3* db = NULL;
+    if (sqlite3_open_v2(database.c_str(), &db, SQLITE_OPEN_READWRITE, NULL) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return 71;
+    }
+
+    if (!Execute(db, "PRAGMA journal_mode=DELETE;") ||
+        !Execute(db, "PRAGMA synchronous=FULL;") ||
+        !Execute(db, "PRAGMA cache_size=8;") ||
+        !Execute(db, "PRAGMA cache_spill=ON;") ||
+        !Execute(db, "BEGIN IMMEDIATE;")) {
+        sqlite3_close(db);
+        return 72;
+    }
+
+    sqlite3_stmt* statement = NULL;
+    const char* sql =
+        "INSERT INTO loans (title, loan_date, type) VALUES (?1, ?2, ?3);";
+    if (sqlite3_prepare_v2(db, sql, -1, &statement, NULL) != SQLITE_OK) {
+        sqlite3_close(db);
+        return 73;
+    }
+
+    // Force cache spill and journal synchronisation while the transaction is
+    // still open. All rows are synthetic and should disappear after recovery.
+    const std::string payload(4096, 'X');
+    bool inserted = true;
+    for (int i = 0; i < 128; ++i) {
+        const std::string title =
+            std::string("UNCOMMITTED_PROCESS_CRASH_") +
+            std::to_string(i) + "_" + payload;
+
+        if (sqlite3_bind_text(statement, 1, title.c_str(),
+                              static_cast<int>(title.size()),
+                              SQLITE_TRANSIENT) != SQLITE_OK ||
+            sqlite3_bind_text(statement, 2, "2099-12-31 23:59", -1,
+                              SQLITE_STATIC) != SQLITE_OK ||
+            sqlite3_bind_text(statement, 3, "livro", -1,
+                              SQLITE_STATIC) != SQLITE_OK ||
+            sqlite3_step(statement) != SQLITE_DONE ||
+            sqlite3_reset(statement) != SQLITE_OK ||
+            sqlite3_clear_bindings(statement) != SQLITE_OK) {
+            inserted = false;
+            break;
+        }
+    }
+
+    const int finalize_result = sqlite3_finalize(statement);
+    if (!inserted || finalize_result != SQLITE_OK ||
+        sqlite3_get_autocommit(db) != 0 ||
+        sqlite3_db_cacheflush(db) != SQLITE_OK ||
+        sqlite3_get_autocommit(db) != 0) {
+        sqlite3_close(db);
+        return 74;
+    }
+
+    *database_handle = db;
+    return 0;
+}
+
+#ifdef _WIN32
+bool RunInterruptedTransactionProcess(const std::string& database,
+                                      DWORD* child_exit_code)
+{
+    if (!child_exit_code) return false;
+    *child_exit_code = 0;
+
+    char executable_path[MAX_PATH] = {0};
+    const DWORD path_length =
+        GetModuleFileNameA(NULL, executable_path, MAX_PATH);
+    if (path_length == 0 || path_length >= MAX_PATH) return false;
+
+    std::string command_line = "\"";
+    command_line.append(executable_path, path_length);
+    command_line += "\" --sqlite-crash-worker \"";
+    command_line += database;
+    command_line += "\"";
+
+    STARTUPINFOA startup;
+    PROCESS_INFORMATION process;
+    std::memset(&startup, 0, sizeof(startup));
+    std::memset(&process, 0, sizeof(process));
+    startup.cb = sizeof(startup);
+
+    if (!CreateProcessA(NULL, &command_line[0], NULL, NULL, FALSE,
+                        CREATE_NO_WINDOW, NULL, NULL,
+                        &startup, &process)) {
+        return false;
+    }
+
+    const DWORD wait_result = WaitForSingleObject(process.hProcess, 30000);
+    bool ok = wait_result == WAIT_OBJECT_0;
+    if (wait_result == WAIT_TIMEOUT) {
+        TerminateProcess(process.hProcess, 89);
+        WaitForSingleObject(process.hProcess, INFINITE);
+    }
+
+    if (ok) ok = GetExitCodeProcess(process.hProcess, child_exit_code) != 0;
+
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return ok;
+}
+#else
+bool RunInterruptedTransactionProcess(const std::string& database,
+                                      int* child_exit_code)
+{
+    if (!child_exit_code) return false;
+    *child_exit_code = 0;
+
+    const pid_t child = fork();
+    if (child < 0) return false;
+
+    if (child == 0) {
+        sqlite3* child_database = NULL;
+        const int result =
+            PrepareInterruptedTransaction(database, &child_database);
+        if (result != 0) _exit(result);
+
+        // Deliberately bypass SQLite close/finalisers to model process death.
+        _exit(86);
+    }
+
+    int wait_status = 0;
+    pid_t waited = -1;
+    do {
+        waited = waitpid(child, &wait_status, 0);
+    } while (waited < 0 && errno == EINTR);
+
+    if (waited != child || !WIFEXITED(wait_status)) return false;
+    *child_exit_code = WEXITSTATUS(wait_status);
+    return true;
+}
+#endif
+
+void TestAbruptProcessInterruptionRecovery(const std::string& database,
+                                           const std::string& backup_directory)
+{
+    Check(MakeDirectory(backup_directory),
+          "process-interruption backup directory should be created");
+
+    std::string error;
+    biblioled::LoanStore initial;
+    Check(initial.Open(database, backup_directory, &error),
+          "isolated database for process-interruption test should open");
+    if (!initial.IsOpen()) return;
+
+    biblioled::LoanRecord committed;
+    committed.title = "Registo confirmado antes da interrupção";
+    committed.loan_date = "2099-01-01 10:00";
+    committed.type = "livro";
+    Check(initial.Insert(&committed, &error),
+          "a known committed record should be written before child termination");
+    initial.Close();
+
+    DWORD windows_exit_code = 0;
+    int child_exit_code = 0;
+#ifdef _WIN32
+    const bool child_started_and_exited =
+        RunInterruptedTransactionProcess(database, &windows_exit_code);
+    Check(child_started_and_exited,
+          "the SQLite crash-worker process should start and terminate");
+    Check(windows_exit_code == 86,
+          "the crash-worker should be terminated from inside its open transaction");
+#else
+    const bool child_started_and_exited =
+        RunInterruptedTransactionProcess(database, &child_exit_code);
+    Check(child_started_and_exited,
+          "the SQLite crash-worker child process should fork and terminate");
+    Check(child_exit_code == 86,
+          "the child should exit abruptly from inside its open transaction");
+#endif
+
+    // A hot rollback journal must survive process termination and be consumed
+    // by SQLite when the parent opens the database again.
+    Check(FileExists(database + "-journal"),
+          "abrupt process termination should leave a hot rollback journal");
+
+    biblioled::LoanStore recovered;
+    error.clear();
+    Check(recovered.Open(database, backup_directory, &error),
+          "LoanStore should reopen and recover the database after child termination");
+    if (recovered.IsOpen()) {
+        std::vector<biblioled::LoanRecord> records;
+        Check(recovered.GetAll(&records, &error),
+              "recovered database should remain readable");
+        Check(records.size() == 1,
+              "recovery should retain only the previously committed record");
+        if (records.size() == 1) {
+            Check(records[0].title ==
+                      "Registo confirmado antes da interrupção",
+                  "recovery should preserve the exact committed record");
+        }
+        Check(recovered.QuickCheck(&error),
+              "database should pass quick_check after process-interruption recovery");
+        Check(!FileExists(database + "-journal"),
+              "SQLite should remove the hot journal after successful recovery");
+        recovered.Close();
+    }
+
+    RemoveDatabaseFiles(database);
+    RemoveFilesWithPrefix(backup_directory, "BiblioLED_");
+#ifdef _WIN32
+    RemoveDirectoryA(backup_directory.c_str());
+#else
+    rmdir(backup_directory.c_str());
+#endif
+}
+
 } // namespace
 
 void TestRollbackFailureClosesStore(const std::string& database,
@@ -537,8 +755,24 @@ void TestRollbackFailureClosesStore(const std::string& database,
 #endif
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string(argv[1]) == "--sqlite-crash-worker") {
+        sqlite3* child_database = NULL;
+        const int result =
+            PrepareInterruptedTransaction(argv[2], &child_database);
+        if (result != 0) return result;
+
+#ifdef _WIN32
+        if (TerminateProcess(GetCurrentProcess(), 86)) return 87;
+        sqlite3_close(child_database);
+        return 88;
+#else
+        // Deliberately bypass SQLite close/finalisers to model process death.
+        _exit(86);
+#endif
+    }
+
     const std::string database =
         "loan-store-test-" + std::to_string(std::rand()) + ".sqlite";
     const std::string blocked_database = database + ".blocked.sqlite";
@@ -564,6 +798,10 @@ int main()
         database + ".rollback-failure.sqlite";
     const std::string rollback_failure_backup_directory =
         database + ".rollback-failure-backups";
+    const std::string process_interruption_database =
+        database + ".process-interruption.sqlite";
+    const std::string process_interruption_backup_directory =
+        database + ".process-interruption-backups";
 
     std::vector<std::string> backups;
     std::string error;
@@ -575,6 +813,8 @@ int main()
 
     TestRollbackFailureClosesStore(
         rollback_failure_database, rollback_failure_backup_directory);
+    TestAbruptProcessInterruptionRecovery(
+        process_interruption_database, process_interruption_backup_directory);
 
     // A new database starts at schema version 1 with an empty audit table.
     biblioled::LoanStore store;
