@@ -1,27 +1,38 @@
 #include "biblioled/loan_rules.h"
 
-#include <cstdio>
 #include <ctime>
 
 namespace biblioled {
 
 std::time_t ParseLoanDateTime(const std::string& value)
 {
-    int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int consumed = 0;
-
-    if (std::sscanf(value.c_str(), "%d-%d-%d %d:%d%n",
-                    &year, &month, &day, &hour, &minute, &consumed) != 5 ||
-        consumed != static_cast<int>(value.size())) {
+    // Persisted loan dates use one fixed, locale-independent representation:
+    // YYYY-MM-DD HH:MM. Do not let scanf accept signs, whitespace, or
+    // variable-width fields that would create non-canonical stored values.
+    if (value.size() != 16 || value[4] != '-' || value[7] != '-' ||
+        value[10] != ' ' || value[13] != ':') {
         return static_cast<std::time_t>(-1);
     }
 
+    int digits[12] = {0};
+    int digit_index = 0;
+    for (std::string::size_type i = 0; i < value.size(); ++i) {
+        if (i == 4 || i == 7 || i == 10 || i == 13) continue;
+        if (value[i] < '0' || value[i] > '9') {
+            return static_cast<std::time_t>(-1);
+        }
+        digits[digit_index++] = value[i] - '0';
+    }
+
+    const int year = digits[0] * 1000 + digits[1] * 100 +
+                     digits[2] * 10 + digits[3];
+    const int month = digits[4] * 10 + digits[5];
+    const int day = digits[6] * 10 + digits[7];
+    const int hour = digits[8] * 10 + digits[9];
+    const int minute = digits[10] * 10 + digits[11];
+
     if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31 ||
-        hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        hour > 23 || minute > 59) {
         return static_cast<std::time_t>(-1);
     }
 

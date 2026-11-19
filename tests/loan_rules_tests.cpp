@@ -36,6 +36,26 @@ void TestDateParsing()
           "trailing text should be rejected");
     Check(Parse("1899-12-31 23:59") == static_cast<std::time_t>(-1),
           "years before 1900 should be rejected");
+    Check(Parse("2024-2-29 12:34") == static_cast<std::time_t>(-1),
+          "single-digit month should be rejected");
+    Check(Parse("2024-02-9 12:34") == static_cast<std::time_t>(-1),
+          "single-digit day should be rejected");
+    Check(Parse("2024-02-29 2:34") == static_cast<std::time_t>(-1),
+          "single-digit hour should be rejected");
+    Check(Parse("2024-02-29 12:4") == static_cast<std::time_t>(-1),
+          "single-digit minute should be rejected");
+    Check(Parse("+2024-02-29 12:34") == static_cast<std::time_t>(-1),
+          "signed year should be rejected");
+    Check(Parse("2024-+2-29 12:34") == static_cast<std::time_t>(-1),
+          "signed month should be rejected");
+    Check(Parse(" 2024-02-29 12:34") == static_cast<std::time_t>(-1),
+          "leading whitespace should be rejected");
+    Check(Parse("2024-02-29 12:34 ") == static_cast<std::time_t>(-1),
+          "trailing whitespace should be rejected");
+    Check(Parse("2024-02-29T12:34") == static_cast<std::time_t>(-1),
+          "non-canonical date/time separator should be rejected");
+    Check(Parse("2024/02/29 12:34") == static_cast<std::time_t>(-1),
+          "non-canonical date separators should be rejected");
 }
 
 void TestCalendarArithmetic()
