@@ -950,7 +950,13 @@ bool LoanStore::Open(const std::string& database_path,
 void LoanStore::Close()
 {
     if (db_) {
-        sqlite3_close(db_);
+        // sqlite3_close() returns SQLITE_BUSY if a statement is still active.
+        // Do not lose the connection pointer in that case: close_v2 marks
+        // it for deferred closure after outstanding statements are finalised.
+        const int close_rc = sqlite3_close(db_);
+        if (close_rc != SQLITE_OK) {
+            sqlite3_close_v2(db_);
+        }
         db_ = NULL;
     }
     database_path_.clear();
