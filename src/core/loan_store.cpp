@@ -1,4 +1,5 @@
 #include "biblioled/loan_store.h"
+#include "biblioled/loan_rules.h"
 #include "biblioled/backup_compression.h"
 #include "biblioled/backup_retention.h"
 
@@ -1970,6 +1971,10 @@ bool LoanStore::Insert(LoanRecord* record, std::string* error)
         SetError(error, "A valid database, title, date and type are required.");
         return false;
     }
+    if (ParseLoanDateTime(record->loan_date) == static_cast<std::time_t>(-1)) {
+        SetError(error, "The loan date must use the valid YYYY-MM-DD HH:MM format.");
+        return false;
+    }
     if (migration_required_) {
         SetError(error, "The legacy database must be migrated before it can be changed.");
         return false;
@@ -2033,6 +2038,10 @@ bool LoanStore::Update(const LoanRecord& record, std::string* error)
     if (!db_ || record.id <= 0 || record.title.empty() ||
         record.loan_date.empty() || record.type.empty()) {
         SetError(error, "A valid record is required for update.");
+        return false;
+    }
+    if (ParseLoanDateTime(record.loan_date) == static_cast<std::time_t>(-1)) {
+        SetError(error, "The loan date must use the valid YYYY-MM-DD HH:MM format.");
         return false;
     }
     if (migration_required_) {

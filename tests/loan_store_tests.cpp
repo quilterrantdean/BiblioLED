@@ -890,6 +890,29 @@ int main(int argc, char** argv)
     Check(events.empty(), "new database should start with no audit events");
     Check(!store.HasSessionBackup(), "opening a database should not create a backup");
 
+    // The persistence layer rejects invalid/non-canonical dates before
+    // backups, writes, or audit events are created.
+    const invalid_dates[] = {
+        "2024-2-29 12:30",
+        "2024-02-30 12:30",
+        "2024-02-29 2:30",
+        "2024-02-29 12:30 "
+    };
+    for (size_t i = 0; i < sizeof(invalid_dates) / sizeof(invalid_dates[0]); ++i) {
+        biblioled::LoanRecord invalid_date_record;
+        invalid_date_record.title = "Invalid date regression";
+        invalid_date_record.loan_date = invalid_dates[i];
+        invalid_date_record.type = "livro";
+        Check(!store.Insert(&invalid_date_record, &error),
+              "LoanStore must reject invalid or non-canonical dates");
+        Check(!store.HasSessionBackup(),
+              "rejected invalid-date insert must not create an automatic backup");
+    }
+    Check(store.GetAll(&records, &error) && records.empty(),
+          "invalid-date inserts must leave the loans table unchanged");
+    Check(store.GetAuditEvents(&events, &error) && events.empty(),
+          "invalid-date inserts must not create audit events");
+
     // Missing record identifiers are rejected before the automatic-backup gate.
     biblioled::LoanStore no_op_store;
     Check(no_op_store.Open(no_op_database, ".", &error),
@@ -1025,6 +1048,16 @@ int main(int argc, char** argv)
     Check(book.title == "Açúcar e café", "UTF-8 title should round-trip");
     Check(store.GetAll(&records, &error) && records.size() == 2,
           "list should return both inserted records");
+
+    biblioled::LoanRecord invalid_update = book;
+    invalid_update.loan_date = "2024-02-30 12:30";
+    Check(!store.Update(invalid_update, &error),
+          "LoanStore must reject invalid update dates");
+    Check(store.GetById(book.id, &book, &error) &&
+          book.loan_date == "2099-01-10 12:30",
+          "invalid-date update must leave the original record unchanged");
+    Check(store.GetAuditEvents(&events, &error) && events.size() == 2,
+          "invalid-date update must not add an audit event");
 
     biblioled::LoanRecord edited = book;
     edited.title = "Título alterado";
