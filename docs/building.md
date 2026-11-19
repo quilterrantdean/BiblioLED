@@ -124,15 +124,15 @@ The Windows/XP test set comprises:
 
 ### Latest validated build
 
-Current development head: `95fb0be479a06f455e019065cb1295af3ce9a691`.
+Current application-source head: `e469c816f10451188ff4b3363d18c3ff5bf675f1`.
 
-- [Core tests run 43921021534](https://github.com/quilterrantdean/BiblioLED/actions/runs/43921021534) passed on this head: Ubuntu (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0.
-- The latest successful [XP-targeted build run 43902567911](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911) is from the older source revision `c4a749d715d0cd39ecfe6dad4afb5aa0e48fb0c5`. Its w64devkit x86 2.10.0 build, all nine tests (including application-path, settings persistence, SQLite rollback/process recovery and future-schema rejection), PE32/i386, GUI subsystem 5.01, and post-XP import checks passed. The current head includes later settings-recovery changes and has not yet been rebuilt with the XP toolchain.
+- [Core tests run 44536157379](https://github.com/quilterrantdean/BiblioLED/actions/runs/44536157379) passed on the immediately preceding source revision `14bead847f023662d84aa7169b859898a0a84c2e`: Ubuntu core tests (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0. This includes the strict date parser and local-calendar day-count tests.
+- [Core tests run 44536364468](https://github.com/quilterrantdean/BiblioLED/actions/runs/44536364468) is validating the current source head, including the 800×600 window adjustment; its result must be checked before treating that final change as CI-validated.
+- The latest successful [XP-targeted build run 43903363630](https://github.com/quilterrantdean/BiblioLED/actions/runs/43903363630) is from source revision `749de809ed1c291139fca701056ea1fac9169336`. Its pinned w64devkit x86 2.10.0 build, all nine XP tests, PE32/i386, GUI subsystem 5.01, and post-XP import checks passed. The current application source has not yet been rebuilt with the XP toolchain.
 
-The disposable artefact is [14241453581](https://github.com/quilterrantdean/BiblioLED/actions/runs/43902567911/artifacts/14241453581), `BiblioLED-XP-PoC`:
+The latest successful disposable artefact is [14243881773](https://github.com/quilterrantdean/BiblioLED/actions/runs/43903363630/artifacts/14243881773), `BiblioLED-XP-PoC`:
 
-- ZIP size: 1,568,598 bytes
-- ZIP SHA-256: `94932edf2c39095ba2ddb5c1b88cc01df224c69be3726c018fec31c76b7b7e20`
+- ZIP size: 1,568,595 bytes
 
 The archive contains exactly four files: `BiblioLED.exe`, `config/settings.ini`, `pe-inspection.txt`, and `LEIA-ME-TESTE.txt`. It does not contain a database or a separate icon file; the application icon is embedded in the executable. The Portuguese test guide is UTF-8 with BOM for Windows XP Notepad.
 
@@ -209,11 +209,11 @@ Manual backups use the `BiblioLED_manual_*` namespace. Restore/migration safety 
 
 Restore accepts `.sqlite.gz`, `.sqlite.zlib`, and legacy uncompressed `.sqlite`. It validates the selected source before creating a safety copy of the current database. After replacement, the restored database is checked; if verification fails, the store attempts rollback from the safety copy. A rollback failure is reported, and the database connection is not reused in an uncertain transaction state.
 
-The file-data flush is not a universal promise against every power-loss scenario: POSIX parent-directory metadata is not separately fsynced after rename, and abrupt power-loss/process-interruption coverage remains outstanding.
+The file-data flush is not a universal promise against every power-loss scenario: POSIX parent-directory metadata is not separately fsynced after rename, and physical power-loss testing remains outstanding. Automated abrupt-process termination and recovery tests exist, but they do not simulate a physical power cut.
 
 ## Audit logging
 
-SQLite `audit_events` is the authoritative audit history. Loan create/edit/delete and their audit events are committed in the same transaction. Current internal event coverage includes loan CRUD, schema migration, application startup/shutdown, successful manual backup/restore, general/backup settings changes, and CSV export. Warning/error/failure-event coverage remains incomplete.
+SQLite `audit_events` is the authoritative audit history. Loan create/edit/delete and their audit events are committed in the same transaction. Current internal event coverage includes loan CRUD, schema migration, application startup/shutdown, successful manual backup/restore, general/backup settings changes, CSV export, and application warnings, errors, and failures. Diagnostic events are stored in SQLite; external-log synchronisation remains subject to the documented read-only safety gate.
 
 When external diagnostics are enabled, committed events are synchronised to `logs/audit.log`, with timestamped `audit_*.log` archives. Stable fingerprints prevent duplicate replay. An incomplete final line in the active log can be truncated and replayed from SQLite; an incomplete archived log is rejected unchanged. Archives are not automatically deleted.
 
