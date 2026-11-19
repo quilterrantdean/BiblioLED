@@ -126,8 +126,7 @@ The Windows/XP test set comprises:
 
 Current application-source head: `e469c816f10451188ff4b3363d18c3ff5bf675f1`.
 
-- [Core tests run 44536157379](https://github.com/quilterrantdean/BiblioLED/actions/runs/44536157379) passed on the immediately preceding source revision `14bead847f023662d84aa7169b859898a0a84c2e`: Ubuntu core tests (8/8), modern Win32 build/tests (9/9), and Cppcheck 2.19.0. This includes the strict date parser and local-calendar day-count tests.
-- [Core tests run 44536364468](https://github.com/quilterrantdean/BiblioLED/actions/runs/44536364468) is validating the current source head, including the 800×600 window adjustment; its result must be checked before treating that final change as CI-validated.
+- [Core tests run 44536364468](https://github.com/quilterrantdean/BiblioLED/actions/runs/44536364468) passed on this source head: Ubuntu core tests (8/8), modern Win32 application/store build and tests (9/9), and Cppcheck 2.19.0. This includes the canonical date parser, local-calendar day-count/DST tests, and the 800×600 main-window adjustment.
 - The latest successful [XP-targeted build run 43903363630](https://github.com/quilterrantdean/BiblioLED/actions/runs/43903363630) is from source revision `749de809ed1c291139fca701056ea1fac9169336`. Its pinned w64devkit x86 2.10.0 build, all nine XP tests, PE32/i386, GUI subsystem 5.01, and post-XP import checks passed. The current application source has not yet been rebuilt with the XP toolchain.
 
 The latest successful disposable artefact is [14243881773](https://github.com/quilterrantdean/BiblioLED/actions/runs/43903363630/artifacts/14243881773), `BiblioLED-XP-PoC`:
