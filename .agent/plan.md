@@ -2,7 +2,7 @@
 
 ## Current status
 
-**Stage:** the C++11/Win32/SQLite application prototype includes guided recovery for invalid settings and databases, strict schema/integrity checks, checked SQL operations and rollback handling, durable backup-file flushing, executable-relative Unicode paths, sortable main/history lists, comprehensive application diagnostic auditing, process-interruption recovery, atomic INI persistence and safe rejection of future SQLite schema versions. The latest application-source head is `e469c816f10451188ff4b3363d18c3ff5bf675f1`.
+**Stage:** the C++11/Win32/SQLite application prototype includes guided recovery for invalid settings and databases, strict schema/integrity checks, checked SQL operations and rollback handling, durable backup-file flushing, executable-relative Unicode paths, sortable main/history lists, comprehensive application diagnostic auditing, process-interruption recovery, atomic INI persistence and safe rejection of future SQLite schema versions. The latest application-source head at the last recorded snapshot is `e469c816f10451188ff4b3363d18c3ff5bf675f1`; branch tip is now `8efdf262f2fa346b23fa58872f131baba02f527d`.
 
 - [Core tests run 44536364468](https://github.com/quilterrantdean/BiblioLED/actions/runs/44536364468) passed on source head `e469c816f10451188ff4b3363d18c3ff5bf675f1`: Ubuntu core tests (8/8), modern Windows SDK Win32 application/store tests (9/9), and Cppcheck 2.19.0. This includes canonical date-time parsing, local-calendar day counting across a daylight-saving transition, and the 800×600 main-window adjustment.
 - The latest successful XP-targeted build is [run 43903363630](https://github.com/quilterrantdean/BiblioLED/actions/runs/43903363630) at source head `749de809ed1c291139fca701056ea1fac9169336`. Its pinned w64devkit x86 2.10.0 build, all 9 XP-targeted tests, PE32/i386, Windows GUI subsystem 5.01 and post-XP API/import checks passed. Artefact [14243881773](https://github.com/quilterrantdean/BiblioLED/actions/runs/43903363630/artifacts/14243881773), `BiblioLED-XP-PoC`, 1,568,595 bytes.
@@ -148,3 +148,11 @@ Do not implement speculative answers to these questions where they could change 
 - `XP-targeted Win32 build (manual)`: `workflow_dispatch` only. It must not run automatically for normal commits or pull requests.
 - Changes confined to `docs/**`, `.agent/**`, `README.md` or `AGENTS.md` do not run CI.
 - The repository default branch is now `development`, and both workflow definitions are present there. The **Actions → XP-targeted Win32 build (manual) → Run workflow** control is therefore available; select `development` as the run branch. This manual workflow has no `push` or `pull_request` trigger. Keep `main` unchanged as the Python reference.
+
+
+### 2026-11-19 — persistence hardening
+
+- LoanStore now validates loan dates with the canonical core parser before insert/update. Four malformed-date insert cases and a malformed-date update regression assert no backup, audit event, or record mutation on rejection.
+- `LoanStore::Close()` now falls back to `sqlite3_close_v2` when ordinary close cannot finish because a statement remains active, avoiding loss of the connection pointer.
+- Core run [44541544670](https://github.com/quilterrantdean/BiblioLED/actions/runs/44541544670): Linux 8/8 and Cppcheck passed; modern Win32 build/store test was still in progress at this snapshot. The immediately preceding CI attempt exposed a missing array type in the new regression test; corrected in commit `8efdf262`.
+- XP manual run [44538757921](https://github.com/quilterrantdean/BiblioLED/actions/runs/44538757921) passed on earlier head `da6a18a7e3ffcc33bf00550820e89693e1ed28db`, including build, 9 XP tests and PE/import checks. It does not validate the latest date validation and close changes.

@@ -199,3 +199,12 @@ The Core workflow is now path-filtered: it runs automatically for build/config/s
 The repository default branch is now `development` (user-confirmed on 2026-11-16), and the workflow definitions are present there. The Actions website can now dispatch `XP-targeted Win32 build (manual)` through **Actions → Run workflow**. Select `development`; do not reintroduce `push` or `pull_request` triggers on the XP workflow. The Core workflow remains path-filtered and excludes documentation-only changes.
 
 The Windows compile failure at commit `4836aa82bf66d44d8f37a2b7b285fce0eb25db1a` was fixed in `95fb0be` by initialising `bool ok = true;`. The Core run on `95fb0be` succeeded. The XP-specific workflow has not yet been rerun on the corrected current head and is the immediate validation task.
+
+
+## Current implementation review update — 2026-11-19
+
+- Loan dates now require exact `YYYY-MM-DD HH:MM` syntax and valid calendar dates. Tests cover malformed field widths, whitespace/separators and daylight-saving day-count boundaries.
+- LoanStore insert/update independently enforce date validity, preventing invalid records from bypassing GUI validation. Rejected operations are tested for no backup, no audit event and no record mutation.
+- `LoanStore::Close()` falls back to `sqlite3_close_v2` if a statement remains active and ordinary close returns non-success, avoiding loss of the connection handle.
+- The main window was adjusted to fit 800×600 displays.
+- Validation snapshot: XP manual run [44538757921](https://github.com/quilterrantdean/BiblioLED/actions/runs/44538757921) passed at head `da6a18a7e3ffcc33bf00550820e89693e1ed28db`. Core run [44541544670](https://github.com/quilterrantdean/BiblioLED/actions/runs/44541544670) passed Linux (8/8) and Cppcheck; modern Win32 build/store validation remained pending. The newest changes still require an XP-targeted build.

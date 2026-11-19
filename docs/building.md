@@ -249,7 +249,7 @@ The target PE is 32-bit i386 with Windows GUI subsystem 5.01. CI rejects selecte
 Before considering a normal portable distribution, the project still needs:
 - a reproducible manual Windows XP SP3 runtime test, including resource glyphs, recovery wizard, and dialogs;
 - failure injection for the `ROLLBACK` statement itself and abrupt process/power-loss interruption;
-- broader audit events for warnings, errors, and failures;
+- a fresh XP-targeted build of the latest source;
 - later schema migration work as product requirements evolve;
 - a final release/build process and portable ZIP review.
 
@@ -286,3 +286,31 @@ The automated regression test uses an isolated database at schema version 7 with
 `XP-targeted Win32 build (manual)` is configured with `workflow_dispatch` only. It performs the pinned w64devkit x86 build, XP-targeted CTest suite, PE32/XP subsystem/API checks and disposable ZIP packaging; it is intentionally not run for every commit.
 
 The repository default branch is now `development` (changed by the user on 2026-11-16), and the manual XP workflow definition is present on that branch. Start the current XP build from **Actions → XP-targeted Win32 build (manual) → Run workflow**, selecting `development`. The workflow remains manual-only; do not add `push` or `pull_request` triggers. The `main` Python reference remains unchanged.
+
+
+## Version 1.0 release checklist
+
+Version 1.0 is not ready until every release gate below is verified. Use only disposable synthetic data.\n
+
+### Build and compatibility
+- [ ] Run Core CI on the release candidate: Linux, modern Win32 and Cppcheck all pass.
+- [ ] Run the manual XP-targeted workflow on the exact release-candidate commit; confirm all 9 tests, PE32/i386, GUI subsystem 5.01, and import/API checks.
+- [ ] Execute that exact artefact on Windows XP SP3/Pentium 4 and record SHA-256, OS details and test results.
+- [ ] Verify all windows/dialogs, Portuguese text, icons, keyboard shortcuts, 800×600, sorting, history, statistics and CSV export.
+- [ ] Measure cold-start time, peak memory, executable size and responsiveness on the target machine.
+
+### Data safety and recovery
+- [ ] In a disposable folder, create, edit and delete synthetic loans; verify audit entries and database integrity.
+- [ ] Verify automatic backup before the first loan-data mutation, reuse during the same day and next-day behaviour.
+- [ ] Test gzip and zlib manual backups and restore both formats.
+- [ ] Test recovery from missing and deliberately corrupt databases; verify preservation of the damaged database and sidecars.
+- [ ] Confirm the selected backup remains untouched and restored records match the source.
+- [ ] Test settings persistence, invalid-settings recovery and Unicode paths.
+- [ ] Verify CSV content/encoding with quotes, semicolons, multiline titles, future and expired records.
+
+### Packaging and release
+- [ ] Produce a clean portable ZIP with executable, default settings and required empty directories only; no database, backup, log or test artefacts.
+- [ ] Verify launch from a path with spaces/accents and from a different working directory.
+- [ ] Add version 1.0 metadata, user instructions, release notes and SHA-256 checksums.
+- [ ] Re-extract into a fresh folder and repeat the launch/smoke test.
+- [ ] Review branch, commit, release files and documentation; keep `main` unchanged.
