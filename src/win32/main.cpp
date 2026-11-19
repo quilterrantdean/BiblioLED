@@ -1455,6 +1455,14 @@ void ShowBackupSettings()
 LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message) {
+    case WM_GETMINMAXINFO:
+        if (lParam) {
+            MINMAXINFO* limits = reinterpret_cast<MINMAXINFO*>(lParam);
+            limits->ptMinTrackSize.x = 700;
+            limits->ptMinTrackSize.y = 450;
+            return 0;
+        }
+        break;
     case WM_CREATE:
         CreateChildControls(window);
         UpdateWriteAccess(window);
@@ -1917,7 +1925,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int show_command)
     gMainWindow = CreateWindowExW(
         0, kWindowClass, title.c_str(),
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 900, 600,
+        CW_USEDEFAULT, CW_USEDEFAULT, 780, 520,
         NULL, CreateApplicationMenu(), gInstance, NULL);
 
     if (!gMainWindow) {
