@@ -892,7 +892,7 @@ int main(int argc, char** argv)
 
     // The persistence layer rejects invalid/non-canonical dates before
     // backups, writes, or audit events are created.
-    const invalid_dates[] = {
+    const char* invalid_dates[] = {
         "2024-2-29 12:30",
         "2024-02-30 12:30",
         "2024-02-29 2:30",
