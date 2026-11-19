@@ -218,9 +218,29 @@ bool CreateDatabaseMarker(const std::wstring& path, std::wstring* error)
 
 std::wstring GetControlText(HWND dialog, int control_id)
 {
-    wchar_t buffer[512] = {0};
-    GetDlgItemTextW(dialog, control_id, buffer, 511);
-    return buffer;
+    const HWND control = GetDlgItem(dialog, control_id);
+    if (!control) return std::wstring();
+
+    const int length = GetWindowTextLengthW(control);
+    if (length <= 0) return std::wstring();
+
+    std::wstring value(static_cast<std::wstring::size_type>(length) + 1, L'\\0');
+    const int copied = GetWindowTextW(control, &value[0], length + 1);
+    if (copied <= 0) return std::wstring();
+
+    value.resize(static_cast<std::wstring::size_type>(copied));
+    return value;
+}
+
+std::wstring TrimTitle(const std::wstring& value)
+{
+    const std::wstring::size_type first =
+        value.find_first_not_of(L" \\t\\r\\n\\f\\v");
+    if (first == std::wstring::npos) return std::wstring();
+
+    const std::wstring::size_type last =
+        value.find_last_not_of(L" \\t\\r\\n\\f\\v");
+    return value.substr(first, last - first + 1);
 }
 
 bool ParsePositiveInteger(const std::string& text,
@@ -287,7 +307,7 @@ INT_PTR CALLBACK LoanDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM
     if (message == WM_COMMAND && LOWORD(wParam) == IDOK) {
         if (!context) return TRUE;
 
-        const std::wstring title = GetControlText(dialog, IDC_LOAN_TITLE);
+        const std::wstring title = TrimTitle(GetControlText(dialog, IDC_LOAN_TITLE));
         const std::wstring date = GetControlText(dialog, IDC_LOAN_DATE);
         const std::wstring time = GetControlText(dialog, IDC_LOAN_TIME);
         const LRESULT type_index =
