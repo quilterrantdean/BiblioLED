@@ -290,7 +290,8 @@ The repository default branch is now `development` (changed by the user on 2026-
 
 ## Version 1.0 release checklist
 
-Version 1.0 is not ready until every release gate below is verified. Use only disposable synthetic data.\n
+Version 1.0 is not ready until every release gate below is verified. Use only disposable synthetic data.
+
 
 ### Build and compatibility
 - [ ] Run Core CI on the release candidate: Linux, modern Win32 and Cppcheck all pass.
