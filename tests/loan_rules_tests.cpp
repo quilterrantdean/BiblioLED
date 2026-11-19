@@ -2,6 +2,14 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <ctime>
+#include <string>
+
+#ifdef _WIN32
+#include <stdlib.h>
+#else
+#include <cstdlib>
+#endif
 
 namespace {
 
@@ -128,6 +136,49 @@ void TestLoanEvaluation()
           "invalid loan date should not be evaluated");
 }
 
+void TestCalendarDayDifference()
+{
+    const char* previous = std::getenv("TZ");
+    const bool had_previous = previous != NULL;
+    const std::string previous_value = had_previous ? previous : "";
+
+#ifdef _WIN32
+    Check(_putenv("TZ=GMT0BST,M3.5.0/1,M10.5.0/2") == 0,
+          "test timezone should be configured");
+    _tzset();
+#else
+    Check(setenv("TZ", "GMT0BST,M3.5.0/1,M10.5.0/2", 1) == 0,
+          "test timezone should be configured");
+    tzset();
+#endif
+
+    const std::time_t before_spring_change = Parse("2024-03-10 12:00");
+    biblioled::LoanEvaluation daylight_saving;
+    Check(biblioled::EvaluateLoanDateTime(
+              "2024-03-10 12:00", 21, before_spring_change, &daylight_saving),
+          "loan spanning the spring clock change should be evaluated");
+    Check(daylight_saving.days_remaining == 21,
+          "days remaining should count local calendar days across the spring clock change");
+
+    const std::time_t just_after_expiry = Parse("2024-03-31 12:01");
+    biblioled::LoanEvaluation expired;
+    Check(biblioled::EvaluateLoanDateTime(
+              "2024-03-10 12:00", 21, just_after_expiry, &expired),
+          "recently expired loan should be evaluated");
+    Check(expired.expired && expired.days_remaining == -1,
+          "a partially elapsed negative day should follow calendar-day floor semantics");
+
+#ifdef _WIN32
+    const std::string restore = had_previous ? "TZ=" + previous_value : "TZ=";
+    _putenv(restore.c_str());
+    _tzset();
+#else
+    if (had_previous) setenv("TZ", previous_value.c_str(), 1);
+    else unsetenv("TZ");
+    tzset();
+#endif
+}
+
 void TestQuotaWindows()
 {
     const std::time_t now = Parse("2024-06-20 15:45");
@@ -180,6 +231,7 @@ int main()
     TestDateParsing();
     TestCalendarArithmetic();
     TestLoanEvaluation();
+    TestCalendarDayDifference();
     TestQuotaWindows();
     TestQuotaAvailability();
 

@@ -1,8 +1,69 @@
 #include "biblioled/loan_rules.h"
 
 #include <ctime>
+#include <climits>
 
 namespace biblioled {
+
+namespace {
+
+long long DaysFromCivil(const std::tm& value)
+{
+    long long year = static_cast<long long>(value.tm_year) + 1900;
+    const unsigned int month = static_cast<unsigned int>(value.tm_mon + 1);
+    const unsigned int day = static_cast<unsigned int>(value.tm_mday);
+    year -= month <= 2 ? 1 : 0;
+
+    const long long era =
+        (year >= 0 ? year : year - 399) / 400;
+    const unsigned int year_of_era =
+        static_cast<unsigned int>(year - era * 400);
+    const unsigned int shifted_month =
+        month > 2 ? month - 3 : month + 9;
+    const unsigned int day_of_year =
+        (153 * shifted_month + 2) / 5 + day - 1;
+    const unsigned int day_of_era =
+        year_of_era * 365 + year_of_era / 4 -
+        year_of_era / 100 + day_of_year;
+    return era * 146097 + static_cast<long long>(day_of_era) - 719468;
+}
+
+bool CalculateLocalDaysRemaining(std::time_t expiry,
+                                 std::time_t now,
+                                 long* days_remaining)
+{
+    if (!days_remaining) return false;
+
+    const std::tm* expiry_value = std::localtime(&expiry);
+    if (!expiry_value) return false;
+    const std::tm expiry_parts = *expiry_value;
+
+    const std::tm* now_value = std::localtime(&now);
+    if (!now_value) return false;
+    const std::tm now_parts = *now_value;
+
+    const long long expiry_seconds =
+        expiry_parts.tm_hour * 3600LL +
+        expiry_parts.tm_min * 60LL + expiry_parts.tm_sec;
+    const long long now_seconds =
+        now_parts.tm_hour * 3600LL +
+        now_parts.tm_min * 60LL + now_parts.tm_sec;
+    const long long wall_clock_difference =
+        (DaysFromCivil(expiry_parts) - DaysFromCivil(now_parts)) * 86400LL +
+        expiry_seconds - now_seconds;
+
+    long long whole_days = wall_clock_difference / 86400LL;
+    if (wall_clock_difference < 0 &&
+        wall_clock_difference % 86400LL != 0) {
+        --whole_days;
+    }
+
+    if (whole_days < LONG_MIN || whole_days > LONG_MAX) return false;
+    *days_remaining = static_cast<long>(whole_days);
+    return true;
+}
+
+} // namespace
 
 std::time_t ParseLoanDateTime(const std::string& value)
 {
@@ -101,8 +162,10 @@ bool EvaluateLoanDateTime(const std::string& loan_date,
     LoanEvaluation result;
     result.loan_time = loan_time;
     result.expiry_time = expiry_time;
-    result.days_remaining = static_cast<long>(
-        std::difftime(expiry_time, now) / 86400.0);
+    if (!CalculateLocalDaysRemaining(
+            expiry_time, now, &result.days_remaining)) {
+        return false;
+    }
     result.future_dated = loan_time > now;
     result.expired = expiry_time < now;
     result.visible_in_operational_list = expiry_time >= now;
